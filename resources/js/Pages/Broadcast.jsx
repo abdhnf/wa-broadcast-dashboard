@@ -17,7 +17,9 @@ import {
   ListOrdered,
   Filter,
   Search,
-  ChevronLeft
+  ChevronLeft,
+  RefreshCw,
+  Smartphone
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
@@ -30,7 +32,7 @@ import {
   DialogFooter
 } from '../components/ui/Dialog';
 
-export function BroadcastPage({ groups, templates, campaigns: initialCampaigns }) {
+export function BroadcastPage({ groups, templates, sessions, campaigns: initialCampaigns }) {
   const [campaigns, setCampaigns] = useState(initialCampaigns || []);
   const [subView, setSubView] = useState('campaigns'); // 'campaigns' | 'queue'
   const [selectedCampaign, setSelectedCampaign] = useState(initialCampaigns?.[0] || null);
@@ -40,16 +42,17 @@ export function BroadcastPage({ groups, templates, campaigns: initialCampaigns }
   const [campaignName, setCampaignName] = useState('');
   const [selectedGroup, setSelectedGroup] = useState(groups?.[0]?.name || 'Pelanggan VIP');
   const [selectedTemplate, setSelectedTemplate] = useState(templates?.[0]?.id || '');
+  const [selectedSessionId, setSelectedSessionId] = useState('auto_rotate'); // Default: Auto Rotate
 
   // Master Antrean Pesan (Queue)
   const [recipientQueue, setRecipientQueue] = useState([
-    { id: 'q_1', campaignId: 'cmp_101', phone: '6281234567891', name: 'Budi Santoso', status: 'sent', sentAt: '10:15 WIB' },
-    { id: 'q_2', campaignId: 'cmp_101', phone: '6281398765432', name: 'Siti Rahmawati', status: 'sent', sentAt: '10:16 WIB' },
-    { id: 'q_3', campaignId: 'cmp_101', phone: '6285211223344', name: 'Ahmad Fauzi', status: 'pending', sentAt: '-' },
-    { id: 'q_4', campaignId: 'cmp_101', phone: '6285644332211', name: 'Dewi Lestari', status: 'pending', sentAt: '-' },
-    { id: 'q_5', campaignId: 'cmp_101', phone: '6287766554433', name: 'Rizky Pratama', status: 'pending', sentAt: '-' },
-    { id: 'q_6', campaignId: 'cmp_102', phone: '6281122334455', name: 'Hendro Wijaya', status: 'pending', sentAt: '-' },
-    { id: 'q_7', campaignId: 'cmp_102', phone: '6281988776655', name: 'Maya Anggraini', status: 'pending', sentAt: '-' },
+    { id: 'q_1', campaignId: 'cmp_101', phone: '6281234567891', name: 'Budi Santoso', status: 'sent', sentAt: '10:15 WIB', session: 'Broadcast Pool A' },
+    { id: 'q_2', campaignId: 'cmp_101', phone: '6281398765432', name: 'Siti Rahmawati', status: 'sent', sentAt: '10:16 WIB', session: 'Broadcast Pool A' },
+    { id: 'q_3', campaignId: 'cmp_101', phone: '6285211223344', name: 'Ahmad Fauzi', status: 'pending', sentAt: '-', session: 'Auto-Rotate' },
+    { id: 'q_4', campaignId: 'cmp_101', phone: '6285644332211', name: 'Dewi Lestari', status: 'pending', sentAt: '-', session: 'Auto-Rotate' },
+    { id: 'q_5', campaignId: 'cmp_101', phone: '6287766554433', name: 'Rizky Pratama', status: 'pending', sentAt: '-', session: 'Auto-Rotate' },
+    { id: 'q_6', campaignId: 'cmp_102', phone: '6281122334455', name: 'Hendro Wijaya', status: 'pending', sentAt: '-', session: 'Customer Support 1' },
+    { id: 'q_7', campaignId: 'cmp_102', phone: '6281988776655', name: 'Maya Anggraini', status: 'pending', sentAt: '-', session: 'Customer Support 1' },
   ]);
 
   // Antrean Filter & Modal State
@@ -66,10 +69,12 @@ export function BroadcastPage({ groups, templates, campaigns: initialCampaigns }
     setSubView('queue');
   };
 
-  // Handler Buat Kampanye Baru: otomatis buka halaman antrean kampanye tersebut
+  // Handler Buat Kampanye Baru
   const handleCreateCampaign = (e) => {
     e.preventDefault();
     const tpl = templates?.find((t) => t.id === selectedTemplate);
+    const chosenSession = sessions?.find((s) => s.id === selectedSessionId);
+    const sessionLabel = selectedSessionId === 'auto_rotate' ? 'Auto-Rotate Pool' : chosenSession?.name || selectedSessionId;
 
     const newCampId = `cmp_${Date.now()}`;
     const newCamp = {
@@ -83,15 +88,16 @@ export function BroadcastPage({ groups, templates, campaigns: initialCampaigns }
       deliveredCount: 0,
       readCount: 0,
       failedCount: 0,
-      status: 'idle', // Siap / Menunggu Eksekusi
+      status: 'idle',
       createdAt: 'Baru Saja',
+      sessionUsed: sessionLabel,
     };
 
     // Tambah nomor awal ke antrean
     const initialQueueItems = [
-      { id: `q_${Date.now()}_1`, campaignId: newCampId, phone: '6281234567891', name: 'Budi Santoso', status: 'pending', sentAt: '-' },
-      { id: `q_${Date.now()}_2`, campaignId: newCampId, phone: '6281398765432', name: 'Siti Rahmawati', status: 'pending', sentAt: '-' },
-      { id: `q_${Date.now()}_3`, campaignId: newCampId, phone: '6285211223344', name: 'Ahmad Fauzi', status: 'pending', sentAt: '-' },
+      { id: `q_${Date.now()}_1`, campaignId: newCampId, phone: '6281234567891', name: 'Budi Santoso', status: 'pending', sentAt: '-', session: sessionLabel },
+      { id: `q_${Date.now()}_2`, campaignId: newCampId, phone: '6281398765432', name: 'Siti Rahmawati', status: 'pending', sentAt: '-', session: sessionLabel },
+      { id: `q_${Date.now()}_3`, campaignId: newCampId, phone: '6285211223344', name: 'Ahmad Fauzi', status: 'pending', sentAt: '-', session: sessionLabel },
     ];
 
     setCampaigns([newCamp, ...campaigns]);
@@ -118,6 +124,7 @@ export function BroadcastPage({ groups, templates, campaigns: initialCampaigns }
       name: newRecipientName || 'Kontak Tambahan',
       status: 'pending',
       sentAt: '-',
+      session: selectedCampaign?.sessionUsed || 'Auto-Rotate Pool'
     };
 
     setRecipientQueue([newItem, ...recipientQueue]);
@@ -161,7 +168,7 @@ export function BroadcastPage({ groups, templates, campaigns: initialCampaigns }
           </div>
           <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
             {subView === 'campaigns'
-              ? 'Kelola kampanye broadcast WhatsApp. Sesi pengiriman dan auto-rotate ditangani langsung oleh WA API Gateway.'
+              ? 'Kelola kampanye broadcast WhatsApp dengan opsi nomor spesifik atau auto-rotate pool.'
               : 'Pantau antrean nomor pesan, tambah nomor penerima, atau hapus nomor sebelum terkirim.'}
           </p>
         </div>
@@ -221,12 +228,13 @@ export function BroadcastPage({ groups, templates, campaigns: initialCampaigns }
       {subView === 'campaigns' && (
         <div className="bg-white dark:bg-[#0f1117] rounded-xl border border-slate-200 dark:border-zinc-800 overflow-hidden shadow-xs">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-600 dark:text-zinc-300 min-w-[720px]">
+            <table className="w-full text-left text-xs text-slate-600 dark:text-zinc-300 min-w-[750px]">
               <thead className="bg-slate-50 dark:bg-zinc-900/60 text-slate-700 dark:text-zinc-400 uppercase text-[10px] tracking-wider font-semibold border-b border-slate-200 dark:border-zinc-800">
                 <tr>
                   <th className="py-2.5 px-4">Nama Kampanye</th>
                   <th className="py-2.5 px-4">Segmen Audiens</th>
                   <th className="py-2.5 px-4">Template Pesan</th>
+                  <th className="py-2.5 px-4">Sesi WhatsApp</th>
                   <th className="py-2.5 px-4">Status & Progres</th>
                   <th className="py-2.5 px-4 text-right">Aksi</th>
                 </tr>
@@ -246,7 +254,13 @@ export function BroadcastPage({ groups, templates, campaigns: initialCampaigns }
                     <td className="py-3 px-4 text-slate-800 dark:text-zinc-200 font-medium">
                       {camp.templateTitle}
                     </td>
-                    <td className="py-3 px-4 w-48">
+                    <td className="py-3 px-4">
+                      <span className="inline-flex items-center gap-1 font-mono text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">
+                        <Smartphone className="w-3 h-3 text-slate-400" />
+                        <span>{camp.sessionUsed || 'Auto-Rotate'}</span>
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 w-44">
                       <div className="flex items-center justify-between text-[10px] font-mono mb-1">
                         <span className="capitalize text-emerald-600 dark:text-emerald-400 font-bold">
                           {camp.status.replace('_', ' ')}
@@ -369,13 +383,13 @@ export function BroadcastPage({ groups, templates, campaigns: initialCampaigns }
           {/* Tabel Antrean Pesan Responsif */}
           <div className="bg-white dark:bg-[#0f1117] rounded-xl border border-slate-200 dark:border-zinc-800 overflow-hidden shadow-xs">
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs text-slate-600 dark:text-zinc-300 min-w-[720px]">
+              <table className="w-full text-left text-xs text-slate-600 dark:text-zinc-300 min-w-[760px]">
                 <thead className="bg-slate-50 dark:bg-zinc-900/60 text-slate-700 dark:text-zinc-400 uppercase text-[10px] tracking-wider font-semibold border-b border-slate-200 dark:border-zinc-800">
                   <tr>
                     <th className="py-2.5 px-4 w-12 text-center">#</th>
                     <th className="py-2.5 px-4">Nama Kontak</th>
                     <th className="py-2.5 px-4">Nomor WhatsApp</th>
-                    <th className="py-2.5 px-4">Batch Kampanye</th>
+                    <th className="py-2.5 px-4">Sesi Pengirim</th>
                     <th className="py-2.5 px-4">Status Pengiriman</th>
                     <th className="py-2.5 px-4">Waktu Dispatch</th>
                     <th className="py-2.5 px-4 text-right">Aksi</th>
@@ -400,10 +414,8 @@ export function BroadcastPage({ groups, templates, campaigns: initialCampaigns }
                         <td className="py-2.5 px-4 font-mono text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">
                           +{item.phone}
                         </td>
-                        <td className="py-2.5 px-4">
-                          <span className="font-mono text-[10px] px-2 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 border border-slate-200 dark:border-zinc-700">
-                            {item.campaignId}
-                          </span>
+                        <td className="py-2.5 px-4 font-mono text-[11px] text-slate-600 dark:text-zinc-400">
+                          {item.session || 'Auto-Rotate'}
                         </td>
                         <td className="py-2.5 px-4">
                           {item.status === 'sent' ? (
@@ -501,8 +513,27 @@ export function BroadcastPage({ groups, templates, campaigns: initialCampaigns }
               </select>
             </div>
 
+            {/* Pilihan Sesi WhatsApp Pengirim (Auto-Rotate vs Pilih Nomor Spesifik) */}
+            <div>
+              <label className="block text-[11px] font-medium text-slate-700 dark:text-zinc-300 mb-1">
+                Sesi WhatsApp Pengirim
+              </label>
+              <select
+                value={selectedSessionId}
+                onChange={(e) => setSelectedSessionId(e.target.value)}
+                className="w-full h-8 px-2.5 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-200 focus:outline-none focus:border-emerald-500"
+              >
+                <option value="auto_rotate">🔄 Auto Rotate (Rotasi Otomatis Semua Nomor Online)</option>
+                {sessions?.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    📱 {s.name} (+{s.phone}) - {s.status}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <div className="p-2.5 rounded-lg bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/40 text-[11px] text-emerald-800 dark:text-emerald-300">
-              ⚡ Kampanye baru akan langsung membuka antrean pesan untuk verifikasi nomor sebelum broadcast dimulai. Rotasi sesi WhatsApp di-handle otomatis oleh WA API.
+              ⚡ Kampanye baru akan langsung membuka antrean pesan untuk verifikasi nomor sebelum broadcast dimulai.
             </div>
 
             <DialogFooter className="pt-2">

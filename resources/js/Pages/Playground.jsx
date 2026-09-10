@@ -9,7 +9,9 @@ import {
   Image,
   MapPin,
   Code2,
-  Sparkles
+  Sparkles,
+  Smartphone,
+  RefreshCw
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
@@ -17,8 +19,9 @@ import { WhatsAppFormattingToolbar } from '../components/WhatsAppFormattingToolb
 import { MediaUploadField } from '../components/MediaUploadField';
 import { WhatsAppBubblePreview } from '../components/WhatsAppBubblePreview';
 
-export function PlaygroundPage({ templates }) {
-  const [sessionId, setSessionId] = useState('wa_default');
+export function PlaygroundPage({ sessions, templates }) {
+  // Session Selector: mendukung auto-rotate atau pilih sesi nomor spesifik seperti di wa-api
+  const [selectedSessionId, setSelectedSessionId] = useState('auto_rotate');
   const [messageType, setMessageType] = useState('text'); // 'text' | 'media' | 'location'
   const [recipient, setRecipient] = useState('6281234567890');
   const [text, setText] = useState('Halo kak *Budi*! 👋\nIni pesan uji coba dari API server *WA Broadcast*. Silakan balas jika pesan ini sudah masuk.');
@@ -59,6 +62,11 @@ export function PlaygroundPage({ templates }) {
     e.preventDefault();
     setLoading(true);
 
+    const activeSession =
+      selectedSessionId === 'auto_rotate'
+        ? sessions?.find((s) => s.status === 'connected')?.id || 'wa_cs_primary'
+        : selectedSessionId;
+
     setTimeout(() => {
       let requestPayload = {};
       let endpoint = '';
@@ -66,7 +74,7 @@ export function PlaygroundPage({ templates }) {
       if (messageType === 'text') {
         endpoint = 'POST /api/v1/messages/send-text';
         requestPayload = {
-          sessionId: sessionId || 'wa_default',
+          sessionId: activeSession,
           to: recipient.replace(/\D/g, ''),
           text: text,
           priority: 'high'
@@ -74,7 +82,7 @@ export function PlaygroundPage({ templates }) {
       } else if (messageType === 'media') {
         endpoint = 'POST /api/v1/messages/send-media';
         requestPayload = {
-          sessionId: sessionId || 'wa_default',
+          sessionId: activeSession,
           to: recipient.replace(/\D/g, ''),
           mediaType: mediaType,
           mediaUrl: mediaUrl.startsWith('data:') ? undefined : mediaUrl,
@@ -85,7 +93,7 @@ export function PlaygroundPage({ templates }) {
       } else {
         endpoint = 'POST /api/v1/messages/send-location';
         requestPayload = {
-          sessionId: sessionId || 'wa_default',
+          sessionId: activeSession,
           to: recipient.replace(/\D/g, ''),
           latitude: parseFloat(locLat) || -6.225588,
           longitude: parseFloat(locLng) || 106.808591,
@@ -101,8 +109,10 @@ export function PlaygroundPage({ templates }) {
           success: true,
           messageId: `wamid_${Date.now()}_simulated`,
           status: 'QUEUED_ENQUEUED',
+          sessionUsed: activeSession,
+          isAutoRotated: selectedSessionId === 'auto_rotate',
           recipient: recipient.replace(/\D/g, ''),
-          pacingDelay: 'Handled automatically by WA API Gateway',
+          pacingDelay: 'Handled automatically by WA API Gaussian Jitter',
           payloadEcho: requestPayload,
         },
         timestamp: new Date().toISOString()
@@ -145,19 +155,24 @@ export function PlaygroundPage({ templates }) {
               </div>
             )}
 
-            {/* Session ID & Nomor Tujuan */}
+            {/* Pilihan Sesi WhatsApp (Sama dengan Playground WA API: Bisa Auto Rotate atau Pilih Nomor Spesifik) */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-[11px] font-medium text-slate-700 dark:text-zinc-300 mb-1">
-                  Session ID WA API
+                  Pilih Nomor Pengirim (WA API Session)
                 </label>
-                <input
-                  type="text"
-                  value={sessionId}
-                  onChange={(e) => setSessionId(e.target.value)}
-                  placeholder="Misal: wa_cs_primary / default"
-                  className="w-full h-8 px-2.5 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs font-mono text-slate-900 dark:text-zinc-200 focus:outline-none focus:border-emerald-500"
-                />
+                <select
+                  value={selectedSessionId}
+                  onChange={(e) => setSelectedSessionId(e.target.value)}
+                  className="w-full h-8 px-2.5 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-200 focus:outline-none focus:border-emerald-500"
+                >
+                  <option value="auto_rotate">🔄 Auto Rotate (Round-Robin Sesi Online)</option>
+                  {sessions?.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      📱 {s.name} (+{s.phone}) - {s.status}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div>
@@ -322,7 +337,7 @@ export function PlaygroundPage({ templates }) {
               <Badge variant="secondary" className="text-[10px] font-mono">Live Render</Badge>
             </div>
             <WhatsAppBubblePreview
-              senderName="Fastify Bot"
+              senderName={selectedSessionId === 'auto_rotate' ? 'Auto Rotate Pool' : 'Fastify Bot'}
               text={text}
               mediaUrl={messageType === 'media' ? mediaUrl : null}
               time="Sekarang"
