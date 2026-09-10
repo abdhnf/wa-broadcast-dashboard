@@ -10,10 +10,8 @@ import {
   Edit2,
   Phone,
   FileSpreadsheet,
-  CheckCircle2,
-  FolderKanban
+  CheckCircle2
 } from 'lucide-react';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import {
@@ -77,14 +75,16 @@ export function ContactsPage({ contacts: initialContacts, groups }) {
   return (
     <div className="space-y-6">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-zinc-800/80">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-zinc-800">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold tracking-tight text-zinc-100">Daftar Kontak & Segmen</h1>
+            <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">
+              Database Kontak Pelanggan
+            </h1>
             <Badge variant="outline" className="font-mono text-[10px]">{contacts.length} Total</Badge>
           </div>
-          <p className="text-xs text-zinc-400 mt-0.5">
-            Database nomor WhatsApp pelanggan lengkap dengan variabel dinamis untuk personalisasi broadcast.
+          <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
+            Manajemen direktori nomor kontak, segmentasi audiens, dan atribut dinamis custom fields.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -93,41 +93,41 @@ export function ContactsPage({ contacts: initialContacts, groups }) {
             <span>Import CSV</span>
           </Button>
           <Button onClick={() => setAddModalOpen(true)} variant="default" size="sm">
-            <Plus className="w-3.5 h-3.5 mr-1 text-zinc-950" />
-            <span className="text-zinc-950 font-semibold">Tambah Kontak</span>
+            <Plus className="w-3.5 h-3.5 mr-1" />
+            <span>Tambah Kontak</span>
           </Button>
         </div>
       </div>
 
-      {/* Filter Toolbar */}
+      {/* Filter and Search Bar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
         <div className="relative flex-1 max-w-sm">
-          <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-zinc-500" />
+          <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Cari nama atau nomor WhatsApp..."
-            className="w-full h-8 pl-8 pr-3 rounded-md bg-zinc-900 border border-zinc-800 text-xs text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-emerald-500"
+            className="w-full h-8 pl-8 pr-3 rounded-lg bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-200 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500"
           />
         </div>
 
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
           <Button
-            variant={selectedGroupFilter === 'ALL' ? 'secondary' : 'ghost'}
+            variant={selectedGroupFilter === 'ALL' ? 'default' : 'outline'}
             size="sm"
             onClick={() => setSelectedGroupFilter('ALL')}
-            className="text-xs"
+            className="text-xs h-7"
           >
             Semua
           </Button>
           {groups?.map((g) => (
             <Button
               key={g.id}
-              variant={selectedGroupFilter === g.name ? 'secondary' : 'ghost'}
+              variant={selectedGroupFilter === g.name ? 'default' : 'outline'}
               size="sm"
               onClick={() => setSelectedGroupFilter(g.name)}
-              className="text-xs"
+              className="text-xs h-7 shrink-0"
             >
               {g.name}
             </Button>
@@ -135,40 +135,41 @@ export function ContactsPage({ contacts: initialContacts, groups }) {
         </div>
       </div>
 
-      {/* Responsive Data Table */}
-      <Card>
+      {/* Full Responsive Table */}
+      <div className="border border-slate-200 dark:border-zinc-800 rounded-xl overflow-hidden bg-white dark:bg-zinc-950">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-zinc-300 min-w-[640px]">
-            <thead className="bg-zinc-900/60 border-b border-zinc-800/80 text-[11px] font-mono text-zinc-400">
+          <table className="w-full text-left text-xs min-w-[700px]">
+            <thead className="bg-slate-50 dark:bg-zinc-900/60 border-b border-slate-200 dark:border-zinc-800 text-[11px] font-mono text-slate-500 dark:text-zinc-400">
               <tr>
                 <th className="py-2.5 px-4 font-medium">NAMA LENGKAP</th>
                 <th className="py-2.5 px-4 font-medium">NOMOR WHATSAPP</th>
                 <th className="py-2.5 px-4 font-medium">SEGMEN / GRUP</th>
-                <th className="py-2.5 px-4 font-medium">VARIABEL DINAMIS</th>
+                <th className="py-2.5 px-4 font-medium">VARIABEL CUSTOM</th>
+                <th className="py-2.5 px-4 font-medium text-right">TANGGAL DIBUAT</th>
                 <th className="py-2.5 px-4 font-medium text-right">AKSI</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-800/50">
+            <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/60 text-slate-700 dark:text-zinc-300">
               {filteredContacts.length === 0 ? (
                 <tr>
-                  <td colSpan="5" className="py-8 text-center text-zinc-500 text-xs">
+                  <td colSpan="6" className="py-8 text-center text-slate-400 text-xs">
                     Tidak ada kontak yang cocok dengan filter.
                   </td>
                 </tr>
               ) : (
                 filteredContacts.map((c) => (
-                  <tr key={c.id} className="hover:bg-zinc-900/40 transition-colors">
-                    <td className="py-3 px-4 font-medium text-zinc-200">
+                  <tr key={c.id} className="hover:bg-slate-50 dark:hover:bg-zinc-900/40 transition-colors">
+                    <td className="py-3 px-4 font-medium text-slate-900 dark:text-white">
                       <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-[10px] text-zinc-300 font-mono">
+                        <div className="w-6 h-6 rounded-full bg-slate-100 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 flex items-center justify-center text-[10px] text-slate-700 dark:text-zinc-300 font-mono">
                           {c.name.charAt(0)}
                         </div>
                         <span>{c.name}</span>
                       </div>
                     </td>
-                    <td className="py-3 px-4 font-mono text-zinc-300">
+                    <td className="py-3 px-4 font-mono text-slate-800 dark:text-zinc-200">
                       <span className="flex items-center gap-1">
-                        <Phone className="w-3 h-3 text-emerald-400" />
+                        <Phone className="w-3 h-3 text-emerald-500" />
                         {c.phone}
                       </span>
                     </td>
@@ -178,29 +179,32 @@ export function ContactsPage({ contacts: initialContacts, groups }) {
                       </Badge>
                     </td>
                     <td className="py-3 px-4">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         {c.customAttributes?.tagihan && (
-                          <span className="px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-[10px] font-mono text-zinc-400">
-                            tagihan: <strong className="text-zinc-200 font-normal">{c.customAttributes.tagihan}</strong>
+                          <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-[10px] font-mono text-slate-600 dark:text-zinc-400">
+                            tagihan: <strong className="text-slate-900 dark:text-zinc-100 font-normal">{c.customAttributes.tagihan}</strong>
                           </span>
                         )}
                         {c.customAttributes?.tempo && (
-                          <span className="px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-[10px] font-mono text-zinc-500">
+                          <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-[10px] font-mono text-slate-500 dark:text-zinc-500">
                             tempo: {c.customAttributes.tempo}
                           </span>
                         )}
                       </div>
                     </td>
+                    <td className="py-3 px-4 text-right font-mono text-[10px] text-slate-500 dark:text-zinc-400">
+                      {c.createdAt || '10 Sep 2026'}
+                    </td>
                     <td className="py-3 px-4 text-right">
                       <div className="flex items-center justify-end gap-1">
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-zinc-400 hover:text-zinc-200">
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200">
                           <Edit2 className="w-3.5 h-3.5" />
                         </Button>
                         <Button
                           variant="ghost"
                           size="icon"
                           onClick={() => setContacts(contacts.filter((item) => item.id !== c.id))}
-                          className="h-7 w-7 text-zinc-500 hover:text-rose-400"
+                          className="h-7 w-7 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </Button>
@@ -212,7 +216,7 @@ export function ContactsPage({ contacts: initialContacts, groups }) {
             </tbody>
           </table>
         </div>
-      </Card>
+      </div>
 
       {/* Modal Tambah Kontak */}
       <Dialog open={addModalOpen} onOpenChange={setAddModalOpen}>
@@ -226,36 +230,36 @@ export function ContactsPage({ contacts: initialContacts, groups }) {
 
           <form onSubmit={handleAddContact} className="space-y-3 py-2">
             <div>
-              <label className="text-[11px] font-medium text-zinc-400 block mb-1">Nama Lengkap</label>
+              <label className="text-[11px] font-medium text-slate-600 dark:text-zinc-400 block mb-1">Nama Lengkap</label>
               <input
                 type="text"
                 required
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 placeholder="Budi Santoso"
-                className="w-full h-8 px-3 rounded-md bg-zinc-900 border border-zinc-800 text-xs text-zinc-200 focus:outline-none focus:border-emerald-500"
+                className="w-full h-8 px-3 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-200 focus:outline-none focus:border-emerald-500"
               />
             </div>
 
             <div>
-              <label className="text-[11px] font-medium text-zinc-400 block mb-1">Nomor WhatsApp</label>
+              <label className="text-[11px] font-medium text-slate-600 dark:text-zinc-400 block mb-1">Nomor WhatsApp</label>
               <input
                 type="text"
                 required
                 value={newPhone}
                 onChange={(e) => setNewPhone(e.target.value)}
                 placeholder="08123456789 atau 628123456789"
-                className="w-full h-8 px-3 rounded-md bg-zinc-900 border border-zinc-800 text-xs text-zinc-200 font-mono focus:outline-none focus:border-emerald-500"
+                className="w-full h-8 px-3 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-200 font-mono focus:outline-none focus:border-emerald-500"
               />
             </div>
 
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="text-[11px] font-medium text-zinc-400 block mb-1">Pilih Segmen</label>
+                <label className="text-[11px] font-medium text-slate-600 dark:text-zinc-400 block mb-1">Pilih Segmen</label>
                 <select
                   value={newGroup}
                   onChange={(e) => setNewGroup(e.target.value)}
-                  className="w-full h-8 px-2 rounded-md bg-zinc-900 border border-zinc-800 text-xs text-zinc-200 focus:outline-none focus:border-emerald-500"
+                  className="w-full h-8 px-2 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-200 focus:outline-none focus:border-emerald-500"
                 >
                   <option value="VIP Customers">VIP Customers</option>
                   <option value="Member Aktif">Member Aktif</option>
@@ -264,13 +268,13 @@ export function ContactsPage({ contacts: initialContacts, groups }) {
                 </select>
               </div>
               <div>
-                <label className="text-[11px] font-medium text-zinc-400 block mb-1">Tagihan (Custom)</label>
+                <label className="text-[11px] font-medium text-slate-600 dark:text-zinc-400 block mb-1">Tagihan (Custom)</label>
                 <input
                   type="text"
                   value={newTagihan}
                   onChange={(e) => setNewTagihan(e.target.value)}
                   placeholder="Rp 250.000"
-                  className="w-full h-8 px-3 rounded-md bg-zinc-900 border border-zinc-800 text-xs text-zinc-200 focus:outline-none focus:border-emerald-500"
+                  className="w-full h-8 px-3 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-200 focus:outline-none focus:border-emerald-500"
                 />
               </div>
             </div>
@@ -293,21 +297,21 @@ export function ContactsPage({ contacts: initialContacts, groups }) {
           <DialogHeader>
             <DialogTitle>Import Data CSV / Excel</DialogTitle>
             <DialogDescription>
-              Upload file spreadsheet dengan header kolom: <code className="text-zinc-200">name</code>, <code className="text-zinc-200">phone</code>, <code className="text-zinc-200">tagihan</code>.
+              Upload spreadsheet dengan header kolom: <code className="text-emerald-600 dark:text-emerald-400 font-mono">name</code>, <code className="text-emerald-600 dark:text-emerald-400 font-mono">phone</code>, <code className="text-emerald-600 dark:text-emerald-400 font-mono">tagihan</code>.
             </DialogDescription>
           </DialogHeader>
 
           <div className="py-4 space-y-4">
-            <div className="border-2 border-dashed border-zinc-800 rounded-xl p-6 text-center hover:border-emerald-500/50 transition-colors bg-zinc-900/30">
-              <FileSpreadsheet className="w-8 h-8 text-zinc-500 mx-auto mb-2" />
-              <div className="text-xs text-zinc-300 font-medium">Klik untuk upload atau drag & drop file</div>
-              <p className="text-[11px] text-zinc-500 mt-1">Format .csv atau .xlsx (Maks. 50.000 baris)</p>
+            <div className="border-2 border-dashed border-slate-200 dark:border-zinc-800 rounded-xl p-6 text-center hover:border-emerald-500 transition-colors bg-slate-50 dark:bg-zinc-900/30 cursor-pointer">
+              <FileSpreadsheet className="w-8 h-8 text-slate-400 dark:text-zinc-500 mx-auto mb-2" />
+              <div className="text-xs text-slate-800 dark:text-zinc-200 font-medium">Klik untuk upload file spreadsheet</div>
+              <p className="text-[11px] text-slate-500 dark:text-zinc-500 mt-1">Format .csv atau .xlsx (Maks. 50.000 baris)</p>
             </div>
 
-            <div className="p-3 bg-zinc-900/60 rounded-lg border border-zinc-800 text-[11px] text-zinc-400 space-y-1">
-              <span className="font-semibold text-zinc-300 block">Tips Normalisasi:</span>
-              <p>&bull; Prefix 08... akan otomatis dikonversi ke 628...</p>
-              <p>&bull; Karakter spasi, strip (-), dan tanda kurung otomatis dibersihkan.</p>
+            <div className="p-3 bg-slate-50 dark:bg-zinc-900/60 rounded-xl border border-slate-200 dark:border-zinc-800 text-[11px] text-slate-600 dark:text-zinc-400 space-y-1">
+              <span className="font-semibold text-slate-900 dark:text-zinc-200 block">Normalisasi Otomatis:</span>
+              <p>&bull; Prefix 08... otomatis dikonversi ke 628...</p>
+              <p>&bull; Karakter spasi, strip, dan simbol non-numerik otomatis dibersihkan.</p>
             </div>
           </div>
 
@@ -315,13 +319,7 @@ export function ContactsPage({ contacts: initialContacts, groups }) {
             <Button variant="outline" size="sm" onClick={() => setImportModalOpen(false)}>
               Batal
             </Button>
-            <Button
-              variant="default"
-              size="sm"
-              onClick={() => {
-                setImportModalOpen(false);
-              }}
-            >
+            <Button variant="default" size="sm" onClick={() => setImportModalOpen(false)}>
               Mulai Import
             </Button>
           </DialogFooter>

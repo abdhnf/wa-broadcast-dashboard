@@ -6,12 +6,12 @@ import {
   KeyRound,
   RefreshCw,
   Trash2,
-  AlertTriangle,
-  ShieldCheck,
   CheckCircle2,
-  SignalHigh
+  Radio,
+  Clock,
+  ShieldCheck,
+  AlertTriangle
 } from 'lucide-react';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import {
@@ -27,103 +27,120 @@ export function SessionsPage({ sessions, onAddSession }) {
   const [selectedSession, setSelectedSession] = useState(null);
   const [qrModalOpen, setQrModalOpen] = useState(false);
   const [pairingModalOpen, setPairingModalOpen] = useState(false);
-  const [pairingCode, setPairingCode] = useState('');
+  const [pairingCode, setPairingCode] = useState('ABCD-1234');
   const [targetPhone, setTargetPhone] = useState('');
 
-  const openQrModal = (session) => {
-    setSelectedSession(session);
+  const openQr = (s) => {
+    setSelectedSession(s);
     setQrModalOpen(true);
   };
 
-  const openPairingModal = (session) => {
-    setSelectedSession(session);
-    setTargetPhone(session.phone || '628899001122');
+  const openPairing = (s) => {
+    setSelectedSession(s);
+    setTargetPhone(s.phone || '628899001122');
     setPairingCode('ABCD-1234');
     setPairingModalOpen(true);
   };
 
   return (
     <div className="space-y-6">
-      {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-zinc-800/80">
+      {/* Page Header Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-zinc-800">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-zinc-100">WhatsApp Sessions</h1>
-          <p className="text-xs text-zinc-400 mt-0.5">
-            Kelola pool koneksi nomor WhatsApp, pantau anti-ban risk score, dan pairing Baileys.
+          <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">
+            WhatsApp Sessions
+          </h1>
+          <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
+            Manajemen multi-device Baileys, monitoring auto-rotate pengiriman, dan telemetry anti-ban.
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button onClick={() => openPairingModal({ name: 'Sesi Baru' })} variant="outline" size="sm">
+          <Button onClick={() => openPairing({ name: 'Sesi Baru' })} variant="outline" size="sm">
             <KeyRound className="w-3.5 h-3.5 mr-1" />
-            <span>Pairing Code</span>
+            <span>Pairing 8-Digit</span>
           </Button>
-          <Button onClick={() => openQrModal({ name: 'Sesi Baru' })} variant="default" size="sm">
-            <QrCode className="w-3.5 h-3.5 mr-1 text-zinc-950" />
-            <span className="text-zinc-950 font-semibold">Scan QR Baru</span>
+          <Button onClick={() => openQr({ name: 'Sesi Baru' })} variant="default" size="sm">
+            <QrCode className="w-3.5 h-3.5 mr-1" />
+            <span>Scan QR Baru</span>
           </Button>
         </div>
       </div>
 
-      {/* Grid Session Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {sessions.map((s) => {
-          const isConn = s.status === 'connected';
-          return (
-            <Card key={s.id} className="flex flex-col justify-between">
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <CardTitle className="text-sm font-semibold truncate">{s.name}</CardTitle>
-                    <div className="text-xs font-mono text-zinc-400 mt-1">{s.phone}</div>
-                  </div>
-                  <Badge variant={isConn ? 'success' : 'warning'} className="text-[10px]">
-                    {isConn ? 'Connected' : 'Connecting'}
-                  </Badge>
-                </div>
-              </CardHeader>
-
-              <CardContent className="space-y-3 pt-0">
-                {/* Meta details */}
-                <div className="grid grid-cols-2 gap-2 text-[11px] bg-zinc-950/60 p-2.5 rounded-lg border border-zinc-800/80 font-mono">
-                  <div>
-                    <span className="text-zinc-500 block text-[10px]">Terkirim Hari Ini</span>
-                    <span className="font-semibold text-zinc-200">{s.sentCount} pesan</span>
-                  </div>
-                  <div>
-                    <span className="text-zinc-500 block text-[10px]">Anti-Ban Risk</span>
-                    <span className={`font-semibold ${s.riskScore > 30 ? 'text-amber-400' : 'text-emerald-400'}`}>
-                      {s.riskScore} / 100
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between text-[11px] text-zinc-400">
-                  <span>Status Warmup:</span>
-                  <span className="font-mono text-zinc-300 capitalize">{s.warmupStatus || 'Mature (Safe)'}</span>
-                </div>
-
-                <div className="pt-2 border-t border-zinc-800/60 flex items-center gap-2">
-                  {!isConn ? (
-                    <Button onClick={() => openQrModal(s)} variant="default" size="sm" className="flex-1">
-                      <QrCode className="w-3.5 h-3.5 mr-1" />
-                      Hubungkan Ulang
-                    </Button>
-                  ) : (
-                    <>
-                      <Button onClick={() => openQrModal(s)} variant="outline" size="sm" className="flex-1">
-                        <RefreshCw className="w-3.5 h-3.5 mr-1" />
-                        Sinkronkan
-                      </Button>
-                      <Button variant="ghost" size="icon" className="text-zinc-500 hover:text-rose-400">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </Button>
-                    </>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })}
+      {/* Tabel Sesi WhatsApp (Full Responsive Table, Menggantikan Card) */}
+      <div className="border border-slate-200 dark:border-zinc-800 rounded-xl overflow-hidden bg-white dark:bg-zinc-950">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs min-w-[760px]">
+            <thead className="bg-slate-50 dark:bg-zinc-900/60 border-b border-slate-200 dark:border-zinc-800 text-[11px] font-mono text-slate-500 dark:text-zinc-400">
+              <tr>
+                <th className="py-2.5 px-4 font-medium">NAMA SESI / LABEL</th>
+                <th className="py-2.5 px-4 font-medium">NOMOR WA</th>
+                <th className="py-2.5 px-4 font-medium">STATUS KONEKSI</th>
+                <th className="py-2.5 px-4 font-medium">TOTAL TERKIRIM</th>
+                <th className="py-2.5 px-4 font-medium">WARMUP STAGE</th>
+                <th className="py-2.5 px-4 font-medium">ANTI-BAN RISK</th>
+                <th className="py-2.5 px-4 font-medium text-right">AKSI KONEKSI</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/60 text-slate-700 dark:text-zinc-300">
+              {sessions.map((s) => {
+                const isConn = s.status === 'connected';
+                return (
+                  <tr key={s.id} className="hover:bg-slate-50 dark:hover:bg-zinc-900/40 transition-colors">
+                    <td className="py-3 px-4 font-semibold text-slate-900 dark:text-white">
+                      <div className="flex items-center gap-2">
+                        <Smartphone className="w-3.5 h-3.5 text-slate-400" />
+                        <span>{s.name}</span>
+                      </div>
+                    </td>
+                    <td className="py-3 px-4 font-mono font-medium text-slate-800 dark:text-zinc-200">
+                      {s.phone}
+                    </td>
+                    <td className="py-3 px-4">
+                      <Badge variant={isConn ? 'success' : 'warning'} className="text-[10px]">
+                        {isConn ? 'Connected' : 'Connecting'}
+                      </Badge>
+                    </td>
+                    <td className="py-3 px-4 font-mono text-slate-800 dark:text-zinc-200">
+                      {s.sentCount} pesan
+                    </td>
+                    <td className="py-3 px-4 capitalize font-mono text-[11px] text-slate-600 dark:text-zinc-400">
+                      {s.warmupStatus || 'Mature (Safe)'}
+                    </td>
+                    <td className="py-3 px-4 font-mono">
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                        s.riskScore < 20
+                          ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300'
+                          : 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300'
+                      }`}>
+                        {s.riskScore} / 100
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        {!isConn ? (
+                          <Button onClick={() => openQr(s)} variant="default" size="sm" className="h-7 text-[11px]">
+                            <QrCode className="w-3 h-3 mr-1" />
+                            Hubungkan
+                          </Button>
+                        ) : (
+                          <>
+                            <Button onClick={() => openQr(s)} variant="outline" size="sm" className="h-7 text-[11px]">
+                              <RefreshCw className="w-3 h-3 mr-1" />
+                              Relink
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400">
+                              <Trash2 className="w-3 h-3" />
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* QR Code Radix Dialog */}
@@ -137,16 +154,16 @@ export function SessionsPage({ sessions, onAddSession }) {
           </DialogHeader>
 
           <div className="py-4 flex flex-col items-center justify-center">
-            <div className="p-4 bg-white rounded-xl shadow-lg border border-zinc-700">
+            <div className="p-3 bg-white rounded-xl shadow-md border border-slate-200">
               <img
                 src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=WAPI_SAMPLE_AUTH_STRING_DEMO_TEST"
                 alt="QR Code Mockup"
                 className="w-44 h-44 object-contain"
               />
             </div>
-            <div className="mt-3 flex items-center gap-1.5 text-xs text-zinc-400 font-mono">
-              <RefreshCw className="w-3 h-3 animate-spin text-emerald-400" />
-              <span>Auto-refresh dalam 20 detik</span>
+            <div className="mt-3 flex items-center gap-1.5 text-xs text-slate-500 dark:text-zinc-400 font-mono">
+              <RefreshCw className="w-3 h-3 animate-spin text-emerald-500" />
+              <span>Auto-refresh setiap 20 detik</span>
             </div>
           </div>
 
@@ -164,25 +181,25 @@ export function SessionsPage({ sessions, onAddSession }) {
           <DialogHeader>
             <DialogTitle>Tautkan dengan Pairing Code</DialogTitle>
             <DialogDescription>
-              Masukkan kode 8 digit ke notifikasi WhatsApp pada ponsel Anda tanpa scan kamera.
+              Masukkan kode 8 digit ke notifikasi WhatsApp pada ponsel Anda.
             </DialogDescription>
           </DialogHeader>
 
           <div className="py-3 space-y-3">
             <div>
-              <label className="text-[11px] font-medium text-zinc-400 block mb-1">Nomor WhatsApp Pengirim</label>
+              <label className="text-[11px] font-medium text-slate-600 dark:text-zinc-400 block mb-1">Nomor WhatsApp Pengirim</label>
               <input
                 type="text"
                 value={targetPhone}
                 onChange={(e) => setTargetPhone(e.target.value)}
                 placeholder="628123456789"
-                className="w-full h-8 px-3 rounded-md bg-zinc-900 border border-zinc-800 text-xs text-zinc-200 font-mono focus:outline-none focus:border-emerald-500"
+                className="w-full h-8 px-3 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-200 font-mono focus:outline-none focus:border-emerald-500"
               />
             </div>
 
-            <div className="p-3 bg-zinc-900/90 rounded-lg border border-zinc-800 text-center space-y-1">
-              <span className="text-[10px] text-zinc-500 font-mono uppercase">Pairing Code</span>
-              <div className="text-xl font-bold font-mono tracking-widest text-emerald-400">
+            <div className="p-3 bg-slate-50 dark:bg-zinc-900 rounded-xl border border-slate-200 dark:border-zinc-800 text-center space-y-1">
+              <span className="text-[10px] text-slate-400 dark:text-zinc-500 font-mono uppercase">Kode Tautan (Pairing Code)</span>
+              <div className="text-xl font-bold font-mono tracking-widest text-emerald-600 dark:text-emerald-400">
                 {pairingCode}
               </div>
             </div>

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { createInertiaApp } from '@inertiajs/react';
 import { createRoot } from 'react-dom/client';
+import { ThemeProvider } from './lib/theme';
 import { Layout } from './components/Layout';
 import { DashboardPage } from './Pages/Dashboard';
 import { SessionsPage } from './Pages/Sessions';
@@ -11,97 +12,99 @@ import { BroadcastPage } from './Pages/Broadcast';
 import { PlaygroundPage } from './Pages/Playground';
 import { SettingsPage } from './Pages/Settings';
 import { LoginPage } from './Pages/Auth/Login';
-
 import {
-  dummyUser,
   dummyMetrics,
   dummySessions,
-  dummyGroups,
   dummyContacts,
+  dummyGroups,
   dummyTemplates,
   dummyCampaigns,
-  dummySettings
+  dummySettings,
+  dummyUser,
 } from './data/dummyData';
 
-export function DashboardMain() {
-  const [isAuthenticated, setIsAuthenticated] = useState(true);
+export function StandaloneApp() {
   const [currentTab, setCurrentTab] = useState('dashboard');
+  const [user, setUser] = useState(dummyUser);
 
-  if (!isAuthenticated) {
+  if (!user) {
     return (
-      <LoginPage
-        onLoginSuccess={() => setIsAuthenticated(true)}
-        registrationEnabled={dummySettings.publicRegistration}
-      />
+      <ThemeProvider>
+        <LoginPage
+          onLogin={setUser}
+          registrationEnabled={dummySettings.publicRegistration}
+          googleAuthEnabled={dummySettings.googleAuthEnabled}
+        />
+      </ThemeProvider>
     );
   }
 
   return (
-    <Layout
-      currentTab={currentTab}
-      onTabChange={setCurrentTab}
-      user={dummyUser}
-      metrics={dummyMetrics}
-    >
-      {currentTab === 'dashboard' && (
-        <DashboardPage
-          metrics={dummyMetrics}
-          sessions={dummySessions}
-          campaigns={dummyCampaigns}
-          onNavigate={setCurrentTab}
-        />
-      )}
-
-      {currentTab === 'sessions' && (
-        <SessionsPage sessions={dummySessions} />
-      )}
-
-      {currentTab === 'contacts' && (
-        <ContactsPage contacts={dummyContacts} groups={dummyGroups} />
-      )}
-
-      {currentTab === 'groups' && (
-        <GroupsPage
-          groups={dummyGroups}
-          onSelectGroupForBroadcast={(groupId) => {
-            setCurrentTab('broadcast');
-          }}
-        />
-      )}
-
-      {currentTab === 'templates' && (
-        <TemplatesPage templates={dummyTemplates} />
-      )}
-
-      {currentTab === 'broadcast' && (
-        <BroadcastPage
-          campaigns={dummyCampaigns}
-          groups={dummyGroups}
-          templates={dummyTemplates}
-          sessions={dummySessions}
-        />
-      )}
-
-      {currentTab === 'playground' && (
-        <PlaygroundPage
-          sessions={dummySessions}
-          templates={dummyTemplates}
-        />
-      )}
-
-      {currentTab === 'settings' && (
-        <SettingsPage settings={dummySettings} />
-      )}
-    </Layout>
+    <ThemeProvider>
+      <Layout
+        currentTab={currentTab}
+        onTabChange={setCurrentTab}
+        user={user}
+        metrics={dummyMetrics}
+      >
+        {currentTab === 'dashboard' && (
+          <DashboardPage
+            metrics={dummyMetrics}
+            sessions={dummySessions}
+            campaigns={dummyCampaigns}
+            onNavigate={setCurrentTab}
+          />
+        )}
+        {currentTab === 'sessions' && (
+          <SessionsPage
+            sessions={dummySessions}
+            onAddSession={(session) => console.log('Add session', session)}
+          />
+        )}
+        {currentTab === 'contacts' && (
+          <ContactsPage
+            contacts={dummyContacts}
+            groups={dummyGroups}
+          />
+        )}
+        {currentTab === 'groups' && (
+          <GroupsPage
+            groups={dummyGroups}
+            onNavigate={setCurrentTab}
+          />
+        )}
+        {currentTab === 'templates' && (
+          <TemplatesPage
+            templates={dummyTemplates}
+          />
+        )}
+        {currentTab === 'broadcast' && (
+          <BroadcastPage
+            groups={dummyGroups}
+            templates={dummyTemplates}
+            sessions={dummySessions}
+            campaigns={dummyCampaigns}
+          />
+        )}
+        {currentTab === 'playground' && (
+          <PlaygroundPage
+            sessions={dummySessions}
+            templates={dummyTemplates}
+          />
+        )}
+        {currentTab === 'settings' && (
+          <SettingsPage
+            settings={dummySettings}
+          />
+        )}
+      </Layout>
+    </ThemeProvider>
   );
 }
 
-createInertiaApp({
-  resolve: (name) => {
-    // Return DashboardMain as our single-page interactive suite
-    return DashboardMain;
-  },
-  setup({ el, App, props }) {
-    createRoot(el).render(<App {...props} />);
-  },
-});
+// Support both standard Inertia page rendering and Direct mount fallback
+const el = document.getElementById('app');
+if (el) {
+  const root = createRoot(el);
+  root.render(<StandaloneApp />);
+}

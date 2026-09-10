@@ -12,24 +12,32 @@ import {
   RotateCcw,
   Zap,
   ArrowRight,
-  Sparkles,
-  Info
+  Eye,
+  Plus
 } from 'lucide-react';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { Progress } from '../components/ui/Progress';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter
+} from '../components/ui/Dialog';
 import { WhatsAppBubblePreview } from '../components/WhatsAppBubblePreview';
 
 export function BroadcastPage({ groups, templates, sessions, campaigns: initialCampaigns }) {
   const [campaigns, setCampaigns] = useState(initialCampaigns || []);
   
-  // Wizard states
+  // Wizard Modal
+  const [wizardOpen, setWizardOpen] = useState(false);
   const [step, setStep] = useState(1);
   const [selectedGroupId, setSelectedGroupId] = useState(groups[0]?.id || '');
   const [selectedTemplateId, setSelectedTemplateId] = useState(templates[0]?.id || '');
-  const [senderMode, setSenderMode] = useState('auto_rotate'); // 'auto_rotate' or session id
-  const [jitterPacing, setJitterPacing] = useState('medium'); // 'safe' (5-15s), 'medium' (3-8s), 'fast' (2-5s)
+  const [senderMode, setSenderMode] = useState('auto_rotate');
+  const [jitterPacing, setJitterPacing] = useState('medium');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [liveSuccessMessage, setLiveSuccessMessage] = useState(null);
 
@@ -42,7 +50,7 @@ export function BroadcastPage({ groups, templates, sessions, campaigns: initialC
     setTimeout(() => {
       const newCampaign = {
         id: `camp_${Date.now()}`,
-        title: `Broadcast - ${currentGroup.name}`,
+        title: `Blast - ${currentGroup.name}`,
         groupName: currentGroup.name,
         templateTitle: currentTemplate.title,
         status: 'running',
@@ -56,197 +64,225 @@ export function BroadcastPage({ groups, templates, sessions, campaigns: initialC
 
       setCampaigns([newCampaign, ...campaigns]);
       setIsSubmitting(false);
-      setLiveSuccessMessage(`Batch ${newCampaign.id} diterima Fastify API Gateway (HTTP 202 Accepted) dengan Gaussian Pacing.`);
+      setWizardOpen(false);
       setStep(1);
+      setLiveSuccessMessage(`Batch ${newCampaign.id} diterima Fastify API Gateway (HTTP 202 Accepted) dengan Gaussian Pacing.`);
 
-      // Otomatis bersihkan notifikasi
       setTimeout(() => setLiveSuccessMessage(null), 8000);
     }, 600);
   };
 
   return (
     <div className="space-y-6">
-      {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-zinc-800/80">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-zinc-800">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold tracking-tight text-zinc-100">Broadcast Campaign Engine</h1>
-            <Badge variant="outline" className="font-mono text-[10px]">Zero-Laravel-Worker</Badge>
+            <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">
+              Broadcast Campaign Engine
+            </h1>
+            <Badge variant="outline" className="font-mono text-[10px]">Direct Fastify Gateway</Badge>
           </div>
-          <p className="text-xs text-zinc-400 mt-0.5">
-            Kirim ribuan pesan massal langsung lewat Fastify Internal Queue dengan Gaussian Jitter Pacing anti-blokir.
+          <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
+            Kirim ribuan pesan massal langsung lewat internal queue WA API server dengan pacing Gaussian Jitter anti-blokir.
           </p>
         </div>
+        <Button onClick={() => setWizardOpen(true)} variant="default" size="sm">
+          <Plus className="w-3.5 h-3.5 mr-1" />
+          <span>Buat Pengiriman Baru</span>
+        </Button>
       </div>
 
       {liveSuccessMessage && (
-        <div className="p-3 rounded-lg bg-emerald-950/40 border border-emerald-500/30 flex items-center gap-2.5 text-xs text-emerald-300">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+        <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-500/30 flex items-center gap-2.5 text-xs text-emerald-800 dark:text-emerald-300">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
           <span>{liveSuccessMessage}</span>
         </div>
       )}
 
-      {/* 3-Step Wizard Card */}
-      <Card>
-        <CardHeader className="border-b border-zinc-800/60 pb-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Buat Pengiriman Baru</CardTitle>
-              <CardDescription>Ikuti 3 langkah konfigurasi target, pesan, dan proteksi sesi</CardDescription>
-            </div>
-            {/* Step Indicators */}
-            <div className="flex items-center gap-2">
-              {[1, 2, 3].map((s) => (
-                <button
-                  key={s}
-                  onClick={() => setStep(s)}
-                  className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-mono transition-colors ${
-                    step === s
-                      ? 'bg-emerald-600 text-white font-bold'
-                      : step > s
-                      ? 'bg-zinc-800 text-emerald-400'
-                      : 'bg-zinc-900 text-zinc-500'
-                  }`}
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-          </div>
-        </CardHeader>
-
-        <CardContent className="pt-5">
-          {/* Step 1: Target Audience */}
-          {step === 1 && (
-            <div className="space-y-4">
-              <div className="text-xs font-semibold text-zinc-200">
-                Langkah 1: Pilih Segmen / Grup Target
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                {groups.map((g) => {
-                  const isSel = selectedGroupId === g.id;
-                  return (
-                    <div
-                      key={g.id}
-                      onClick={() => setSelectedGroupId(g.id)}
-                      className={`p-3.5 rounded-lg border cursor-pointer transition-all ${
-                        isSel
-                          ? 'bg-zinc-900 border-emerald-500/50 shadow-xs'
-                          : 'bg-zinc-950/60 border-zinc-800/80 hover:bg-zinc-900/40'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between mb-1.5">
-                        <span className="text-xs font-semibold text-zinc-200">{g.name}</span>
-                        {isSel && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />}
+      {/* Tabel Kampanye Pengiriman Massal (Responsive Table) */}
+      <div className="border border-slate-200 dark:border-zinc-800 rounded-xl overflow-hidden bg-white dark:bg-zinc-950">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs min-w-[760px]">
+            <thead className="bg-slate-50 dark:bg-zinc-900/60 border-b border-slate-200 dark:border-zinc-800 text-[11px] font-mono text-slate-500 dark:text-zinc-400">
+              <tr>
+                <th className="py-2.5 px-4 font-medium">KAMPANYE / BATCH ID</th>
+                <th className="py-2.5 px-4 font-medium">TARGET SEGMEN</th>
+                <th className="py-2.5 px-4 font-medium">TEMPLATE KONTEN</th>
+                <th className="py-2.5 px-4 font-medium">STATUS</th>
+                <th className="py-2.5 px-4 font-medium">PROGRESS DELIVERY</th>
+                <th className="py-2.5 px-4 font-medium">SUKSES / GAGAL</th>
+                <th className="py-2.5 px-4 font-medium text-right">KONTROL</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/60 text-slate-700 dark:text-zinc-300">
+              {campaigns.map((c) => {
+                const pct = Math.round((c.sent / c.total) * 100);
+                const isFinished = c.status === 'finished';
+                return (
+                  <tr key={c.id} className="hover:bg-slate-50 dark:hover:bg-zinc-900/40 transition-colors">
+                    <td className="py-3.5 px-4 font-semibold text-slate-900 dark:text-white whitespace-nowrap">
+                      <div>{c.title}</div>
+                      <div className="text-[10px] font-mono text-slate-400 dark:text-zinc-500 font-normal">
+                        {c.id} &bull; {c.sentAt}
                       </div>
-                      <div className="text-[11px] font-mono text-zinc-400">
-                        {g.contactCount} Penerima
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 text-[11px]">
+                        {c.groupName}
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-4 max-w-xs truncate text-slate-600 dark:text-zinc-400">
+                      {c.templateTitle || 'Promo Reguler'}
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <Badge variant={isFinished ? 'outline' : 'success'} className="text-[10px] uppercase">
+                        {isFinished ? 'Selesai' : 'Sedang Kirim'}
+                      </Badge>
+                    </td>
+                    <td className="py-3.5 px-4 w-48">
+                      <div className="space-y-1">
+                        <div className="flex justify-between font-mono text-[11px]">
+                          <span>{c.sent} / {c.total}</span>
+                          <span>{pct}%</span>
+                        </div>
+                        <Progress value={pct} indicatorClassName={isFinished ? 'bg-slate-400 dark:bg-zinc-600' : 'bg-emerald-500'} />
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
+                    </td>
+                    <td className="py-3.5 px-4 font-mono text-[11px]">
+                      <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{c.success}</span>
+                      <span className="text-slate-400 mx-1">/</span>
+                      <span className="text-rose-600 dark:text-rose-400">{c.failed}</span>
+                    </td>
+                    <td className="py-3.5 px-4 text-right">
+                      {!isFinished ? (
+                        <div className="flex items-center justify-end gap-1">
+                          <Button variant="outline" size="sm" className="h-7 text-[11px] px-2">
+                            <Pause className="w-3 h-3 mr-1" /> Jeda
+                          </Button>
+                          <Button variant="ghost" size="sm" className="h-7 text-[11px] px-2 text-rose-600 dark:text-rose-400">
+                            Batal
+                          </Button>
+                        </div>
+                      ) : (
+                        <span className="text-[11px] font-mono text-slate-400">Arsip Selesai</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
 
-              <div className="flex justify-end pt-3">
-                <Button onClick={() => setStep(2)} variant="default" size="sm">
-                  <span>Lanjut: Pilih Template</span>
-                  <ArrowRight className="w-3.5 h-3.5 ml-1 text-zinc-950" />
-                </Button>
+      {/* Modal Wizard Buat Broadcast 3 Langkah (Radix Dialog) */}
+      <Dialog open={wizardOpen} onOpenChange={setWizardOpen}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <div className="flex items-center justify-between">
+              <DialogTitle>Buat Pengiriman Broadcast</DialogTitle>
+              <div className="flex items-center gap-1.5 font-mono text-xs text-slate-500">
+                <span>Langkah {step} dari 3</span>
               </div>
             </div>
-          )}
+            <DialogDescription>
+              Konfigurasi audiens, konten template pesan, dan opsi perataan anti-blokir
+            </DialogDescription>
+          </DialogHeader>
 
-          {/* Step 2: Choose Template */}
-          {step === 2 && (
-            <div className="space-y-4">
-              <div className="text-xs font-semibold text-zinc-200">
-                Langkah 2: Pilih Template Konten WhatsApp
+          <div className="py-3">
+            {/* Step 1: Target Audience */}
+            {step === 1 && (
+              <div className="space-y-3">
+                <label className="text-xs font-semibold text-slate-900 dark:text-white block">
+                  Pilih Segmen / Grup Target:
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {groups.map((g) => {
+                    const isSel = selectedGroupId === g.id;
+                    return (
+                      <div
+                        key={g.id}
+                        onClick={() => setSelectedGroupId(g.id)}
+                        className={`p-3 rounded-xl border cursor-pointer transition-all ${
+                          isSel
+                            ? 'bg-slate-100 dark:bg-zinc-900 border-emerald-500 shadow-2xs'
+                            : 'bg-white dark:bg-zinc-950 border-slate-200 dark:border-zinc-800 hover:bg-slate-50 dark:hover:bg-zinc-900/60'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-semibold text-slate-900 dark:text-white">{g.name}</span>
+                          {isSel && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />}
+                        </div>
+                        <div className="text-[11px] font-mono text-slate-500 dark:text-zinc-400 mt-1">
+                          {g.contactCount} Penerima Terdaftar
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
+            )}
+
+            {/* Step 2: Content Template */}
+            {step === 2 && (
+              <div className="space-y-3">
+                <label className="text-xs font-semibold text-slate-900 dark:text-white block">
+                  Pilih Template Pesan:
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   {templates.map((tpl) => {
                     const isSel = selectedTemplateId === tpl.id;
                     return (
                       <div
                         key={tpl.id}
                         onClick={() => setSelectedTemplateId(tpl.id)}
-                        className={`p-3 rounded-lg border cursor-pointer transition-all ${
+                        className={`p-3 rounded-xl border cursor-pointer transition-all ${
                           isSel
-                            ? 'bg-zinc-900 border-emerald-500/50'
-                            : 'bg-zinc-950/60 border-zinc-800/80 hover:bg-zinc-900/40'
+                            ? 'bg-slate-100 dark:bg-zinc-900 border-emerald-500'
+                            : 'bg-white dark:bg-zinc-950 border-slate-200 dark:border-zinc-800 hover:bg-slate-50 dark:hover:bg-zinc-900/60'
                         }`}
                       >
                         <div className="flex items-center justify-between mb-1">
-                          <span className="text-xs font-semibold text-zinc-200">{tpl.title}</span>
+                          <span className="text-xs font-semibold text-slate-900 dark:text-white">{tpl.title}</span>
                           <Badge variant={tpl.type === 'media' ? 'warning' : 'outline'} className="text-[9px] font-mono">
                             {tpl.type}
                           </Badge>
                         </div>
-                        <p className="text-[11px] text-zinc-400 line-clamp-2">{tpl.content}</p>
+                        <p className="text-[11px] text-slate-500 dark:text-zinc-400 line-clamp-2">{tpl.content}</p>
                       </div>
                     );
                   })}
                 </div>
-
-                {/* Preview bubble */}
-                <div className="p-4 bg-zinc-950 rounded-lg border border-zinc-800 flex items-center justify-center min-h-[200px]">
-                  <WhatsAppBubblePreview
-                    content={currentTemplate.content}
-                    mediaUrl={currentTemplate.mediaUrl}
-                    sampleData={{
-                      name: 'Ahmad Dahlan',
-                      phone: '628123456789',
-                      tagihan: 'Rp 450.000',
-                      tempo: '28 Sep 2026',
-                    }}
-                  />
-                </div>
               </div>
+            )}
 
-              <div className="flex justify-between pt-3">
-                <Button onClick={() => setStep(1)} variant="outline" size="sm">
-                  Kembali
-                </Button>
-                <Button onClick={() => setStep(3)} variant="default" size="sm">
-                  <span>Lanjut: Konfigurasi Anti-Ban</span>
-                  <ArrowRight className="w-3.5 h-3.5 ml-1 text-zinc-950" />
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {/* Step 3: Sender and Anti-Ban Engine */}
-          {step === 3 && (
-            <div className="space-y-4">
-              <div className="text-xs font-semibold text-zinc-200">
-                Langkah 3: Rute Pengirim & Proteksi Pacing
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Rute Nomor */}
-                <div className="space-y-2">
-                  <label className="text-[11px] font-medium text-zinc-400 block">Metode Pengiriman</label>
+            {/* Step 3: Sender and Anti-Ban Engine */}
+            {step === 3 && (
+              <div className="space-y-4">
+                <div>
+                  <label className="text-xs font-semibold text-slate-900 dark:text-white block mb-1">
+                    Metode Perangkat Pengirim
+                  </label>
                   <div
                     onClick={() => setSenderMode('auto_rotate')}
-                    className={`p-3 rounded-lg border cursor-pointer ${
-                      senderMode === 'auto_rotate'
-                        ? 'bg-zinc-900 border-emerald-500/50'
-                        : 'bg-zinc-950/60 border-zinc-800'
-                    }`}
+                    className="p-3 rounded-xl border border-emerald-500 bg-slate-50 dark:bg-zinc-900 cursor-pointer"
                   >
-                    <div className="flex items-center gap-2 font-semibold text-xs text-zinc-200">
-                      <Zap className="w-3.5 h-3.5 text-emerald-400" />
+                    <div className="flex items-center gap-2 font-semibold text-xs text-slate-900 dark:text-white">
+                      <Zap className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                       <span>Smart Multi-Session Auto-Rotate (Disarankan)</span>
                     </div>
-                    <p className="text-[11px] text-zinc-400 mt-1">
-                      Beban blast otomatis dirotasi bergantian ke 3 nomor aktif untuk mencegah batas spam harian WhatsApp.
+                    <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-1">
+                      Beban pesan didistribusikan merata ke 3 nomor aktif untuk mencegah batasan spam WhatsApp.
                     </p>
                   </div>
                 </div>
 
-                {/* Pacing Jitter Delay */}
-                <div className="space-y-2">
-                  <label className="text-[11px] font-medium text-zinc-400 block">Kecepatan & Jeda Pacing (Gaussian Jitter)</label>
+                <div>
+                  <label className="text-xs font-semibold text-slate-900 dark:text-white block mb-1">
+                    Jeda Pengiriman (Gaussian Jitter Pacing)
+                  </label>
                   <div className="grid grid-cols-3 gap-2">
                     {[
                       { id: 'safe', label: 'Aman', delay: '6s - 15s' },
@@ -257,105 +293,48 @@ export function BroadcastPage({ groups, templates, sessions, campaigns: initialC
                         key={mode.id}
                         type="button"
                         onClick={() => setJitterPacing(mode.id)}
-                        className={`p-2.5 rounded-lg border text-center cursor-pointer transition-colors ${
+                        className={`p-2.5 rounded-xl border text-center cursor-pointer transition-colors ${
                           jitterPacing === mode.id
-                            ? 'bg-zinc-900 border-emerald-500/50 text-zinc-100'
-                            : 'bg-zinc-950/60 border-zinc-800 text-zinc-400 hover:bg-zinc-900/40'
+                            ? 'bg-slate-100 dark:bg-zinc-900 border-emerald-500 font-semibold text-slate-900 dark:text-white'
+                            : 'bg-white dark:bg-zinc-950 border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400'
                         }`}
                       >
-                        <div className="text-xs font-semibold">{mode.label}</div>
-                        <div className="text-[10px] font-mono text-zinc-500 mt-0.5">{mode.delay}</div>
+                        <div className="text-xs">{mode.label}</div>
+                        <div className="text-[10px] font-mono text-slate-400 mt-0.5">{mode.delay}</div>
                       </button>
                     ))}
                   </div>
                 </div>
               </div>
-
-              {/* Summary recap */}
-              <div className="p-3 bg-zinc-900/60 rounded-lg border border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs font-mono text-zinc-300">
-                <div>
-                  Target: <strong className="text-zinc-100">{currentGroup.name}</strong> ({currentGroup.contactCount} kontak)
-                </div>
-                <div>
-                  Template: <strong className="text-zinc-100">{currentTemplate.title}</strong>
-                </div>
-              </div>
-
-              <div className="flex justify-between pt-3">
-                <Button onClick={() => setStep(2)} variant="outline" size="sm">
-                  Kembali
-                </Button>
-                <Button
-                  onClick={handleStartBroadcast}
-                  disabled={isSubmitting}
-                  variant="default"
-                  size="sm"
-                >
-                  <Send className="w-3.5 h-3.5 mr-1 text-zinc-950" />
-                  <span className="text-zinc-950 font-semibold">
-                    {isSubmitting ? 'Mengirim ke Antrean...' : 'Mulai Broadcast Massal'}
-                  </span>
-                </Button>
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Tabel Riwayat Kampanye */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Daftar Kampanye Terakhir</CardTitle>
-          <CardDescription>Monitoring progress batch pesan massal secara real-time</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            {campaigns.map((c) => {
-              const pct = Math.round((c.sent / c.total) * 100);
-              const isFinished = c.status === 'finished';
-              return (
-                <div key={c.id} className="p-3.5 rounded-lg bg-zinc-950/60 border border-zinc-800/80 space-y-2.5">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-semibold text-zinc-200">{c.title}</span>
-                        <Badge variant={isFinished ? 'outline' : 'success'} className="text-[10px] uppercase font-mono">
-                          {isFinished ? 'Selesai' : 'Sedang Berjalan'}
-                        </Badge>
-                      </div>
-                      <div className="text-[11px] text-zinc-500 mt-0.5">
-                        Batch ID: <span className="font-mono text-zinc-400">{c.id}</span> &bull; {c.sentAt}
-                      </div>
-                    </div>
-                    <div className="font-mono text-xs text-zinc-300">
-                      {c.sent} / {c.total} ({pct}%)
-                    </div>
-                  </div>
-
-                  <Progress value={pct} indicatorClassName={isFinished ? 'bg-zinc-500' : 'bg-emerald-500'} />
-
-                  <div className="flex items-center justify-between text-[11px] text-zinc-400 pt-1">
-                    <div className="flex items-center gap-3">
-                      <span className="text-emerald-400 font-mono">Sukses: {c.success}</span>
-                      <span className="text-rose-400 font-mono">Gagal: {c.failed}</span>
-                    </div>
-                    {!isFinished && (
-                      <div className="flex items-center gap-2">
-                        <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2">
-                          <Pause className="w-3 h-3 mr-1" /> Jeda
-                        </Button>
-                        <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2 text-rose-400">
-                          Batalkan
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+            )}
           </div>
-        </CardContent>
-      </Card>
+
+          <DialogFooter className="flex justify-between sm:justify-between items-center">
+            {step > 1 ? (
+              <Button onClick={() => setStep(step - 1)} variant="outline" size="sm">
+                Kembali
+              </Button>
+            ) : <div />}
+
+            {step < 3 ? (
+              <Button onClick={() => setStep(step + 1)} variant="default" size="sm">
+                <span>Lanjut</span>
+                <ArrowRight className="w-3.5 h-3.5 ml-1" />
+              </Button>
+            ) : (
+              <Button
+                onClick={handleStartBroadcast}
+                disabled={isSubmitting}
+                variant="default"
+                size="sm"
+              >
+                <Send className="w-3.5 h-3.5 mr-1" />
+                <span>{isSubmitting ? 'Memproses...' : 'Mulai Broadcast Massal'}</span>
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
