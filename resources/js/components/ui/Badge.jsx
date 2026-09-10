@@ -1,18 +1,34 @@
-import React from 'react';
+import React from "react"
+import { cva } from "class-variance-authority"
+import { cn } from "../../lib/utils"
 
-export function Badge({ children, variant = 'default', className = '' }) {
-  const variants = {
-    default: 'bg-slate-800 text-slate-300 border border-slate-700',
-    success: 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/80',
-    warning: 'bg-amber-950/80 text-amber-400 border border-amber-800/80',
-    danger: 'bg-rose-950/80 text-rose-400 border border-rose-800/80',
-    info: 'bg-cyan-950/80 text-cyan-400 border border-cyan-800/80',
-    gold: 'bg-amber-500/10 text-amber-300 border border-amber-500/30 font-semibold',
-  };
+const badgeVariants = cva(
+  "inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-medium font-mono border transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+  {
+    variants: {
+      variant: {
+        default:
+          "border-zinc-800 bg-zinc-900 text-zinc-300",
+        secondary:
+          "border-transparent bg-zinc-800 text-zinc-300",
+        success:
+          "border-emerald-500/20 bg-emerald-950/50 text-emerald-300",
+        warning:
+          "border-amber-500/20 bg-amber-950/50 text-amber-300",
+        destructive:
+          "border-rose-500/20 bg-rose-950/50 text-rose-300",
+        outline:
+          "border-zinc-800 text-zinc-400",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+    },
+  }
+)
 
+export function Badge({ className, variant, ...props }) {
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${variants[variant] || variants.default} ${className}`}>
-      {children}
-    </span>
-  );
+    <div className={cn(badgeVariants({ variant }), className)} {...props} />
+  )
 }

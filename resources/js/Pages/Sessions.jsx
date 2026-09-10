@@ -1,242 +1,201 @@
 import React, { useState } from 'react';
 import {
   Smartphone,
+  Plus,
   QrCode,
   KeyRound,
   RefreshCw,
-  LogOut,
-  ShieldCheck,
-  Zap,
-  CheckCircle2,
+  Trash2,
   AlertTriangle,
-  Clock,
-  Plus
+  ShieldCheck,
+  CheckCircle2,
+  SignalHigh
 } from 'lucide-react';
-import { Badge } from '../components/ui/Badge';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
+import { Badge } from '../components/ui/Badge';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogDescription,
-  DialogTrigger,
-  DialogClose
+  DialogFooter
 } from '../components/ui/Dialog';
 
-export function SessionsPage({ sessions: initialSessions }) {
-  const [sessions, setSessions] = useState(initialSessions);
+export function SessionsPage({ sessions, onAddSession }) {
+  const [selectedSession, setSelectedSession] = useState(null);
   const [qrModalOpen, setQrModalOpen] = useState(false);
-  const [pairModalOpen, setPairModalOpen] = useState(false);
-  const [pairPhone, setPairPhone] = useState('');
-  const [generatedCode, setGeneratedCode] = useState(null);
-  const [activeSessionTarget, setActiveSessionTarget] = useState(null);
+  const [pairingModalOpen, setPairingModalOpen] = useState(false);
+  const [pairingCode, setPairingCode] = useState('');
+  const [targetPhone, setTargetPhone] = useState('');
 
-  const handleOpenQr = (session) => {
-    setActiveSessionTarget(session);
+  const openQrModal = (session) => {
+    setSelectedSession(session);
     setQrModalOpen(true);
   };
 
-  const handleOpenPair = (session) => {
-    setActiveSessionTarget(session);
-    setPairPhone(session ? session.phone : '');
-    setGeneratedCode(null);
-    setPairModalOpen(true);
-  };
-
-  const generatePairingCode = () => {
-    // Simulasi kode pairing 8 karakter
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    let code = '';
-    for (let i = 0; i < 8; i++) {
-      code += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    const formatted = `${code.slice(0, 4)}-${code.slice(4, 8)}`;
-    setGeneratedCode(formatted);
+  const openPairingModal = (session) => {
+    setSelectedSession(session);
+    setTargetPhone(session.phone || '628899001122');
+    setPairingCode('ABCD-1234');
+    setPairingModalOpen(true);
   };
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* Top Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-zinc-800/80">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-white">Sesi WhatsApp &amp; Pool Telemetri</h1>
-          <p className="text-xs text-slate-400">
-            Hubungkan nomor WhatsApp via QR Code atau 8-Digit Pairing Code untuk distribusi pesan massal.
+          <h1 className="text-xl font-bold tracking-tight text-zinc-100">WhatsApp Sessions</h1>
+          <p className="text-xs text-zinc-400 mt-0.5">
+            Kelola pool koneksi nomor WhatsApp, pantau anti-ban risk score, dan pairing Baileys.
           </p>
         </div>
-        <div className="flex items-center gap-2.5">
-          <Button onClick={() => handleOpenPair(null)} variant="secondary" size="md">
-            <KeyRound className="w-4 h-4" />
+        <div className="flex items-center gap-2">
+          <Button onClick={() => openPairingModal({ name: 'Sesi Baru' })} variant="outline" size="sm">
+            <KeyRound className="w-3.5 h-3.5 mr-1" />
             <span>Pairing Code</span>
           </Button>
-          <Button onClick={() => handleOpenQr(null)} variant="primary" size="md">
-            <QrCode className="w-4 h-4" />
-            <span>Scan QR Baru</span>
+          <Button onClick={() => openQrModal({ name: 'Sesi Baru' })} variant="default" size="sm">
+            <QrCode className="w-3.5 h-3.5 mr-1 text-zinc-950" />
+            <span className="text-zinc-950 font-semibold">Scan QR Baru</span>
           </Button>
         </div>
       </div>
 
-      {/* Grid Sesi WhatsApp */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {/* Grid Session Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {sessions.map((s) => {
-          const isConnected = s.status === 'connected';
+          const isConn = s.status === 'connected';
           return (
-            <div
-              key={s.id}
-              className="p-5 rounded-3xl bg-slate-900 border border-slate-800 space-y-4 hover:border-slate-700 transition"
-            >
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-3">
-                  <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-bold ${
-                    isConnected ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
-                  }`}>
-                    <Smartphone className="w-5 h-5" />
+            <Card key={s.id} className="flex flex-col justify-between">
+              <CardHeader className="pb-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <CardTitle className="text-sm font-semibold truncate">{s.name}</CardTitle>
+                    <div className="text-xs font-mono text-zinc-400 mt-1">{s.phone}</div>
+                  </div>
+                  <Badge variant={isConn ? 'success' : 'warning'} className="text-[10px]">
+                    {isConn ? 'Connected' : 'Connecting'}
+                  </Badge>
+                </div>
+              </CardHeader>
+
+              <CardContent className="space-y-3 pt-0">
+                {/* Meta details */}
+                <div className="grid grid-cols-2 gap-2 text-[11px] bg-zinc-950/60 p-2.5 rounded-lg border border-zinc-800/80 font-mono">
+                  <div>
+                    <span className="text-zinc-500 block text-[10px]">Terkirim Hari Ini</span>
+                    <span className="font-semibold text-zinc-200">{s.sentCount} pesan</span>
                   </div>
                   <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-sm font-bold text-white">{s.name}</h3>
-                      <Badge variant={isConnected ? 'success' : 'danger'}>
-                        {isConnected ? 'Connected' : 'Offline'}
-                      </Badge>
-                    </div>
-                    <p className="text-xs font-mono text-slate-400 mt-0.5">+{s.phone}</p>
+                    <span className="text-zinc-500 block text-[10px]">Anti-Ban Risk</span>
+                    <span className={`font-semibold ${s.riskScore > 30 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                      {s.riskScore} / 100
+                    </span>
                   </div>
                 </div>
 
-                <div className="text-right">
-                  <span className="text-[10px] text-slate-400 block">Risk Score</span>
-                  <span className={`text-xs font-mono font-bold ${s.riskScore < 30 ? 'text-emerald-400' : 'text-amber-400'}`}>
-                    {s.riskScore} / 100
-                  </span>
-                </div>
-              </div>
-
-              {/* Status Bar info */}
-              <div className="grid grid-cols-3 gap-2 p-3 rounded-2xl bg-slate-950/60 border border-slate-800/80 text-[11px]">
-                <div>
-                  <span className="text-slate-400 block">Platform</span>
-                  <span className="text-slate-200 font-medium">{s.platform}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block">Terkirim Hari Ini</span>
-                  <span className="text-emerald-400 font-mono font-semibold">{s.sentToday}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block">Fase Warmup</span>
-                  <span className="text-slate-200 font-medium">Hari ke-{s.warmupDay}</span>
-                </div>
-              </div>
-
-              {/* Actions */}
-              <div className="flex items-center justify-between pt-2 border-t border-slate-800/80">
-                <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
-                  <Zap className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Antrean: <strong className="text-slate-200 font-mono">{s.queueCount} pesan</strong></span>
+                <div className="flex items-center justify-between text-[11px] text-zinc-400">
+                  <span>Status Warmup:</span>
+                  <span className="font-mono text-zinc-300 capitalize">{s.warmupStatus || 'Mature (Safe)'}</span>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  {!isConnected ? (
-                    <Button onClick={() => handleOpenQr(s)} variant="primary" size="sm">
-                      <QrCode className="w-3.5 h-3.5" />
-                      <span>Sambungkan</span>
+                <div className="pt-2 border-t border-zinc-800/60 flex items-center gap-2">
+                  {!isConn ? (
+                    <Button onClick={() => openQrModal(s)} variant="default" size="sm" className="flex-1">
+                      <QrCode className="w-3.5 h-3.5 mr-1" />
+                      Hubungkan Ulang
                     </Button>
                   ) : (
                     <>
-                      <Button variant="ghost" size="sm" className="text-slate-400 hover:text-slate-200">
-                        <RefreshCw className="w-3.5 h-3.5" />
-                        <span>Sync</span>
+                      <Button onClick={() => openQrModal(s)} variant="outline" size="sm" className="flex-1">
+                        <RefreshCw className="w-3.5 h-3.5 mr-1" />
+                        Sinkronkan
                       </Button>
-                      <Button variant="danger" size="sm">
-                        <LogOut className="w-3.5 h-3.5" />
-                        <span>Putus</span>
+                      <Button variant="ghost" size="icon" className="text-zinc-500 hover:text-rose-400">
+                        <Trash2 className="w-3.5 h-3.5" />
                       </Button>
                     </>
                   )}
                 </div>
-              </div>
-            </div>
+              </CardContent>
+            </Card>
           );
         })}
       </div>
 
-      {/* Modal 1: Scan QR Code (Radix UI Dialog) */}
+      {/* QR Code Radix Dialog */}
       <Dialog open={qrModalOpen} onOpenChange={setQrModalOpen}>
-        <DialogContent className="max-w-md text-center">
-          <DialogHeader>
-            <DialogTitle>Scan QR Code WhatsApp</DialogTitle>
+        <DialogContent className="max-w-sm text-center">
+          <DialogHeader className="text-center sm:text-center">
+            <DialogTitle>Scan QR WhatsApp</DialogTitle>
             <DialogDescription>
-              Buka WhatsApp di HP Anda ➔ Perangkat Tertaut (Linked Devices) ➔ Tautkan Perangkat.
+              Buka WhatsApp di ponsel &bull; Ketuk Menu/Pengaturan &bull; Perangkat Tertaut &bull; Tautkan Perangkat.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="my-4 flex flex-col items-center justify-center p-6 rounded-2xl bg-white text-slate-900 shadow-inner">
-            {/* Mockup QR Code */}
-            <div className="w-48 h-48 bg-slate-100 rounded-xl flex flex-col items-center justify-center border-4 border-slate-900 p-2 relative">
-              <QrCode className="w-36 h-36 text-slate-950" />
-              <div className="absolute inset-0 flex items-center justify-center bg-white/10 backdrop-blur-[0.5px]">
-                <span className="w-6 h-6 rounded-full bg-emerald-600 text-white font-bold text-[10px] flex items-center justify-center shadow">WA</span>
-              </div>
+          <div className="py-4 flex flex-col items-center justify-center">
+            <div className="p-4 bg-white rounded-xl shadow-lg border border-zinc-700">
+              <img
+                src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=WAPI_SAMPLE_AUTH_STRING_DEMO_TEST"
+                alt="QR Code Mockup"
+                className="w-44 h-44 object-contain"
+              />
             </div>
-            <p className="text-xs text-slate-600 mt-3 font-medium flex items-center gap-1.5">
-              <RefreshCw className="w-3.5 h-3.5 text-emerald-600 animate-spin" />
-              <span>QR Code diperbarui otomatis setiap 60 detik</span>
-            </p>
+            <div className="mt-3 flex items-center gap-1.5 text-xs text-zinc-400 font-mono">
+              <RefreshCw className="w-3 h-3 animate-spin text-emerald-400" />
+              <span>Auto-refresh dalam 20 detik</span>
+            </div>
           </div>
 
-          <div className="flex items-center justify-end gap-2">
-            <Button variant="secondary" onClick={() => setQrModalOpen(false)}>
+          <DialogFooter className="sm:justify-center">
+            <Button variant="outline" size="sm" onClick={() => setQrModalOpen(false)}>
               Tutup
             </Button>
-          </div>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Modal 2: 8-Digit Pairing Code (Radix UI Dialog) */}
-      <Dialog open={pairModalOpen} onOpenChange={setPairModalOpen}>
-        <DialogContent className="max-w-md">
+      {/* Pairing Code Radix Dialog */}
+      <Dialog open={pairingModalOpen} onOpenChange={setPairingModalOpen}>
+        <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Hubungkan via 8-Digit Pairing Code</DialogTitle>
+            <DialogTitle>Tautkan dengan Pairing Code</DialogTitle>
             <DialogDescription>
-              Masukkan nomor WhatsApp Anda. Kode 8 digit akan digenerate untuk dimasukkan ke WhatsApp di HP Anda.
+              Masukkan kode 8 digit ke notifikasi WhatsApp pada ponsel Anda tanpa scan kamera.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 my-2">
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-slate-300">Nomor WhatsApp Pengirim</label>
+          <div className="py-3 space-y-3">
+            <div>
+              <label className="text-[11px] font-medium text-zinc-400 block mb-1">Nomor WhatsApp Pengirim</label>
               <input
                 type="text"
-                placeholder="6281234567890"
-                value={pairPhone}
-                onChange={(e) => setPairPhone(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono"
+                value={targetPhone}
+                onChange={(e) => setTargetPhone(e.target.value)}
+                placeholder="628123456789"
+                className="w-full h-8 px-3 rounded-md bg-zinc-900 border border-zinc-800 text-xs text-zinc-200 font-mono focus:outline-none focus:border-emerald-500"
               />
-              <span className="text-[10px] text-slate-400">Gunakan format internasional tanpa tanda tambah (contoh: 628xxx)</span>
             </div>
 
-            {generatedCode ? (
-              <div className="p-4 rounded-2xl bg-emerald-950/50 border border-emerald-800/80 text-center space-y-2">
-                <span className="text-xs text-emerald-300 font-medium">Masukkan kode ini di WhatsApp HP Anda:</span>
-                <div className="text-2xl font-bold font-mono tracking-widest text-emerald-400 py-1">
-                  {generatedCode}
-                </div>
-                <p className="text-[11px] text-slate-400">
-                  Notifikasi pairing akan muncul di bilah notifikasi HP Anda dalam 5 detik.
-                </p>
+            <div className="p-3 bg-zinc-900/90 rounded-lg border border-zinc-800 text-center space-y-1">
+              <span className="text-[10px] text-zinc-500 font-mono uppercase">Pairing Code</span>
+              <div className="text-xl font-bold font-mono tracking-widest text-emerald-400">
+                {pairingCode}
               </div>
-            ) : (
-              <Button onClick={generatePairingCode} variant="primary" className="w-full">
-                <KeyRound className="w-4 h-4" />
-                <span>Minta Kode Pairing 8-Digit</span>
-              </Button>
-            )}
+            </div>
           </div>
 
-          <div className="flex items-center justify-end gap-2">
-            <Button variant="secondary" onClick={() => setPairModalOpen(false)}>
-              Selesai
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setPairingModalOpen(false)}>
+              Batal
             </Button>
-          </div>
+            <Button variant="default" size="sm" onClick={() => setPairingModalOpen(false)}>
+              Selesai Ditautkan
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

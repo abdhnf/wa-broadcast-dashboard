@@ -1,167 +1,162 @@
 import React, { useState } from 'react';
 import { Terminal, Send, CheckCircle2, Phone, AlertCircle, Sparkles, Code2 } from 'lucide-react';
-import { Badge } from '../components/ui/Badge';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
+import { Badge } from '../components/ui/Badge';
 import { WhatsAppBubblePreview } from '../components/WhatsAppBubblePreview';
 
 export function PlaygroundPage({ sessions, templates }) {
-  const [recipientPhone, setRecipientPhone] = useState('6281234567891');
-  const [selectedSession, setSelectedSession] = useState(sessions[0]?.id || '');
-  const [messageText, setMessageText] = useState('Halo kak *Budi Santoso*,\n\nIni adalah pesan uji coba dari *WA Broadcast Sandbox*.\nSistem siap mengirimkan pesan ke antrean server.');
+  const [selectedSessionId, setSelectedSessionId] = useState(sessions[0]?.id || '');
+  const [recipientPhone, setRecipientPhone] = useState('628123456789');
+  const [messageText, setMessageText] = useState('Halo kak, ini adalah pesan uji coba dari Fastify WA API Gateway! 🔥');
   const [mediaUrl, setMediaUrl] = useState('');
   const [isSending, setIsSending] = useState(false);
-  const [responseLog, setResponseLog] = useState(null);
+  const [apiResponse, setApiResponse] = useState(null);
 
   const handleSendTest = (e) => {
     e.preventDefault();
     setIsSending(true);
 
     setTimeout(() => {
-      const mockRes = {
-        success: true,
-        messageId: `msg_${Date.now().toString(36)}`,
-        status: 'queued',
-        sessionId: selectedSession,
-        to: recipientPhone,
-        pacingStrategy: 'gaussian_jitter',
-        delayEstimate: '3.4s',
-        timestamp: new Date().toISOString()
-      };
-      setResponseLog(mockRes);
+      setApiResponse({
+        status: 202,
+        statusText: 'Accepted',
+        payload: {
+          success: true,
+          messageId: `wamsg_${Date.now()}`,
+          queuePosition: 1,
+          estimatedDispatch: '0.04s',
+          pacingJitter: '3.42s',
+          sender: sessions.find((s) => s.id === selectedSessionId)?.phone || '628120000001',
+          recipient: recipientPhone,
+          timestamp: new Date().toISOString(),
+        },
+      });
       setIsSending(false);
-    }, 600);
-  };
-
-  const handleApplyTemplate = (tplId) => {
-    const tpl = templates.find((t) => t.id === tplId);
-    if (tpl) {
-      setMessageText(tpl.content);
-      setMediaUrl(tpl.mediaUrl || '');
-    }
+    }, 450);
   };
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-zinc-800/80">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-white">Playground Message Tester</h1>
-          <p className="text-xs text-slate-400">
-            Kirim pesan uji coba ke 1 nomor tujuan untuk memvalidasi format teks dan lampiran media sebelum blast massal.
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-bold tracking-tight text-zinc-100">Playground Tester</h1>
+            <Badge variant="outline" className="font-mono text-[10px]">Direct Fastify Endpoint</Badge>
+          </div>
+          <p className="text-xs text-zinc-400 mt-0.5">
+            Kirim pesan uji coba ke nomor Anda secara instan untuk memeriksa keterbacaan format dan respon API gateway.
           </p>
         </div>
       </div>
 
+      {/* 2-Column Tester */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Form Pengiriman (7 cols) */}
-        <div className="lg:col-span-7 p-6 rounded-3xl bg-slate-900 border border-slate-800 space-y-4 shadow-xl">
-          <form onSubmit={handleSendTest} className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-slate-300">Nomor Pengirim (Sesi)</label>
+        {/* Form Tester (7 cols) */}
+        <Card className="lg:col-span-7">
+          <CardHeader>
+            <CardTitle>Form Kirim Pesan Uji Coba</CardTitle>
+            <CardDescription>Target pesan individual tanpa antrean broadcast massal</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSendTest} className="space-y-4">
+              <div>
+                <label className="text-[11px] font-medium text-zinc-400 block mb-1">Pilih Sesi Pengirim</label>
                 <select
-                  value={selectedSession}
-                  onChange={(e) => setSelectedSession(e.target.value)}
-                  className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                  value={selectedSessionId}
+                  onChange={(e) => setSelectedSessionId(e.target.value)}
+                  className="w-full h-8 px-2.5 rounded-md bg-zinc-900 border border-zinc-800 text-xs text-zinc-200 focus:outline-none focus:border-emerald-500 font-mono"
                 >
-                  {sessions.filter(s => s.status === 'connected').map((s) => (
+                  {sessions.map((s) => (
                     <option key={s.id} value={s.id}>
-                      {s.name} (+{s.phone})
+                      {s.name} ({s.phone}) - Risk Score: {s.riskScore}/100
                     </option>
                   ))}
                 </select>
               </div>
 
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-slate-300">Nomor Penerima Uji Coba</label>
+              <div>
+                <label className="text-[11px] font-medium text-zinc-400 block mb-1">Nomor Tujuan WhatsApp</label>
                 <input
                   type="text"
+                  required
                   value={recipientPhone}
                   onChange={(e) => setRecipientPhone(e.target.value)}
-                  placeholder="6281234567890"
-                  required
-                  className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-100 font-mono focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                  placeholder="628123456789"
+                  className="w-full h-8 px-3 rounded-md bg-zinc-900 border border-zinc-800 text-xs text-zinc-200 font-mono focus:outline-none focus:border-emerald-500"
                 />
               </div>
-            </div>
 
-            {/* Quick Template Picker */}
-            <div className="flex items-center gap-2 pt-1">
-              <span className="text-[11px] text-slate-400">Gunakan Template:</span>
-              <div className="flex flex-wrap gap-1.5">
-                {templates.map((t) => (
-                  <button
-                    key={t.id}
-                    type="button"
-                    onClick={() => handleApplyTemplate(t.id)}
-                    className="px-2 py-0.5 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-[11px] text-slate-300 transition cursor-pointer"
-                  >
-                    {t.title}
-                  </button>
-                ))}
+              <div>
+                <label className="text-[11px] font-medium text-zinc-400 block mb-1">Isi Pesan Uji Coba</label>
+                <textarea
+                  rows={4}
+                  required
+                  value={messageText}
+                  onChange={(e) => setMessageText(e.target.value)}
+                  className="w-full p-2.5 rounded-md bg-zinc-900 border border-zinc-800 text-xs text-zinc-200 focus:outline-none focus:border-emerald-500 resize-none font-sans"
+                />
               </div>
-            </div>
 
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-slate-300">URL Gambar (Opsional)</label>
-              <input
-                type="text"
-                placeholder="https://images.unsplash.com/... atau kosongkan"
-                value={mediaUrl}
-                onChange={(e) => setMediaUrl(e.target.value)}
-                className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-100 font-mono focus:outline-none focus:ring-1 focus:ring-emerald-500"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-slate-300">Isi Pesan Teks</label>
-              <textarea
-                rows={6}
-                value={messageText}
-                onChange={(e) => setMessageText(e.target.value)}
-                required
-                className="w-full p-3.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-emerald-500 resize-none leading-relaxed"
-              />
-            </div>
-
-            <div className="flex items-center justify-between pt-2">
-              <div className="flex items-center gap-2 text-[11px] text-slate-400">
-                <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Pesan dikirim langsung via API</span>
+              <div>
+                <label className="text-[11px] font-medium text-zinc-400 block mb-1">URL Gambar (Opsional)</label>
+                <input
+                  type="url"
+                  value={mediaUrl}
+                  onChange={(e) => setMediaUrl(e.target.value)}
+                  placeholder="https://example.com/banner.png"
+                  className="w-full h-8 px-3 rounded-md bg-zinc-900 border border-zinc-800 text-xs text-zinc-200 font-mono focus:outline-none focus:border-emerald-500"
+                />
               </div>
-              <Button type="submit" variant="primary" disabled={isSending}>
-                <Send className="w-4 h-4" />
-                <span>{isSending ? 'Mengirim...' : 'Kirim Pesan Uji Coba'}</span>
-              </Button>
-            </div>
-          </form>
 
-          {/* Response JSON Inspector */}
-          {responseLog && (
-            <div className="mt-4 p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-2">
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-semibold text-emerald-400 flex items-center gap-1.5 font-mono">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  HTTP 202 Accepted &bull; In Queue
+              <Button type="submit" disabled={isSending} variant="default" size="sm" className="w-full">
+                <Send className="w-3.5 h-3.5 mr-1 text-zinc-950" />
+                <span className="text-zinc-950 font-semibold">
+                  {isSending ? 'Mengirim...' : 'Kirim Pesan Sekarang'}
                 </span>
-                <span className="text-[10px] text-slate-400 font-mono">{responseLog.timestamp}</span>
-              </div>
-              <pre className="p-3 rounded-xl bg-slate-900 text-[11px] font-mono text-slate-300 overflow-x-auto border border-slate-800/80">
-                {JSON.stringify(responseLog, null, 2)}
-              </pre>
-            </div>
-          )}
-        </div>
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
 
-        {/* Live WA Bubble Preview (5 cols) */}
-        <div className="lg:col-span-5 flex flex-col items-center justify-start space-y-4">
-          <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block self-start px-1">
-            Pratinjau Layar Penerima
-          </span>
-          <WhatsAppBubblePreview
-            content={messageText}
-            mediaUrl={mediaUrl}
-            sampleName="Nomor Tujuan"
-          />
+        {/* Preview and JSON Response (5 cols) */}
+        <div className="lg:col-span-5 space-y-4">
+          <Card className="p-4 bg-zinc-950 border-zinc-800 flex items-center justify-center min-h-[220px]">
+            <WhatsAppBubblePreview
+              content={messageText}
+              mediaUrl={mediaUrl}
+              sampleData={{ name: 'Tester', phone: recipientPhone }}
+            />
+          </Card>
+
+          {/* Real-time Response Box */}
+          <Card>
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-xs font-mono flex items-center gap-1.5">
+                  <Code2 className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>API Response Telemetry</span>
+                </CardTitle>
+                {apiResponse && (
+                  <Badge variant="success" className="text-[9px] font-mono">
+                    HTTP {apiResponse.status} {apiResponse.statusText}
+                  </Badge>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent>
+              {apiResponse ? (
+                <pre className="p-3 rounded-md bg-zinc-950 border border-zinc-800/80 font-mono text-[11px] text-emerald-300 overflow-x-auto leading-relaxed">
+                  {JSON.stringify(apiResponse.payload, null, 2)}
+                </pre>
+              ) : (
+                <div className="p-6 text-center text-zinc-500 text-xs font-mono border border-dashed border-zinc-800 rounded-md">
+                  Tekan tombol &quot;Kirim Pesan Sekarang&quot; untuk melihat telemetri gateway
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>

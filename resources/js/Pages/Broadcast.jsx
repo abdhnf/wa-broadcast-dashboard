@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import {
   Send,
-  Sparkles,
   Users,
   FileText,
   Smartphone,
@@ -12,317 +11,351 @@ import {
   Pause,
   RotateCcw,
   Zap,
-  ArrowRight
+  ArrowRight,
+  Sparkles,
+  Info
 } from 'lucide-react';
-import { Badge } from '../components/ui/Badge';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
+import { Badge } from '../components/ui/Badge';
 import { Progress } from '../components/ui/Progress';
 import { WhatsAppBubblePreview } from '../components/WhatsAppBubblePreview';
 
-export function BroadcastPage({ campaigns: initialCampaigns, groups, templates, sessions }) {
-  const [campaigns, setCampaigns] = useState(initialCampaigns);
-
-  // Wizard state
+export function BroadcastPage({ groups, templates, sessions, campaigns: initialCampaigns }) {
+  const [campaigns, setCampaigns] = useState(initialCampaigns || []);
+  
+  // Wizard states
   const [step, setStep] = useState(1);
   const [selectedGroupId, setSelectedGroupId] = useState(groups[0]?.id || '');
   const [selectedTemplateId, setSelectedTemplateId] = useState(templates[0]?.id || '');
-  const [selectedSessionId, setSelectedSessionId] = useState('auto_rotate');
-  const [jitterDelay, setJitterDelay] = useState('adaptif');
-  const [isLaunching, setIsLaunching] = useState(false);
+  const [senderMode, setSenderMode] = useState('auto_rotate'); // 'auto_rotate' or session id
+  const [jitterPacing, setJitterPacing] = useState('medium'); // 'safe' (5-15s), 'medium' (3-8s), 'fast' (2-5s)
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [liveSuccessMessage, setLiveSuccessMessage] = useState(null);
 
-  const activeGroup = groups.find((g) => g.id === selectedGroupId) || groups[0];
-  const activeTemplate = templates.find((t) => t.id === selectedTemplateId) || templates[0];
+  const currentGroup = groups.find((g) => g.id === selectedGroupId) || groups[0];
+  const currentTemplate = templates.find((t) => t.id === selectedTemplateId) || templates[0];
 
   const handleStartBroadcast = () => {
-    setIsLaunching(true);
-
+    setIsSubmitting(true);
+    
     setTimeout(() => {
       const newCampaign = {
-        id: `cmp_${Date.now()}`,
-        name: `Blast: ${activeGroup.name} (${activeTemplate.title})`,
-        batchId: `batch_${Date.now().toString(36)}`,
-        groupName: activeGroup.name,
-        templateTitle: activeTemplate.title,
-        totalRecipients: activeGroup.count,
-        sentCount: 1,
-        deliveredCount: 1,
-        readCount: 0,
-        failedCount: 0,
-        status: 'in_progress',
-        createdAt: 'Baru saja',
-        sessionUsed: selectedSessionId === 'auto_rotate' ? 'Auto-Rotate Multi-Session' : 'Nomor Pilihan',
+        id: `camp_${Date.now()}`,
+        title: `Broadcast - ${currentGroup.name}`,
+        groupName: currentGroup.name,
+        templateTitle: currentTemplate.title,
+        status: 'running',
+        total: currentGroup.contactCount || 250,
+        sent: 12,
+        success: 12,
+        failed: 0,
+        sentAt: 'Baru Saja',
+        estimatedRemaining: '~18 menit',
       };
 
       setCampaigns([newCampaign, ...campaigns]);
-      setIsLaunching(false);
-      setStep(1); // reset wizard
-    }, 800);
+      setIsSubmitting(false);
+      setLiveSuccessMessage(`Batch ${newCampaign.id} diterima Fastify API Gateway (HTTP 202 Accepted) dengan Gaussian Pacing.`);
+      setStep(1);
+
+      // Otomatis bersihkan notifikasi
+      setTimeout(() => setLiveSuccessMessage(null), 8000);
+    }, 600);
   };
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* Top Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-zinc-800/80">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-white">Broadcast &amp; Blast Campaign</h1>
-          <p className="text-xs text-slate-400">
-            Kirim pesan massal terpersonalisasi langsung ke antrean WA API Server tanpa membebani antrian Laravel.
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-bold tracking-tight text-zinc-100">Broadcast Campaign Engine</h1>
+            <Badge variant="outline" className="font-mono text-[10px]">Zero-Laravel-Worker</Badge>
+          </div>
+          <p className="text-xs text-zinc-400 mt-0.5">
+            Kirim ribuan pesan massal langsung lewat Fastify Internal Queue dengan Gaussian Jitter Pacing anti-blokir.
           </p>
         </div>
       </div>
 
-      {/* Wizard 3 Langkah */}
-      <div className="p-6 rounded-3xl bg-slate-900 border border-slate-800 space-y-6 shadow-xl">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-4">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-xl bg-emerald-600 flex items-center justify-center font-bold text-xs text-white">
-              {step}
-            </div>
-            <div>
-              <h2 className="text-sm font-bold text-white">
-                {step === 1 && 'Langkah 1: Tentukan Target Segmentasi Kontak'}
-                {step === 2 && 'Langkah 2: Pilih Template & Isi Pesan WhatsApp'}
-                {step === 3 && 'Langkah 3: Rute Pengirim & Anti-Spam Pacing'}
-              </h2>
-              <p className="text-xs text-slate-400">
-                {step === 1 && 'Pilih salah satu grup kontak yang sudah terisi nomor WhatsApp penerima.'}
-                {step === 2 && 'Pilih template yang memuat teks dan media yang akan dibroadcast.'}
-                {step === 3 && 'Tentukan nomor pengirim WhatsApp dan jeda Gaussian Jitter adaptif.'}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-mono text-slate-400 hidden sm:inline">Langkah {step} dari 3</span>
-          </div>
+      {liveSuccessMessage && (
+        <div className="p-3 rounded-lg bg-emerald-950/40 border border-emerald-500/30 flex items-center gap-2.5 text-xs text-emerald-300">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span>{liveSuccessMessage}</span>
         </div>
+      )}
 
-        {/* Step 1: Pilih Grup */}
-        {step === 1 && (
-          <div className="space-y-4">
-            <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider block">
-              Pilih Grup Kontak Tujuan
-            </label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              {groups.map((g) => {
-                const isSelected = g.id === selectedGroupId;
-                return (
-                  <div
-                    key={g.id}
-                    onClick={() => setSelectedGroupId(g.id)}
-                    className={`p-4 rounded-2xl border transition cursor-pointer space-y-2 ${
-                      isSelected
-                        ? 'bg-emerald-950/30 border-emerald-500 shadow-md ring-1 ring-emerald-500/30'
-                        : 'bg-slate-950 border-slate-800 hover:border-slate-700'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-white">{g.name}</span>
-                      <Badge variant={isSelected ? 'success' : 'default'}>{g.count} Nomor</Badge>
-                    </div>
-                    <p className="text-[11px] text-slate-400 line-clamp-2">{g.description}</p>
-                  </div>
-                );
-              })}
+      {/* 3-Step Wizard Card */}
+      <Card>
+        <CardHeader className="border-b border-zinc-800/60 pb-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Buat Pengiriman Baru</CardTitle>
+              <CardDescription>Ikuti 3 langkah konfigurasi target, pesan, dan proteksi sesi</CardDescription>
             </div>
-
-            <div className="flex justify-end pt-2">
-              <Button onClick={() => setStep(2)} variant="primary">
-                <span>Lanjut: Pilih Template</span>
-                <ArrowRight className="w-4 h-4" />
-              </Button>
+            {/* Step Indicators */}
+            <div className="flex items-center gap-2">
+              {[1, 2, 3].map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setStep(s)}
+                  className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-mono transition-colors ${
+                    step === s
+                      ? 'bg-emerald-600 text-white font-bold'
+                      : step > s
+                      ? 'bg-zinc-800 text-emerald-400'
+                      : 'bg-zinc-900 text-zinc-500'
+                  }`}
+                >
+                  {s}
+                </button>
+              ))}
             </div>
           </div>
-        )}
+        </CardHeader>
 
-        {/* Step 2: Pilih Template */}
-        {step === 2 && (
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="space-y-3">
-                <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider block">
-                  Pilih Template Pesan
-                </label>
+        <CardContent className="pt-5">
+          {/* Step 1: Target Audience */}
+          {step === 1 && (
+            <div className="space-y-4">
+              <div className="text-xs font-semibold text-zinc-200">
+                Langkah 1: Pilih Segmen / Grup Target
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                {groups.map((g) => {
+                  const isSel = selectedGroupId === g.id;
+                  return (
+                    <div
+                      key={g.id}
+                      onClick={() => setSelectedGroupId(g.id)}
+                      className={`p-3.5 rounded-lg border cursor-pointer transition-all ${
+                        isSel
+                          ? 'bg-zinc-900 border-emerald-500/50 shadow-xs'
+                          : 'bg-zinc-950/60 border-zinc-800/80 hover:bg-zinc-900/40'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-xs font-semibold text-zinc-200">{g.name}</span>
+                        {isSel && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />}
+                      </div>
+                      <div className="text-[11px] font-mono text-zinc-400">
+                        {g.contactCount} Penerima
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="flex justify-end pt-3">
+                <Button onClick={() => setStep(2)} variant="default" size="sm">
+                  <span>Lanjut: Pilih Template</span>
+                  <ArrowRight className="w-3.5 h-3.5 ml-1 text-zinc-950" />
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 2: Choose Template */}
+          {step === 2 && (
+            <div className="space-y-4">
+              <div className="text-xs font-semibold text-zinc-200">
+                Langkah 2: Pilih Template Konten WhatsApp
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  {templates.map((t) => {
-                    const isSelected = t.id === selectedTemplateId;
+                  {templates.map((tpl) => {
+                    const isSel = selectedTemplateId === tpl.id;
                     return (
                       <div
-                        key={t.id}
-                        onClick={() => setSelectedTemplateId(t.id)}
-                        className={`p-4 rounded-2xl border transition cursor-pointer space-y-1.5 ${
-                          isSelected
-                            ? 'bg-emerald-950/30 border-emerald-500 shadow-md ring-1 ring-emerald-500/30'
-                            : 'bg-slate-950 border-slate-800 hover:border-slate-700'
+                        key={tpl.id}
+                        onClick={() => setSelectedTemplateId(tpl.id)}
+                        className={`p-3 rounded-lg border cursor-pointer transition-all ${
+                          isSel
+                            ? 'bg-zinc-900 border-emerald-500/50'
+                            : 'bg-zinc-950/60 border-zinc-800/80 hover:bg-zinc-900/40'
                         }`}
                       >
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-white">{t.title}</span>
-                          <Badge variant="default">{t.mediaUrl ? 'Teks + Media' : 'Teks Saja'}</Badge>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs font-semibold text-zinc-200">{tpl.title}</span>
+                          <Badge variant={tpl.type === 'media' ? 'warning' : 'outline'} className="text-[9px] font-mono">
+                            {tpl.type}
+                          </Badge>
                         </div>
-                        <p className="text-[11px] text-slate-400 line-clamp-2 leading-relaxed">
-                          {t.content}
-                        </p>
+                        <p className="text-[11px] text-zinc-400 line-clamp-2">{tpl.content}</p>
                       </div>
                     );
                   })}
                 </div>
-              </div>
 
-              {/* Preview bubble */}
-              <div className="space-y-2 flex flex-col items-center justify-center p-4 rounded-2xl bg-slate-950/60 border border-slate-800">
-                <span className="text-xs font-medium text-slate-400 mb-2">Simulasi Pesan ke Pelanggan</span>
-                <WhatsAppBubblePreview
-                  content={activeTemplate.content}
-                  mediaUrl={activeTemplate.mediaUrl}
-                  sampleName="Budi Santoso"
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between pt-2">
-              <Button onClick={() => setStep(1)} variant="secondary">
-                Kembali
-              </Button>
-              <Button onClick={() => setStep(3)} variant="primary">
-                <span>Lanjut: Pengaturan Rute &amp; Pacing</span>
-                <ArrowRight className="w-4 h-4" />
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* Step 3: Rute & Pacing */}
-        {step === 3 && (
-          <div className="space-y-5">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label className="text-xs font-medium text-slate-300">Nomor Pengirim WhatsApp</label>
-                <select
-                  value={selectedSessionId}
-                  onChange={(e) => setSelectedSessionId(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                >
-                  <option value="auto_rotate">✨ Auto-Rotate Multi-Session (Direkomendasikan)</option>
-                  {sessions.filter(s => s.status === 'connected').map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} (+{s.phone})
-                    </option>
-                  ))}
-                </select>
-                <p className="text-[10px] text-slate-400">
-                  Auto-Rotate akan membagi antrean rata ke semua nomor yang aktif agar terhindar dari spam rate-limit.
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-xs font-medium text-slate-300">Pacing Jitter Delay (Anti-Ban)</label>
-                <select
-                  value={jitterDelay}
-                  onChange={(e) => setJitterDelay(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono"
-                >
-                  <option value="adaptif">Gaussian Jitter Adaptif (3s - 12s, Optimal)</option>
-                  <option value="santai">Santai &amp; Aman (8s - 20s per pesan)</option>
-                  <option value="cepat">Cepat (1s - 4s, Khusus nomor lama)</option>
-                </select>
-                <p className="text-[10px] text-slate-400">
-                  Waktu jeda acak antar pesan dihitung langsung oleh Fastify Baileys Queue di server.
-                </p>
-              </div>
-            </div>
-
-            {/* Summary Box */}
-            <div className="p-4 rounded-2xl bg-emerald-950/20 border border-emerald-800/40 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
-              <div className="space-y-1">
-                <span className="font-bold text-emerald-300">Ringkasan Eksekusi Kampanye:</span>
-                <div className="text-slate-300 text-[11px]">
-                  Target: <strong className="text-white">{activeGroup.name}</strong> ({activeGroup.count} kontak) &bull; Template: <strong className="text-white">{activeTemplate.title}</strong>
+                {/* Preview bubble */}
+                <div className="p-4 bg-zinc-950 rounded-lg border border-zinc-800 flex items-center justify-center min-h-[200px]">
+                  <WhatsAppBubblePreview
+                    content={currentTemplate.content}
+                    mediaUrl={currentTemplate.mediaUrl}
+                    sampleData={{
+                      name: 'Ahmad Dahlan',
+                      phone: '628123456789',
+                      tagihan: 'Rp 450.000',
+                      tempo: '28 Sep 2026',
+                    }}
+                  />
                 </div>
               </div>
-              <div className="text-emerald-400 font-mono text-xs font-bold">
-                Status: Siap Diluncurkan
+
+              <div className="flex justify-between pt-3">
+                <Button onClick={() => setStep(1)} variant="outline" size="sm">
+                  Kembali
+                </Button>
+                <Button onClick={() => setStep(3)} variant="default" size="sm">
+                  <span>Lanjut: Konfigurasi Anti-Ban</span>
+                  <ArrowRight className="w-3.5 h-3.5 ml-1 text-zinc-950" />
+                </Button>
               </div>
             </div>
+          )}
 
-            <div className="flex items-center justify-between pt-2">
-              <Button onClick={() => setStep(2)} variant="secondary">
-                Kembali
-              </Button>
-              <Button onClick={handleStartBroadcast} variant="primary" disabled={isLaunching}>
-                <Send className="w-4 h-4" />
-                <span>{isLaunching ? 'Mengirim ke Server WA...' : 'Luncurkan Broadcast Sekarang'}</span>
-              </Button>
-            </div>
-          </div>
-        )}
-      </div>
+          {/* Step 3: Sender and Anti-Ban Engine */}
+          {step === 3 && (
+            <div className="space-y-4">
+              <div className="text-xs font-semibold text-zinc-200">
+                Langkah 3: Rute Pengirim & Proteksi Pacing
+              </div>
 
-      {/* Monitoring Kampanye Aktif & Riwayat */}
-      <div className="space-y-4">
-        <h2 className="text-sm font-bold text-white uppercase tracking-wider px-1">
-          Daftar Kampanye &amp; Batch Monitor
-        </h2>
-
-        <div className="space-y-3">
-          {campaigns.map((cmp) => {
-            const percent = Math.round((cmp.sentCount / cmp.totalRecipients) * 100);
-            const isDone = cmp.status === 'completed';
-
-            return (
-              <div key={cmp.id} className="p-5 rounded-3xl bg-slate-900 border border-slate-800 space-y-4 shadow-lg">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-sm font-bold text-white">{cmp.name}</h3>
-                      <Badge variant={isDone ? 'success' : 'info'}>
-                        {isDone ? 'Selesai' : 'Sedang Berjalan (Queue)'}
-                      </Badge>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Rute Nomor */}
+                <div className="space-y-2">
+                  <label className="text-[11px] font-medium text-zinc-400 block">Metode Pengiriman</label>
+                  <div
+                    onClick={() => setSenderMode('auto_rotate')}
+                    className={`p-3 rounded-lg border cursor-pointer ${
+                      senderMode === 'auto_rotate'
+                        ? 'bg-zinc-900 border-emerald-500/50'
+                        : 'bg-zinc-950/60 border-zinc-800'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 font-semibold text-xs text-zinc-200">
+                      <Zap className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Smart Multi-Session Auto-Rotate (Disarankan)</span>
                     </div>
-                    <p className="text-xs text-slate-400 mt-1 font-mono">
-                      Batch ID: <span className="text-slate-300">{cmp.batchId}</span> &bull; Pengirim: {cmp.sessionUsed}
+                    <p className="text-[11px] text-zinc-400 mt-1">
+                      Beban blast otomatis dirotasi bergantian ke 3 nomor aktif untuk mencegah batas spam harian WhatsApp.
                     </p>
                   </div>
-
-                  <div className="text-left sm:text-right">
-                    <span className="text-sm font-bold font-mono text-slate-200">
-                      {cmp.sentCount} / {cmp.totalRecipients} ({percent}%)
-                    </span>
-                    <span className="text-[11px] text-slate-400 block">{cmp.createdAt}</span>
-                  </div>
                 </div>
 
-                <Progress value={percent} />
-
-                <div className="flex flex-wrap items-center justify-between gap-3 text-xs pt-1">
-                  <div className="flex items-center gap-4 font-mono text-[11px]">
-                    <span className="text-emerald-400">✓ {cmp.deliveredCount} Sukses</span>
-                    <span className="text-cyan-400">✓✓ {cmp.readCount} Dibaca</span>
-                    {cmp.failedCount > 0 && (
-                      <span className="text-rose-400">✕ {cmp.failedCount} Gagal</span>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    {!isDone ? (
-                      <>
-                        <Button variant="ghost" size="sm">
-                          <Pause className="w-3.5 h-3.5" />
-                          <span>Pause</span>
-                        </Button>
-                      </>
-                    ) : (
-                      <Button variant="ghost" size="sm">
-                        <RotateCcw className="w-3.5 h-3.5" />
-                        <span>Kirim Ulang Gagal (0)</span>
-                      </Button>
-                    )}
+                {/* Pacing Jitter Delay */}
+                <div className="space-y-2">
+                  <label className="text-[11px] font-medium text-zinc-400 block">Kecepatan & Jeda Pacing (Gaussian Jitter)</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { id: 'safe', label: 'Aman', delay: '6s - 15s' },
+                      { id: 'medium', label: 'Standar', delay: '3s - 8s' },
+                      { id: 'fast', label: 'Cepat', delay: '2s - 4s' },
+                    ].map((mode) => (
+                      <button
+                        key={mode.id}
+                        type="button"
+                        onClick={() => setJitterPacing(mode.id)}
+                        className={`p-2.5 rounded-lg border text-center cursor-pointer transition-colors ${
+                          jitterPacing === mode.id
+                            ? 'bg-zinc-900 border-emerald-500/50 text-zinc-100'
+                            : 'bg-zinc-950/60 border-zinc-800 text-zinc-400 hover:bg-zinc-900/40'
+                        }`}
+                      >
+                        <div className="text-xs font-semibold">{mode.label}</div>
+                        <div className="text-[10px] font-mono text-zinc-500 mt-0.5">{mode.delay}</div>
+                      </button>
+                    ))}
                   </div>
                 </div>
               </div>
-            );
-          })}
-        </div>
-      </div>
+
+              {/* Summary recap */}
+              <div className="p-3 bg-zinc-900/60 rounded-lg border border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs font-mono text-zinc-300">
+                <div>
+                  Target: <strong className="text-zinc-100">{currentGroup.name}</strong> ({currentGroup.contactCount} kontak)
+                </div>
+                <div>
+                  Template: <strong className="text-zinc-100">{currentTemplate.title}</strong>
+                </div>
+              </div>
+
+              <div className="flex justify-between pt-3">
+                <Button onClick={() => setStep(2)} variant="outline" size="sm">
+                  Kembali
+                </Button>
+                <Button
+                  onClick={handleStartBroadcast}
+                  disabled={isSubmitting}
+                  variant="default"
+                  size="sm"
+                >
+                  <Send className="w-3.5 h-3.5 mr-1 text-zinc-950" />
+                  <span className="text-zinc-950 font-semibold">
+                    {isSubmitting ? 'Mengirim ke Antrean...' : 'Mulai Broadcast Massal'}
+                  </span>
+                </Button>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Tabel Riwayat Kampanye */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Daftar Kampanye Terakhir</CardTitle>
+          <CardDescription>Monitoring progress batch pesan massal secara real-time</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            {campaigns.map((c) => {
+              const pct = Math.round((c.sent / c.total) * 100);
+              const isFinished = c.status === 'finished';
+              return (
+                <div key={c.id} className="p-3.5 rounded-lg bg-zinc-950/60 border border-zinc-800/80 space-y-2.5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold text-zinc-200">{c.title}</span>
+                        <Badge variant={isFinished ? 'outline' : 'success'} className="text-[10px] uppercase font-mono">
+                          {isFinished ? 'Selesai' : 'Sedang Berjalan'}
+                        </Badge>
+                      </div>
+                      <div className="text-[11px] text-zinc-500 mt-0.5">
+                        Batch ID: <span className="font-mono text-zinc-400">{c.id}</span> &bull; {c.sentAt}
+                      </div>
+                    </div>
+                    <div className="font-mono text-xs text-zinc-300">
+                      {c.sent} / {c.total} ({pct}%)
+                    </div>
+                  </div>
+
+                  <Progress value={pct} indicatorClassName={isFinished ? 'bg-zinc-500' : 'bg-emerald-500'} />
+
+                  <div className="flex items-center justify-between text-[11px] text-zinc-400 pt-1">
+                    <div className="flex items-center gap-3">
+                      <span className="text-emerald-400 font-mono">Sukses: {c.success}</span>
+                      <span className="text-rose-400 font-mono">Gagal: {c.failed}</span>
+                    </div>
+                    {!isFinished && (
+                      <div className="flex items-center gap-2">
+                        <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2">
+                          <Pause className="w-3 h-3 mr-1" /> Jeda
+                        </Button>
+                        <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2 text-rose-400">
+                          Batalkan
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

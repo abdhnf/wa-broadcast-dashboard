@@ -9,260 +9,197 @@ import {
   Eye,
   EyeOff,
   Server,
-  Sparkles,
-  Info,
-  Globe
+  Globe,
+  Info
 } from 'lucide-react';
-import { Badge } from '../components/ui/Badge';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
+import { Badge } from '../components/ui/Badge';
 import { Switch } from '../components/ui/Switch';
 
 export function SettingsPage({ settings: initialSettings }) {
-  const [settings, setSettings] = useState(initialSettings);
+  const [settings, setSettings] = useState(initialSettings || {});
   const [showApiKey, setShowApiKey] = useState(false);
+  const [testSuccess, setTestSuccess] = useState(false);
   const [copiedField, setCopiedField] = useState(null);
-  const [testingConnection, setTestingConnection] = useState(false);
-  const [connResult, setConnResult] = useState(null);
 
-  const originUrl = typeof window !== 'undefined' ? window.location.origin : 'https://broadcast.domain.com';
-  const callbackUrl = `${originUrl}/auth/google/callback`;
-
-  const copyToClipboard = (text, field) => {
-    navigator.clipboard.writeText(text);
-    setCopiedField(field);
+  const copyToClipboard = (text, fieldName) => {
+    navigator.clipboard?.writeText(text);
+    setCopiedField(fieldName);
     setTimeout(() => setCopiedField(null), 2000);
   };
 
   const handleTestConnection = () => {
-    setTestingConnection(true);
-    setConnResult(null);
+    setTestSuccess(false);
     setTimeout(() => {
-      setTestingConnection(false);
-      setConnResult({ success: true, version: '5.3.0', latency: '6ms', queueReady: true });
-    }, 600);
+      setTestSuccess(true);
+      setTimeout(() => setTestSuccess(false), 5000);
+    }, 400);
   };
 
   return (
-    <div className="space-y-6 max-w-4xl">
-      <div>
-        <h1 className="text-xl font-bold tracking-tight text-white">Konfigurasi &amp; Autentikasi</h1>
-        <p className="text-xs text-slate-400">
-          Koneksi ke WA API Gateway, pengaturan toggle registrasi, dan integrasi Google OAuth Single Sign-On.
-        </p>
+    <div className="space-y-6">
+      {/* Top Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-zinc-800/80">
+        <div>
+          <h1 className="text-xl font-bold tracking-tight text-zinc-100">Configuration & Integrations</h1>
+          <p className="text-xs text-zinc-400 mt-0.5">
+            Kelola endpoint koneksi Fastify WA API Gateway dan kredensial Google OAuth Single Sign-On.
+          </p>
+        </div>
+        <Button onClick={handleTestConnection} variant="outline" size="sm">
+          <Server className="w-3.5 h-3.5 mr-1 text-emerald-400" />
+          <span>Uji Sambungan Gateway</span>
+        </Button>
       </div>
 
-      {/* Card 1: Koneksi WhatsApp API Gateway */}
-      <div className="p-6 rounded-3xl bg-slate-900 border border-slate-800 space-y-5 shadow-xl">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400">
-              <Server className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="text-sm font-bold text-white">Koneksi WhatsApp API Server</h2>
-              <p className="text-xs text-slate-400">Fastify backend gateway URL dan credential x-api-key</p>
-            </div>
-          </div>
-          <Badge variant="success">Connected</Badge>
+      {testSuccess && (
+        <div className="p-3 rounded-lg bg-emerald-950/40 border border-emerald-500/30 flex items-center gap-2.5 text-xs text-emerald-300">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span>Koneksi berhasil! Fastify WA API merespon 200 OK dengan latensi 12ms.</span>
         </div>
+      )}
 
-        <div className="space-y-4">
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-slate-300">WA API Server Endpoint URL</label>
-            <input
-              type="text"
-              value={settings.serverUrl}
-              onChange={(e) => setSettings({ ...settings, serverUrl: e.target.value })}
-              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-100 font-mono focus:outline-none focus:ring-1 focus:ring-emerald-500"
-            />
-            <span className="text-[10px] text-slate-400">
-              Contoh: <code>https://wa-api.domain.com/api/v1</code> atau internal IP <code>http://127.0.0.1:3100/api/v1</code>
-            </span>
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-slate-300">WA API Key (x-api-key)</label>
-            <div className="relative">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Card 1: WA API Server Connection */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Koneksi Fastify WA API Server</CardTitle>
+            <CardDescription>Endpoint backend yang menangani socket Baileys dan queue pacing</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <label className="text-[11px] font-medium text-zinc-400 block mb-1">URL WA API Server</label>
               <input
-                type={showApiKey ? 'text' : 'password'}
-                value={settings.apiKey}
-                onChange={(e) => setSettings({ ...settings, apiKey: e.target.value })}
-                className="w-full pl-3.5 pr-20 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-100 font-mono focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                type="text"
+                value={settings.waApiUrl || 'http://127.0.0.1:3100/api/v1'}
+                onChange={(e) => setSettings({ ...settings, waApiUrl: e.target.value })}
+                className="w-full h-8 px-3 rounded-md bg-zinc-900 border border-zinc-800 text-xs text-zinc-200 font-mono focus:outline-none focus:border-emerald-500"
               />
-              <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+            </div>
+
+            <div>
+              <label className="text-[11px] font-medium text-zinc-400 block mb-1">API Key Gateway (x-api-key)</label>
+              <div className="relative">
+                <input
+                  type={showApiKey ? 'text' : 'password'}
+                  value={settings.waApiKey || 'wapi_live_9a8b7c6d5e4f3a2b1c'}
+                  onChange={(e) => setSettings({ ...settings, waApiKey: e.target.value })}
+                  className="w-full h-8 pl-3 pr-10 rounded-md bg-zinc-900 border border-zinc-800 text-xs text-zinc-200 font-mono focus:outline-none focus:border-emerald-500"
+                />
                 <button
                   type="button"
                   onClick={() => setShowApiKey(!showApiKey)}
-                  className="p-1.5 text-slate-400 hover:text-slate-200 cursor-pointer"
+                  className="absolute right-2.5 top-2 text-zinc-400 hover:text-zinc-200"
                 >
                   {showApiKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => copyToClipboard(settings.apiKey, 'apiKey')}
-                  className="p-1.5 text-slate-400 hover:text-slate-200 cursor-pointer"
-                >
-                  {copiedField === 'apiKey' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                </button>
               </div>
             </div>
-          </div>
 
-          <div className="flex items-center justify-between pt-2">
-            <div className="text-xs">
-              {connResult && (
-                <span className="text-emerald-400 font-mono font-medium flex items-center gap-1.5">
-                  <CheckCircle2 className="w-4 h-4" />
-                  Koneksi Sukses! Gateway v{connResult.version} &bull; Latensi {connResult.latency}
-                </span>
+            <div className="p-3 bg-zinc-900/60 rounded-lg border border-zinc-800 text-[11px] text-zinc-400 space-y-1">
+              <span className="font-semibold text-zinc-300 block">Antrean Tanpa Worker Ganda:</span>
+              <p>
+                Laravel hanya memicu batch dan menerima 202 Accepted. Pacing jitter 3s-12s dan retry otomatis ditangani langsung di sisi server WA API.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Card 2: Pilihan Autentikasi (Identik dengan WA API) */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Autentikasi & Registrasi Publik</CardTitle>
+            <CardDescription>Kontrol pendaftaran form biasa dan akses akun Google</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Toggle Registrasi Akun Baru */}
+            <div className="flex items-center justify-between p-3 rounded-lg bg-zinc-900/60 border border-zinc-800">
+              <div className="space-y-0.5">
+                <span className="text-xs font-semibold text-zinc-200 block">Buka Registrasi Publik</span>
+                <p className="text-[11px] text-zinc-400">
+                  Hanya berlaku untuk form pendaftaran manual email/password.
+                </p>
+              </div>
+              <Switch
+                checked={settings.publicRegistration}
+                onCheckedChange={(val) => setSettings({ ...settings, publicRegistration: val })}
+              />
+            </div>
+
+            {/* Google OAuth Section */}
+            <div className="p-3 rounded-lg bg-zinc-900/60 border border-zinc-800 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-semibold text-zinc-200 block">Google OAuth 2.0 Single Sign-On</span>
+                  <p className="text-[11px] text-zinc-400">Pengguna Google baru otomatis dibuatkan akun.</p>
+                </div>
+                <Switch
+                  checked={settings.googleAuthEnabled}
+                  onCheckedChange={(val) => setSettings({ ...settings, googleAuthEnabled: val })}
+                />
+              </div>
+
+              {settings.googleAuthEnabled && (
+                <div className="space-y-3 pt-2 border-t border-zinc-800/80">
+                  <div>
+                    <label className="text-[10px] font-mono text-zinc-400 block mb-1">Google Client ID</label>
+                    <input
+                      type="text"
+                      value={settings.googleClientId || ''}
+                      onChange={(e) => setSettings({ ...settings, googleClientId: e.target.value })}
+                      placeholder="123456789-abc.apps.googleusercontent.com"
+                      className="w-full h-8 px-3 rounded-md bg-zinc-900 border border-zinc-800 text-xs text-zinc-200 font-mono focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+
+                  {/* Google Cloud Console Guidance */}
+                  <div className="p-3 bg-zinc-950 rounded-lg border border-zinc-800 space-y-2 text-[11px]">
+                    <span className="text-[10px] font-mono uppercase text-zinc-500 font-bold block">
+                      Panduan Google Cloud Console
+                    </span>
+
+                    {/* Origin */}
+                    <div>
+                      <span className="text-zinc-400 text-[10px] block">Authorized JavaScript origins:</span>
+                      <div className="flex items-center justify-between bg-zinc-900 px-2.5 py-1 rounded border border-zinc-800 font-mono text-[10px] text-zinc-300 mt-0.5">
+                        <span>http://172.30.30.229:8085</span>
+                        <button
+                          type="button"
+                          onClick={() => copyToClipboard('http://172.30.30.229:8085', 'origin')}
+                          className="text-zinc-400 hover:text-zinc-100 ml-2"
+                        >
+                          {copiedField === 'origin' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Redirect URI */}
+                    <div>
+                      <span className="text-zinc-400 text-[10px] block">Authorized redirect URIs:</span>
+                      <div className="flex items-center justify-between bg-zinc-900 px-2.5 py-1 rounded border border-zinc-800 font-mono text-[10px] text-zinc-300 mt-0.5">
+                        <span>http://172.30.30.229:8085/auth/google/callback</span>
+                        <button
+                          type="button"
+                          onClick={() => copyToClipboard('http://172.30.30.229:8085/auth/google/callback', 'callback')}
+                          className="text-zinc-400 hover:text-zinc-100 ml-2"
+                        >
+                          {copiedField === 'callback' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               )}
             </div>
-            <Button onClick={handleTestConnection} variant="secondary" size="sm" disabled={testingConnection}>
-              <span>{testingConnection ? 'Memeriksa...' : 'Test Connection'}</span>
-            </Button>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Card 2: Pengaturan Autentikasi Pengguna */}
-      <div className="p-6 rounded-3xl bg-slate-900 border border-slate-800 space-y-5 shadow-xl">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400">
-              <Shield className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="text-sm font-bold text-white">Pengaturan Autentikasi &amp; Pendaftaran</h2>
-              <p className="text-xs text-slate-400">Kebijakan registrasi form manual dan Google Sign-In</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Toggle Pendaftaran Publik */}
-        <div className="flex items-center justify-between p-4 rounded-2xl bg-slate-950/70 border border-slate-800/80">
-          <div className="space-y-1">
-            <div className="text-xs font-semibold text-slate-200">Izinkan Pendaftaran Akun Baru (Form Manual)</div>
-            <p className="text-[11px] text-slate-400 max-w-lg">
-              Jika dimatikan, pendaftaran mandiri via email/password ditutup. Pengguna hanya dapat dibuatkan oleh Admin atau login via Google OAuth.
-            </p>
-          </div>
-          <Switch
-            checked={settings.publicRegistration}
-            onCheckedChange={(val) => setSettings({ ...settings, publicRegistration: val })}
-          />
-        </div>
-
-        {/* Google OAuth SSO */}
-        <div className="space-y-4 pt-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-slate-200">Google OAuth 2.0 Single Sign-On</span>
-              <Badge variant={settings.googleAuthEnabled ? 'success' : 'default'}>
-                {settings.googleAuthEnabled ? 'Aktif' : 'Nonaktif'}
-              </Badge>
-            </div>
-            <Switch
-              checked={settings.googleAuthEnabled}
-              onCheckedChange={(val) => setSettings({ ...settings, googleAuthEnabled: val })}
-            />
-          </div>
-
-          {settings.googleAuthEnabled && (
-            <div className="space-y-4 pt-2 border-t border-slate-800/80">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-slate-300">Google Client ID</label>
-                  <input
-                    type="text"
-                    value={settings.googleClientId}
-                    onChange={(e) => setSettings({ ...settings, googleClientId: e.target.value })}
-                    className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-100 font-mono focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-slate-300">Google Client Secret</label>
-                  <input
-                    type="password"
-                    value={settings.googleClientSecret}
-                    onChange={(e) => setSettings({ ...settings, googleClientSecret: e.target.value })}
-                    className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-100 font-mono focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-slate-300">Allowed Email / Domain Whitelist</label>
-                <input
-                  type="text"
-                  placeholder="@kantor.id, @fapet.id, @abdhnf.com"
-                  value={settings.googleAllowedDomains}
-                  onChange={(e) => setSettings({ ...settings, googleAllowedDomains: e.target.value })}
-                  className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                />
-                <span className="text-[10px] text-slate-400">
-                  Kosongkan jika ingin mengizinkan semua akun Google publik login.
-                </span>
-              </div>
-
-              {/* Panduan Google Cloud Console */}
-              <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 space-y-3">
-                <div className="flex items-center gap-2 text-xs font-semibold text-slate-200">
-                  <Globe className="w-4 h-4 text-cyan-400" />
-                  <span>Daftarkan URL ini di Google Cloud Console (OAuth 2.0 Web Client):</span>
-                </div>
-
-                {/* JavaScript Origin */}
-                <div className="space-y-1">
-                  <span className="text-[11px] text-slate-400 block">Authorized JavaScript origins:</span>
-                  <div className="flex items-center justify-between p-2 rounded-xl bg-slate-900 border border-slate-800 text-xs font-mono text-cyan-300">
-                    <span>{originUrl}</span>
-                    <button
-                      type="button"
-                      onClick={() => copyToClipboard(originUrl, 'origin')}
-                      className="p-1 hover:text-white text-slate-400 cursor-pointer"
-                    >
-                      {copiedField === 'origin' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Redirect URIs */}
-                <div className="space-y-1">
-                  <span className="text-[11px] text-slate-400 block">Authorized redirect URIs:</span>
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between p-2 rounded-xl bg-slate-900 border border-slate-800 text-xs font-mono text-cyan-300">
-                      <span>{originUrl}</span>
-                      <button
-                        type="button"
-                        onClick={() => copyToClipboard(originUrl, 'red1')}
-                        className="p-1 hover:text-white text-slate-400 cursor-pointer"
-                      >
-                        {copiedField === 'red1' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                      </button>
-                    </div>
-                    <div className="flex items-center justify-between p-2 rounded-xl bg-slate-900 border border-slate-800 text-xs font-mono text-cyan-300">
-                      <span>{callbackUrl}</span>
-                      <button
-                        type="button"
-                        onClick={() => copyToClipboard(callbackUrl, 'red2')}
-                        className="p-1 hover:text-white text-slate-400 cursor-pointer"
-                      >
-                        {copiedField === 'red2' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="flex justify-end pt-3 border-t border-slate-800">
-          <Button variant="primary">
-            Simpan Semua Pengaturan
-          </Button>
-        </div>
+      <div className="flex justify-end pt-2">
+        <Button variant="default" size="sm">
+          Simpan Semua Konfigurasi
+        </Button>
       </div>
     </div>
   );
