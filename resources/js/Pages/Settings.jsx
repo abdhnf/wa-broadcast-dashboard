@@ -36,6 +36,8 @@ export function SettingsPage({ settings: initialSettings }) {
     }, 400);
   };
 
+  const activeApiKey = (typeof window !== 'undefined' && JSON.parse(localStorage.getItem('wa_blast_user') || '{}')?.apiKey) || settings.apiKey || 'wa_live_sec_••••••••';
+
   return (
     <div className="space-y-6">
       {/* Top Header */}
@@ -82,22 +84,25 @@ export function SettingsPage({ settings: initialSettings }) {
             </div>
 
             <div>
-              <label className="text-[11px] font-medium text-slate-600 dark:text-zinc-400 block mb-1">API Key Gateway (x-api-key)</label>
+              <label className="text-[11px] font-medium text-slate-600 dark:text-zinc-400 block mb-1">API Key Gateway Aktif (Tersinkron)</label>
               <div className="relative">
                 <input
                   type={showApiKey ? 'text' : 'password'}
-                  value={settings.waApiKey || 'wapi_live_9a8b7c6d5e4f3a2b1c'}
-                  onChange={(e) => setSettings({ ...settings, waApiKey: e.target.value })}
-                  className="w-full h-8 pl-3 pr-10 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-200 font-mono focus:outline-none focus:border-emerald-500"
+                  value={activeApiKey}
+                  readOnly
+                  className="w-full h-8 pl-3 pr-10 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-200 font-mono focus:outline-none focus:border-emerald-500 select-all"
                 />
                 <button
                   type="button"
                   onClick={() => setShowApiKey(!showApiKey)}
-                  className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200"
+                  className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 cursor-pointer"
                 >
                   {showApiKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                 </button>
               </div>
+              <p className="text-[10px] text-slate-400 dark:text-zinc-500 mt-1">
+                API Key ini otomatis disinkronkan saat login via token peluncuran & PIN.
+              </p>
             </div>
 
             <div className="p-3 bg-slate-50 dark:bg-zinc-900/60 rounded-xl border border-slate-200 dark:border-zinc-800 text-[11px] text-slate-600 dark:text-zinc-400 space-y-1">

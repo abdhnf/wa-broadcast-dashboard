@@ -23,15 +23,37 @@ import {
 
 export function StandaloneApp() {
   const [currentTab, setCurrentTab] = useState('dashboard');
-  const [user, setUser] = useState(dummyUser);
+  const [user, setUser] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('wa_blast_user');
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch (e) {}
+      }
+    }
+    return null;
+  });
+
+  const handleLogin = (userData) => {
+    setUser(userData);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('wa_blast_user', JSON.stringify(userData));
+    }
+  };
+
+  const handleLogout = () => {
+    setUser(null);
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('wa_blast_user');
+    }
+  };
 
   if (!user) {
     return (
       <ThemeProvider>
         <LoginPage
-          onLogin={setUser}
-          registrationEnabled={dummySettings.publicRegistration}
-          googleAuthEnabled={dummySettings.googleAuthEnabled}
+          onLogin={handleLogin}
         />
       </ThemeProvider>
     );
@@ -43,6 +65,7 @@ export function StandaloneApp() {
         currentTab={currentTab}
         onTabChange={setCurrentTab}
         user={user}
+        onLogout={handleLogout}
         metrics={dummyMetrics}
       >
         {currentTab === 'dashboard' && (

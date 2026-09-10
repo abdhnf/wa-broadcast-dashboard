@@ -8,12 +8,13 @@ import {
   Settings,
   Menu,
   X,
-  Radio
+  Radio,
+  LogOut
 } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 import { Badge } from './ui/Badge';
 
-export function Layout({ currentTab, onTabChange, user, metrics, children }) {
+export function Layout({ currentTab, onTabChange, user, onLogout, metrics, children }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navItems = [
@@ -77,6 +78,17 @@ export function Layout({ currentTab, onTabChange, user, metrics, children }) {
                   <span className="text-[10px] text-slate-500 dark:text-zinc-400 capitalize">{user?.role || "admin"}</span>
                 </div>
               </div>
+
+              {/* Tombol Logout / Kunci Dashboard */}
+              {onLogout && (
+                <button
+                  onClick={onLogout}
+                  className="p-1.5 rounded-lg border border-slate-200 dark:border-zinc-800 text-slate-500 hover:text-rose-600 dark:text-zinc-400 dark:hover:text-rose-400 hover:bg-slate-100 dark:hover:bg-zinc-850 transition cursor-pointer"
+                  title="Keluar / Kunci Dashboard"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
           </div>
 

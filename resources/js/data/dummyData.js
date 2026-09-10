@@ -221,12 +221,12 @@ export const dummyCampaigns = [
 ];
 
 export const dummySettings = {
-  serverUrl: 'https://wa-api.domain.com/api/v1',
-  apiKey: 'wapi_...2d',
+  serverUrl: 'http://127.0.0.1:3100/api/v1',
+  apiKey: 'wa_live_sec_ee8e846f53b57dd3f69bf60309d1c3ca',
   connectedStatus: true,
   publicRegistration: false,
-  googleAuthEnabled: true,
-  googleClientId: '637615677400-hu1t5ojgmldkci7ssvmgemp85iv7d1sd.apps.googleusercontent.com',
-  googleClientSecret: 'GOCSPX-sample_secret_redacted_xyz123',
-  googleAllowedDomains: '@kantor.id, @fapet.id, @abdhnf.com',
+  googleAuthEnabled: false,
+  googleClientId: '',
+  googleClientSecret: '',
+  googleAllowedDomains: '',
 };
