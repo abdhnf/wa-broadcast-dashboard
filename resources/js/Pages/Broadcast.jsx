@@ -13,7 +13,10 @@ import {
   Zap,
   ArrowRight,
   Eye,
-  Plus
+  Plus,
+  Trash2,
+  ListOrdered,
+  AlertCircle
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
@@ -23,316 +26,463 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
   DialogFooter
 } from '../components/ui/Dialog';
-import { WhatsAppBubblePreview } from '../components/WhatsAppBubblePreview';
 
 export function BroadcastPage({ groups, templates, sessions, campaigns: initialCampaigns }) {
   const [campaigns, setCampaigns] = useState(initialCampaigns || []);
-  
-  // Wizard Modal
-  const [wizardOpen, setWizardOpen] = useState(false);
-  const [step, setStep] = useState(1);
-  const [selectedGroupId, setSelectedGroupId] = useState(groups[0]?.id || '');
-  const [selectedTemplateId, setSelectedTemplateId] = useState(templates[0]?.id || '');
-  const [senderMode, setSenderMode] = useState('auto_rotate');
-  const [jitterPacing, setJitterPacing] = useState('medium');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [liveSuccessMessage, setLiveSuccessMessage] = useState(null);
+  const [isWizardOpen, setIsWizardOpen] = useState(false);
 
-  const currentGroup = groups.find((g) => g.id === selectedGroupId) || groups[0];
-  const currentTemplate = templates.find((t) => t.id === selectedTemplateId) || templates[0];
+  // Form State Setup Campaign
+  const [campaignName, setCampaignName] = useState('');
+  const [selectedGroup, setSelectedGroup] = useState(groups?.[0]?.name || 'Pelanggan VIP');
+  const [selectedTemplate, setSelectedTemplate] = useState(templates?.[0]?.id || '');
+  const [selectedSession, setSelectedSession] = useState(sessions?.[0]?.id || 'wa_blast_alpha');
 
-  const handleStartBroadcast = () => {
-    setIsSubmitting(true);
-    
-    setTimeout(() => {
-      const newCampaign = {
-        id: `camp_${Date.now()}`,
-        title: `Blast - ${currentGroup.name}`,
-        groupName: currentGroup.name,
-        templateTitle: currentTemplate.title,
-        status: 'running',
-        total: currentGroup.contactCount || 250,
-        sent: 12,
-        success: 12,
-        failed: 0,
-        sentAt: 'Baru Saja',
-        estimatedRemaining: '~18 menit',
-      };
+  // Active Blast Manager State (Halaman/Panel Pengelolaan Antrean Nyata)
+  const [activeBlastCampaign, setActiveBlastCampaign] = useState(initialCampaigns?.[0] || null);
 
-      setCampaigns([newCampaign, ...campaigns]);
-      setIsSubmitting(false);
-      setWizardOpen(false);
-      setStep(1);
-      setLiveSuccessMessage(`Batch ${newCampaign.id} diterima Fastify API Gateway (HTTP 202 Accepted) dengan Gaussian Pacing.`);
+  // Antrean nomor penerima yang bisa ditambah/dihapus sebelum/saat blast berjalan
+  const [recipientQueue, setRecipientQueue] = useState([
+    { id: 'q_1', phone: '6281234567891', name: 'Budi Santoso', status: 'sent', sentAt: '10:15 WIB' },
+    { id: 'q_2', phone: '6281398765432', name: 'Siti Rahmawati', status: 'sent', sentAt: '10:16 WIB' },
+    { id: 'q_3', phone: '6285211223344', name: 'Ahmad Fauzi', status: 'pending', sentAt: '-' },
+    { id: 'q_4', phone: '6285644332211', name: 'Dewi Lestari', status: 'pending', sentAt: '-' },
+    { id: 'q_5', phone: '6287766554433', name: 'Rizky Pratama', status: 'pending', sentAt: '-' },
+  ]);
 
-      setTimeout(() => setLiveSuccessMessage(null), 8000);
-    }, 600);
+  // Modal Tambah Nomor ke Antrean
+  const [isAddRecipientModalOpen, setIsAddRecipientModalOpen] = useState(false);
+  const [newRecipientPhone, setNewRecipientPhone] = useState('');
+  const [newRecipientName, setNewRecipientName] = useState('');
+
+  const [isPaused, setIsPaused] = useState(false);
+
+  // Handler Buat Campaign Baru: Masuk ke Workspace Blast (TIDAK LANGSUNG BLAST)
+  const handleCreateCampaign = (e) => {
+    e.preventDefault();
+    const tpl = templates?.find((t) => t.id === selectedTemplate);
+    const grp = groups?.find((g) => g.name === selectedGroup);
+    const sess = sessions?.find((s) => s.id === selectedSession);
+
+    const newCamp = {
+      id: `cmp_${Date.now()}`,
+      name: campaignName || `Blast - ${selectedGroup}`,
+      batchId: `batch_${Math.random().toString(36).substring(2, 9)}`,
+      groupName: selectedGroup,
+      templateTitle: tpl ? tpl.title : 'Custom Blast',
+      totalRecipients: 5,
+      sentCount: 0,
+      deliveredCount: 0,
+      readCount: 0,
+      failedCount: 0,
+      status: 'idle', // Status awal: Siap / Menunggu Review Antrean
+      createdAt: 'Baru Saja',
+      sessionUsed: sess ? sess.name : 'Auto Pool',
+    };
+
+    setCampaigns([newCamp, ...campaigns]);
+    setActiveBlastCampaign(newCamp);
+    setIsWizardOpen(false);
+  };
+
+  // Handler Hapus Nomor dari Antrean
+  const handleRemoveRecipient = (id) => {
+    setRecipientQueue(recipientQueue.filter((item) => item.id !== id));
+  };
+
+  // Handler Tambah Nomor ke Antrean
+  const handleAddRecipient = (e) => {
+    e.preventDefault();
+    if (!newRecipientPhone) return;
+
+    const newItem = {
+      id: `q_${Date.now()}`,
+      phone: newRecipientPhone.replace(/\D/g, ''),
+      name: newRecipientName || 'Kontak Baru',
+      status: 'pending',
+      sentAt: '-'
+    };
+
+    setRecipientQueue([...recipientQueue, newItem]);
+    setNewRecipientPhone('');
+    setNewRecipientName('');
+    setIsAddRecipientModalOpen(false);
+  };
+
+  // Handler Mulai Blast (Dipicu saat user sudah siap)
+  const handleStartBlast = () => {
+    if (!activeBlastCampaign) return;
+    setActiveBlastCampaign({
+      ...activeBlastCampaign,
+      status: 'in_progress'
+    });
+    setCampaigns(
+      campaigns.map((c) =>
+        c.id === activeBlastCampaign.id ? { ...c, status: 'in_progress' } : c
+      )
+    );
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-zinc-800">
+    <div className="space-y-4">
+      {/* Header Panel */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-[#0f1117] p-4 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-xs">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">
-              Broadcast Campaign Engine
-            </h1>
-            <Badge variant="outline" className="font-mono text-[10px]">Direct Fastify Gateway</Badge>
+            <h1 className="text-base font-bold text-slate-900 dark:text-white">Blast Campaign & Antrean Pesan</h1>
+            <Badge variant="outline" className="font-mono text-[10px]">{campaigns.length} Kampanye</Badge>
           </div>
           <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
-            Kirim ribuan pesan massal langsung lewat internal queue WA API server dengan pacing Gaussian Jitter anti-blokir.
+            Pacing interval pengiriman dikelola otomatis oleh WA API Gateway (Gaussian Jitter 3–12 detik).
           </p>
         </div>
-        <Button onClick={() => setWizardOpen(true)} variant="default" size="sm">
+
+        <Button
+          onClick={() => {
+            setCampaignName('');
+            setIsWizardOpen(true);
+          }}
+          variant="default"
+          size="sm"
+          className="text-xs"
+        >
           <Plus className="w-3.5 h-3.5 mr-1" />
-          <span>Buat Pengiriman Baru</span>
+          <span>Buat Kampanye Baru</span>
         </Button>
       </div>
 
-      {liveSuccessMessage && (
-        <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-500/30 flex items-center gap-2.5 text-xs text-emerald-800 dark:text-emerald-300">
-          <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-          <span>{liveSuccessMessage}</span>
+      {/* ACTIVE BLAST WORKSPACE: Menampilkan detail kampanye aktif & pengelolaan antrean */}
+      {activeBlastCampaign && (
+        <div className="bg-white dark:bg-[#0f1117] p-4 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-xs space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-zinc-800">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <h2 className="text-sm font-bold text-slate-900 dark:text-white">
+                  {activeBlastCampaign.name}
+                </h2>
+                <Badge
+                  variant={activeBlastCampaign.status === 'in_progress' ? 'default' : 'secondary'}
+                  className="font-mono text-[10px]"
+                >
+                  {activeBlastCampaign.status === 'in_progress'
+                    ? 'Sedang Berjalan'
+                    : activeBlastCampaign.status === 'completed'
+                    ? 'Selesai'
+                    : 'Siap Dikirim (Menunggu Konfirmasi)'}
+                </Badge>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-zinc-400 mt-1">
+                <span>Batch: <code className="font-mono text-[11px]">{activeBlastCampaign.batchId}</code></span>
+                <span>•</span>
+                <span>Sesi: <strong className="text-slate-800 dark:text-zinc-200">{activeBlastCampaign.sessionUsed}</strong></span>
+                <span>•</span>
+                <span>Template: <strong className="text-slate-800 dark:text-zinc-200">{activeBlastCampaign.templateTitle}</strong></span>
+              </div>
+            </div>
+
+            {/* Tombol Kontrol Blast */}
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setIsAddRecipientModalOpen(true)}
+                className="text-xs"
+              >
+                <Plus className="w-3.5 h-3.5 mr-1 text-emerald-600 dark:text-emerald-400" />
+                <span>Tambah Nomor</span>
+              </Button>
+
+              {activeBlastCampaign.status === 'idle' ? (
+                <Button
+                  type="button"
+                  variant="default"
+                  size="sm"
+                  onClick={handleStartBlast}
+                  className="text-xs bg-emerald-600 hover:bg-emerald-500 text-white"
+                >
+                  <Play className="w-3.5 h-3.5 mr-1" />
+                  <span>Mulai Blast Sekarang</span>
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsPaused(!isPaused)}
+                  className="text-xs"
+                >
+                  {isPaused ? <Play className="w-3.5 h-3.5 mr-1" /> : <Pause className="w-3.5 h-3.5 mr-1" />}
+                  <span>{isPaused ? 'Lanjutkan' : 'Jeda Antrean'}</span>
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* TABEL ANTREAN PENERIMA (Bisa Hapus / Tambah Nomor dalam antrean) */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-semibold text-slate-800 dark:text-zinc-200 flex items-center gap-1.5">
+                <ListOrdered className="w-3.5 h-3.5 text-emerald-500" />
+                <span>Daftar Nomor Antrean Pengiriman ({recipientQueue.length} Nomor)</span>
+              </span>
+              <span className="text-[11px] text-slate-500 dark:text-zinc-400">
+                Pemberhentian atau penghapusan nomor sebelum dikirim berlaku seketika
+              </span>
+            </div>
+
+            <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-zinc-800">
+              <table className="w-full text-left text-xs text-slate-600 dark:text-zinc-300 min-w-[650px]">
+                <thead className="bg-slate-50 dark:bg-zinc-900/60 text-slate-700 dark:text-zinc-400 text-[10px] uppercase font-semibold border-b border-slate-200 dark:border-zinc-800">
+                  <tr>
+                    <th className="py-2 px-3 w-10 text-center">#</th>
+                    <th className="py-2 px-3">Nama Penerima</th>
+                    <th className="py-2 px-3">Nomor WhatsApp</th>
+                    <th className="py-2 px-3">Status Antrean</th>
+                    <th className="py-2 px-3">Waktu Terkirim</th>
+                    <th className="py-2 px-3 text-right">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-zinc-800">
+                  {recipientQueue.map((item, idx) => (
+                    <tr key={item.id} className="hover:bg-slate-50/50 dark:hover:bg-zinc-900/30">
+                      <td className="py-2 px-3 text-center font-mono text-[11px] text-slate-400">
+                        {idx + 1}
+                      </td>
+                      <td className="py-2 px-3 font-medium text-slate-900 dark:text-zinc-100">
+                        {item.name}
+                      </td>
+                      <td className="py-2 px-3 font-mono text-[11px] text-emerald-700 dark:text-emerald-400">
+                        +{item.phone}
+                      </td>
+                      <td className="py-2 px-3">
+                        {item.status === 'sent' ? (
+                          <span className="inline-flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
+                            <CheckCircle2 className="w-3 h-3" />
+                            <span>Terkirim</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400 font-medium">
+                            <Clock className="w-3 h-3" />
+                            <span>Menunggu Antrean</span>
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-2 px-3 font-mono text-[11px] text-slate-500 dark:text-zinc-400">
+                        {item.sentAt}
+                      </td>
+                      <td className="py-2 px-3 text-right">
+                        {item.status === 'pending' && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveRecipient(item.id)}
+                            className="p-1 rounded text-slate-400 hover:text-rose-500 transition-colors"
+                            title="Hapus nomor dari antrean"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       )}
 
-      {/* Tabel Kampanye Pengiriman Massal (Responsive Table) */}
-      <div className="border border-slate-200 dark:border-zinc-800 rounded-xl overflow-hidden bg-white dark:bg-zinc-950">
+      {/* Modern High-Density Table of All Campaigns */}
+      <div className="bg-white dark:bg-[#0f1117] rounded-xl border border-slate-200 dark:border-zinc-800 overflow-hidden shadow-xs">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs min-w-[760px]">
-            <thead className="bg-slate-50 dark:bg-zinc-900/60 border-b border-slate-200 dark:border-zinc-800 text-[11px] font-mono text-slate-500 dark:text-zinc-400">
+          <table className="w-full text-left text-xs text-slate-600 dark:text-zinc-300 min-w-[760px]">
+            <thead className="bg-slate-50 dark:bg-zinc-900/60 text-slate-700 dark:text-zinc-400 uppercase text-[10px] tracking-wider font-semibold border-b border-slate-200 dark:border-zinc-800">
               <tr>
-                <th className="py-2.5 px-4 font-medium">KAMPANYE / BATCH ID</th>
-                <th className="py-2.5 px-4 font-medium">TARGET SEGMEN</th>
-                <th className="py-2.5 px-4 font-medium">TEMPLATE KONTEN</th>
-                <th className="py-2.5 px-4 font-medium">STATUS</th>
-                <th className="py-2.5 px-4 font-medium">PROGRESS DELIVERY</th>
-                <th className="py-2.5 px-4 font-medium">SUKSES / GAGAL</th>
-                <th className="py-2.5 px-4 font-medium text-right">KONTROL</th>
+                <th className="py-2.5 px-4">Nama Kampanye</th>
+                <th className="py-2.5 px-4">Segmen & Template</th>
+                <th className="py-2.5 px-4">Sesi Pengirim</th>
+                <th className="py-2.5 px-4">Status & Progres</th>
+                <th className="py-2.5 px-4 text-right">Kelola</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/60 text-slate-700 dark:text-zinc-300">
-              {campaigns.map((c) => {
-                const pct = Math.round((c.sent / c.total) * 100);
-                const isFinished = c.status === 'finished';
-                return (
-                  <tr key={c.id} className="hover:bg-slate-50 dark:hover:bg-zinc-900/40 transition-colors">
-                    <td className="py-3.5 px-4 font-semibold text-slate-900 dark:text-white whitespace-nowrap">
-                      <div>{c.title}</div>
-                      <div className="text-[10px] font-mono text-slate-400 dark:text-zinc-500 font-normal">
-                        {c.id} &bull; {c.sentAt}
-                      </div>
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 text-[11px]">
-                        {c.groupName}
+            <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
+              {campaigns.map((camp) => (
+                <tr key={camp.id} className="hover:bg-slate-50/60 dark:hover:bg-zinc-900/40 transition-colors">
+                  <td className="py-3 px-4 font-semibold text-slate-900 dark:text-zinc-100">
+                    <div>{camp.name}</div>
+                    <div className="text-[10px] text-slate-400 font-mono mt-0.5">{camp.createdAt}</div>
+                  </td>
+                  <td className="py-3 px-4">
+                    <div className="text-slate-800 dark:text-zinc-200 font-medium">{camp.groupName}</div>
+                    <div className="text-[10px] text-slate-500 dark:text-zinc-400">{camp.templateTitle}</div>
+                  </td>
+                  <td className="py-3 px-4 font-mono text-[11px] text-slate-700 dark:text-zinc-300">
+                    {camp.sessionUsed}
+                  </td>
+                  <td className="py-3 px-4 w-48">
+                    <div className="flex items-center justify-between text-[10px] font-mono mb-1">
+                      <span className="capitalize text-emerald-600 dark:text-emerald-400 font-bold">
+                        {camp.status.replace('_', ' ')}
                       </span>
-                    </td>
-                    <td className="py-3.5 px-4 max-w-xs truncate text-slate-600 dark:text-zinc-400">
-                      {c.templateTitle || 'Promo Reguler'}
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <Badge variant={isFinished ? 'outline' : 'success'} className="text-[10px] uppercase">
-                        {isFinished ? 'Selesai' : 'Sedang Kirim'}
-                      </Badge>
-                    </td>
-                    <td className="py-3.5 px-4 w-48">
-                      <div className="space-y-1">
-                        <div className="flex justify-between font-mono text-[11px]">
-                          <span>{c.sent} / {c.total}</span>
-                          <span>{pct}%</span>
-                        </div>
-                        <Progress value={pct} indicatorClassName={isFinished ? 'bg-slate-400 dark:bg-zinc-600' : 'bg-emerald-500'} />
-                      </div>
-                    </td>
-                    <td className="py-3.5 px-4 font-mono text-[11px]">
-                      <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{c.success}</span>
-                      <span className="text-slate-400 mx-1">/</span>
-                      <span className="text-rose-600 dark:text-rose-400">{c.failed}</span>
-                    </td>
-                    <td className="py-3.5 px-4 text-right">
-                      {!isFinished ? (
-                        <div className="flex items-center justify-end gap-1">
-                          <Button variant="outline" size="sm" className="h-7 text-[11px] px-2">
-                            <Pause className="w-3 h-3 mr-1" /> Jeda
-                          </Button>
-                          <Button variant="ghost" size="sm" className="h-7 text-[11px] px-2 text-rose-600 dark:text-rose-400">
-                            Batal
-                          </Button>
-                        </div>
-                      ) : (
-                        <span className="text-[11px] font-mono text-slate-400">Arsip Selesai</span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
+                      <span>
+                        {camp.sentCount} / {camp.totalRecipients}
+                      </span>
+                    </div>
+                    <Progress
+                      value={(camp.sentCount / (camp.totalRecipients || 1)) * 100}
+                      className="h-1.5"
+                    />
+                  </td>
+                  <td className="py-3 px-4 text-right">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setActiveBlastCampaign(camp)}
+                      className="text-xs h-7"
+                    >
+                      <span>Buka Antrean</span>
+                    </Button>
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* Modal Wizard Buat Broadcast 3 Langkah (Radix Dialog) */}
-      <Dialog open={wizardOpen} onOpenChange={setWizardOpen}>
-        <DialogContent className="max-w-xl">
+      {/* Modal Buat Kampanye: Menyusun Parameter & Masuk ke Halaman Blast */}
+      <Dialog open={isWizardOpen} onOpenChange={setIsWizardOpen}>
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <div className="flex items-center justify-between">
-              <DialogTitle>Buat Pengiriman Broadcast</DialogTitle>
-              <div className="flex items-center gap-1.5 font-mono text-xs text-slate-500">
-                <span>Langkah {step} dari 3</span>
-              </div>
-            </div>
-            <DialogDescription>
-              Konfigurasi audiens, konten template pesan, dan opsi perataan anti-blokir
-            </DialogDescription>
+            <DialogTitle>Buat Kampanye Blast Baru</DialogTitle>
           </DialogHeader>
 
-          <div className="py-3">
-            {/* Step 1: Target Audience */}
-            {step === 1 && (
-              <div className="space-y-3">
-                <label className="text-xs font-semibold text-slate-900 dark:text-white block">
-                  Pilih Segmen / Grup Target:
-                </label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  {groups.map((g) => {
-                    const isSel = selectedGroupId === g.id;
-                    return (
-                      <div
-                        key={g.id}
-                        onClick={() => setSelectedGroupId(g.id)}
-                        className={`p-3 rounded-xl border cursor-pointer transition-all ${
-                          isSel
-                            ? 'bg-slate-100 dark:bg-zinc-900 border-emerald-500 shadow-2xs'
-                            : 'bg-white dark:bg-zinc-950 border-slate-200 dark:border-zinc-800 hover:bg-slate-50 dark:hover:bg-zinc-900/60'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-semibold text-slate-900 dark:text-white">{g.name}</span>
-                          {isSel && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />}
-                        </div>
-                        <div className="text-[11px] font-mono text-slate-500 dark:text-zinc-400 mt-1">
-                          {g.contactCount} Penerima Terdaftar
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
+          <form onSubmit={handleCreateCampaign} className="space-y-3.5 text-xs py-1">
+            <div>
+              <label className="block text-[11px] font-medium text-slate-700 dark:text-zinc-300 mb-1">
+                Nama Kampanye *
+              </label>
+              <input
+                type="text"
+                required
+                placeholder="Misal: Info Pelanggan Loyal September"
+                value={campaignName}
+                onChange={(e) => setCampaignName(e.target.value)}
+                className="w-full h-8 px-2.5 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-200 focus:outline-none focus:border-emerald-500"
+              />
+            </div>
 
-            {/* Step 2: Content Template */}
-            {step === 2 && (
-              <div className="space-y-3">
-                <label className="text-xs font-semibold text-slate-900 dark:text-white block">
-                  Pilih Template Pesan:
-                </label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  {templates.map((tpl) => {
-                    const isSel = selectedTemplateId === tpl.id;
-                    return (
-                      <div
-                        key={tpl.id}
-                        onClick={() => setSelectedTemplateId(tpl.id)}
-                        className={`p-3 rounded-xl border cursor-pointer transition-all ${
-                          isSel
-                            ? 'bg-slate-100 dark:bg-zinc-900 border-emerald-500'
-                            : 'bg-white dark:bg-zinc-950 border-slate-200 dark:border-zinc-800 hover:bg-slate-50 dark:hover:bg-zinc-900/60'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-xs font-semibold text-slate-900 dark:text-white">{tpl.title}</span>
-                          <Badge variant={tpl.type === 'media' ? 'warning' : 'outline'} className="text-[9px] font-mono">
-                            {tpl.type}
-                          </Badge>
-                        </div>
-                        <p className="text-[11px] text-slate-500 dark:text-zinc-400 line-clamp-2">{tpl.content}</p>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Step 3: Sender and Anti-Ban Engine */}
-            {step === 3 && (
-              <div className="space-y-4">
-                <div>
-                  <label className="text-xs font-semibold text-slate-900 dark:text-white block mb-1">
-                    Metode Perangkat Pengirim
-                  </label>
-                  <div
-                    onClick={() => setSenderMode('auto_rotate')}
-                    className="p-3 rounded-xl border border-emerald-500 bg-slate-50 dark:bg-zinc-900 cursor-pointer"
-                  >
-                    <div className="flex items-center gap-2 font-semibold text-xs text-slate-900 dark:text-white">
-                      <Zap className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                      <span>Smart Multi-Session Auto-Rotate (Disarankan)</span>
-                    </div>
-                    <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-1">
-                      Beban pesan didistribusikan merata ke 3 nomor aktif untuk mencegah batasan spam WhatsApp.
-                    </p>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-slate-900 dark:text-white block mb-1">
-                    Jeda Pengiriman (Gaussian Jitter Pacing)
-                  </label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {[
-                      { id: 'safe', label: 'Aman', delay: '6s - 15s' },
-                      { id: 'medium', label: 'Standar', delay: '3s - 8s' },
-                      { id: 'fast', label: 'Cepat', delay: '2s - 4s' },
-                    ].map((mode) => (
-                      <button
-                        key={mode.id}
-                        type="button"
-                        onClick={() => setJitterPacing(mode.id)}
-                        className={`p-2.5 rounded-xl border text-center cursor-pointer transition-colors ${
-                          jitterPacing === mode.id
-                            ? 'bg-slate-100 dark:bg-zinc-900 border-emerald-500 font-semibold text-slate-900 dark:text-white'
-                            : 'bg-white dark:bg-zinc-950 border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400'
-                        }`}
-                      >
-                        <div className="text-xs">{mode.label}</div>
-                        <div className="text-[10px] font-mono text-slate-400 mt-0.5">{mode.delay}</div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <DialogFooter className="flex justify-between sm:justify-between items-center">
-            {step > 1 ? (
-              <Button onClick={() => setStep(step - 1)} variant="outline" size="sm">
-                Kembali
-              </Button>
-            ) : <div />}
-
-            {step < 3 ? (
-              <Button onClick={() => setStep(step + 1)} variant="default" size="sm">
-                <span>Lanjut</span>
-                <ArrowRight className="w-3.5 h-3.5 ml-1" />
-              </Button>
-            ) : (
-              <Button
-                onClick={handleStartBroadcast}
-                disabled={isSubmitting}
-                variant="default"
-                size="sm"
+            <div>
+              <label className="block text-[11px] font-medium text-slate-700 dark:text-zinc-300 mb-1">
+                Target Segmen Audiens
+              </label>
+              <select
+                value={selectedGroup}
+                onChange={(e) => setSelectedGroup(e.target.value)}
+                className="w-full h-8 px-2.5 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-200 focus:outline-none focus:border-emerald-500"
               >
-                <Send className="w-3.5 h-3.5 mr-1" />
-                <span>{isSubmitting ? 'Memproses...' : 'Mulai Broadcast Massal'}</span>
+                {groups?.map((g) => (
+                  <option key={g.id} value={g.name}>
+                    {g.name} ({g.count} kontak)
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-medium text-slate-700 dark:text-zinc-300 mb-1">
+                Pilih Template Pesan
+              </label>
+              <select
+                value={selectedTemplate}
+                onChange={(e) => setSelectedTemplate(e.target.value)}
+                className="w-full h-8 px-2.5 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-200 focus:outline-none focus:border-emerald-500"
+              >
+                {templates?.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.title} ({t.messageType || 'text'})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-medium text-slate-700 dark:text-zinc-300 mb-1">
+                Sesi WhatsApp Pengirim
+              </label>
+              <select
+                value={selectedSession}
+                onChange={(e) => setSelectedSession(e.target.value)}
+                className="w-full h-8 px-2.5 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-200 focus:outline-none focus:border-emerald-500"
+              >
+                {sessions?.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name} ({s.phone})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="p-2.5 rounded-lg bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/40 text-[11px] text-emerald-800 dark:text-emerald-300">
+              ⚡ Kampanye baru akan masuk ke antrean blast dalam kondisi <strong>siap (idle)</strong>. Kamu dapat menambah atau memilah nomor penerima sebelum memulai blast.
+            </div>
+
+            <DialogFooter className="pt-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => setIsWizardOpen(false)}>
+                Batal
               </Button>
-            )}
-          </DialogFooter>
+              <Button type="submit" variant="default" size="sm">
+                Susun Antrean Kampanye
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Tambah Nomor Langsung ke Antrean */}
+      <Dialog open={isAddRecipientModalOpen} onOpenChange={setIsAddRecipientModalOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Tambah Nomor ke Antrean</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleAddRecipient} className="space-y-3 text-xs py-1">
+            <div>
+              <label className="block text-[11px] font-medium text-slate-700 dark:text-zinc-300 mb-1">
+                Nama Penerima
+              </label>
+              <input
+                type="text"
+                placeholder="Misal: Hendra Pratama"
+                value={newRecipientName}
+                onChange={(e) => setNewRecipientName(e.target.value)}
+                className="w-full h-8 px-2.5 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-200 focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-slate-700 dark:text-zinc-300 mb-1">
+                Nomor WhatsApp (628xxx) *
+              </label>
+              <input
+                type="text"
+                required
+                placeholder="62812345678"
+                value={newRecipientPhone}
+                onChange={(e) => setNewRecipientPhone(e.target.value)}
+                className="w-full h-8 px-2.5 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs font-mono text-slate-900 dark:text-zinc-200 focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+            <DialogFooter className="pt-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => setIsAddRecipientModalOpen(false)}>
+                Batal
+              </Button>
+              <Button type="submit" variant="default" size="sm">
+                Tambahkan ke Antrean
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </div>

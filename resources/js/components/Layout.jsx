@@ -9,14 +9,10 @@ import {
   Settings,
   Menu,
   X,
-  Radio,
-  Zap,
-  ShieldCheck,
-  ChevronDown
+  Radio
 } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 import { Badge } from './ui/Badge';
-import { Button } from './ui/Button';
 
 export function Layout({ currentTab, onTabChange, user, metrics, children }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -34,11 +30,11 @@ export function Layout({ currentTab, onTabChange, user, metrics, children }) {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-[#0c0e12] text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors duration-200 selection:bg-emerald-500 selection:text-white">
-      {/* Universal Top Header */}
+      {/* Top Header Bar */}
       <header className="sticky top-0 z-40 bg-white/90 dark:bg-[#0f1117]/90 backdrop-blur-md border-b border-slate-200 dark:border-zinc-800/80">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-14">
-            {/* Logo and Brand */}
+            {/* Left: Brand / Logo */}
             <div className="flex items-center gap-3">
               <button
                 type="button"
@@ -60,9 +56,8 @@ export function Layout({ currentTab, onTabChange, user, metrics, children }) {
               </div>
             </div>
 
-            {/* Right Tools: Server Status, Quota, Theme Toggle, Profile */}
+            {/* Right Tools: Server Status, Theme Toggle, Profile */}
             <div className="flex items-center gap-2 sm:gap-3">
-              {/* Server Gateway Pill */}
               <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 dark:bg-zinc-900/80 border border-slate-200 dark:border-zinc-800 text-[11px]">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                 <span className="text-slate-500 dark:text-zinc-400 font-mono">Gateway 3100:</span>
@@ -87,8 +82,8 @@ export function Layout({ currentTab, onTabChange, user, metrics, children }) {
             </div>
           </div>
 
-          {/* Desktop Tab Bar Navigation (Rombak Total: Clean, Unified, No bulky sidebar) */}
-          <nav className="hidden md:flex items-center space-x-1 border-t border-slate-100 dark:border-zinc-800/60 py-1.5 overflow-x-auto">
+          {/* Nav Tab Bar RATA TENGAH (justify-center) */}
+          <nav className="hidden md:flex items-center justify-center space-x-1.5 border-t border-slate-100 dark:border-zinc-800/60 py-1.5 overflow-x-auto">
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = currentTab === item.id;
@@ -96,7 +91,7 @@ export function Layout({ currentTab, onTabChange, user, metrics, children }) {
                 <button
                   key={item.id}
                   onClick={() => onTabChange(item.id)}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all shrink-0 cursor-pointer ${
+                  className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all shrink-0 cursor-pointer ${
                     isActive
                       ? 'bg-slate-900 text-white dark:bg-zinc-100 dark:text-zinc-950 font-semibold shadow-xs'
                       : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-800/60'
@@ -120,7 +115,7 @@ export function Layout({ currentTab, onTabChange, user, metrics, children }) {
         </div>
       </header>
 
-      {/* Mobile Menu Dropdown Panel */}
+      {/* Mobile Drawer Panel */}
       {mobileMenuOpen && (
         <div className="md:hidden bg-white dark:bg-[#0f1117] border-b border-slate-200 dark:border-zinc-800 px-4 py-3 space-y-1 shadow-lg">
           {navItems.map((item) => {
@@ -152,12 +147,12 @@ export function Layout({ currentTab, onTabChange, user, metrics, children }) {
         </div>
       )}
 
-      {/* Main Workspace Canvas */}
+      {/* Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 pb-20 md:pb-8">
         {children}
       </main>
 
-      {/* Mobile Thumb-Friendly Bottom Navigation */}
+      {/* Mobile Bottom Navigation */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-[#0f1117]/95 backdrop-blur-md border-t border-slate-200 dark:border-zinc-800 flex items-center justify-around px-2 py-2 safe-area-bottom">
         {[
           { id: 'dashboard', label: 'Overview', icon: Radio },

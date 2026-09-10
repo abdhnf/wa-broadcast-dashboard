@@ -1,12 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   FileText,
   Plus,
   Image,
-  Shuffle,
+  MapPin,
   Eye,
   Trash2,
   Edit2,
+  Sparkles,
   Smartphone,
   Check
 } from 'lucide-react';
@@ -17,54 +18,89 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
   DialogFooter
 } from '../components/ui/Dialog';
+import { WhatsAppFormattingToolbar } from '../components/WhatsAppFormattingToolbar';
+import { MediaUploadField } from '../components/MediaUploadField';
 import { WhatsAppBubblePreview } from '../components/WhatsAppBubblePreview';
 
 export function TemplatesPage({ templates: initialTemplates }) {
   const [templates, setTemplates] = useState(initialTemplates || []);
-  const [selectedTemplate, setSelectedTemplate] = useState(initialTemplates[0] || null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [previewTemplate, setPreviewTemplate] = useState(null);
 
-  // Modal editor states
-  const [editModalOpen, setEditModalOpen] = useState(false);
-  const [previewModalOpen, setPreviewModalOpen] = useState(false);
-
-  // Form states
+  // Form State
+  const [editingId, setEditingId] = useState(null);
   const [title, setTitle] = useState('');
-  const [type, setType] = useState('text');
+  const [messageType, setMessageType] = useState('text'); // 'text' | 'media' | 'location'
+  const [mediaType, setMediaType] = useState('image'); // 'image' | 'video' | 'audio' | 'document'
   const [mediaUrl, setMediaUrl] = useState('');
   const [content, setContent] = useState('');
+  // Location form state
+  const [locName, setLocName] = useState('');
+  const [locAddress, setLocAddress] = useState('');
+  const [locLat, setLocLat] = useState(-6.2088);
+  const [locLng, setLocLng] = useState(106.8456);
 
-  const openEditor = (tpl) => {
-    if (tpl) {
-      setSelectedTemplate(tpl);
-      setTitle(tpl.title);
-      setType(tpl.type);
-      setMediaUrl(tpl.mediaUrl || '');
-      setContent(tpl.content);
-    } else {
-      setSelectedTemplate(null);
-      setTitle('Template Baru');
-      setType('text');
-      setMediaUrl('');
-      setContent('Halo {{name}}, terima kasih telah menjadi pelanggan setia kami.');
-    }
-    setEditModalOpen(true);
+  const textareaRef = useRef(null);
+
+  const openAddModal = () => {
+    setEditingId(null);
+    setTitle('');
+    setMessageType('text');
+    setMediaType('image');
+    setMediaUrl('');
+    setContent('');
+    setLocName('');
+    setLocAddress('');
+    setLocLat(-6.2088);
+    setLocLng(106.8456);
+    setIsModalOpen(true);
   };
 
-  const openPreview = (tpl) => {
-    setSelectedTemplate(tpl);
-    setPreviewModalOpen(true);
+  const openEditModal = (t) => {
+    setEditingId(t.id);
+    setTitle(t.title);
+    setMessageType(t.messageType || (t.mediaUrl ? 'media' : 'text'));
+    setMediaType(t.mediaType || 'image');
+    setMediaUrl(t.mediaUrl || '');
+    setContent(t.content);
+    if (t.location) {
+      setLocName(t.location.name || '');
+      setLocAddress(t.location.address || '');
+      setLocLat(t.location.latitude || -6.2088);
+      setLocLng(t.location.longitude || 106.8456);
+    }
+    setIsModalOpen(true);
   };
 
   const handleSave = (e) => {
     e.preventDefault();
-    if (selectedTemplate) {
+    if (!title || !content) return;
+
+    const locationData =
+      messageType === 'location'
+        ? {
+            name: locName,
+            address: locAddress,
+            latitude: parseFloat(locLat) || 0,
+            longitude: parseFloat(locLng) || 0
+          }
+        : null;
+
+    if (editingId) {
       setTemplates(
         templates.map((t) =>
-          t.id === selectedTemplate.id
-            ? { ...t, title, type, mediaUrl, content }
+          t.id === editingId
+            ? {
+                ...t,
+                title,
+                messageType,
+                mediaType: messageType === 'media' ? mediaType : null,
+                mediaUrl: messageType === 'media' ? mediaUrl : null,
+                content,
+                location: locationData
+              }
             : t
         )
       );
@@ -72,260 +108,312 @@ export function TemplatesPage({ templates: initialTemplates }) {
       const newTpl = {
         id: `tpl_${Date.now()}`,
         title,
-        type,
-        mediaUrl,
+        messageType,
+        mediaType: messageType === 'media' ? mediaType : null,
+        mediaUrl: messageType === 'media' ? mediaUrl : null,
         content,
+        location: locationData
       };
-      setTemplates([...templates, newTpl]);
+      setTemplates([newTpl, ...templates]);
     }
-    setEditModalOpen(false);
-  };
 
-  const insertTag = (tag) => {
-    setContent((prev) => prev + ` {{${tag}}}`);
-  };
-
-  const insertSpintax = () => {
-    setContent((prev) => prev + ` {Halo|Hai|Selamat pagi}`);
+    setIsModalOpen(false);
   };
 
   return (
-    <div className="space-y-6">
-      {/* Page Header Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-zinc-800">
+    <div className="space-y-4">
+      {/* Header Panel */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-[#0f1117] p-4 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-xs">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">
-              Message Templates
-            </h1>
-            <Badge variant="outline" className="font-mono text-[10px]">{templates.length} Tersimpan</Badge>
+            <h1 className="text-base font-bold text-slate-900 dark:text-white">Pustaka Template Pesan</h1>
+            <Badge variant="outline" className="font-mono text-[10px]">{templates.length} Template</Badge>
           </div>
           <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
-            Kelola template pesan dinamis dengan variabel personalisasi dan Spintax anti-spam.
+            Mendukung pesan Teks WhatsApp, Media (Gambar/Dokumen/Video/Audio dengan upload storage), dan Lokasi GPS.
           </p>
         </div>
-        <Button onClick={() => openEditor(null)} variant="default" size="sm">
+
+        <Button onClick={openAddModal} variant="default" size="sm" className="text-xs">
           <Plus className="w-3.5 h-3.5 mr-1" />
           <span>Buat Template Baru</span>
         </Button>
       </div>
 
-      {/* Tabel Template Pesan (Full Responsive Table) */}
-      <div className="border border-slate-200 dark:border-zinc-800 rounded-xl overflow-hidden bg-white dark:bg-zinc-950">
+      {/* Modern High-Density Table */}
+      <div className="bg-white dark:bg-[#0f1117] rounded-xl border border-slate-200 dark:border-zinc-800 overflow-hidden shadow-xs">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs min-w-[700px]">
-            <thead className="bg-slate-50 dark:bg-zinc-900/60 border-b border-slate-200 dark:border-zinc-800 text-[11px] font-mono text-slate-500 dark:text-zinc-400">
+          <table className="w-full text-left text-xs text-slate-600 dark:text-zinc-300 min-w-[750px]">
+            <thead className="bg-slate-50 dark:bg-zinc-900/60 text-slate-700 dark:text-zinc-400 uppercase text-[10px] tracking-wider font-semibold border-b border-slate-200 dark:border-zinc-800">
               <tr>
-                <th className="py-2.5 px-4 font-medium">JUDUL TEMPLATE</th>
-                <th className="py-2.5 px-4 font-medium">TIPE PESAN</th>
-                <th className="py-2.5 px-4 font-medium">KONTEN PESAN WHATSAPP</th>
-                <th className="py-2.5 px-4 font-medium">MEDIA LAMPIRAN</th>
-                <th className="py-2.5 px-4 font-medium text-right">AKSI</th>
+                <th className="py-2.5 px-4 w-12 text-center">#</th>
+                <th className="py-2.5 px-4">Judul Template</th>
+                <th className="py-2.5 px-4">Tipe Pesan WA API</th>
+                <th className="py-2.5 px-4">Ringkasan Isi Pesan</th>
+                <th className="py-2.5 px-4 text-right">Aksi</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/60 text-slate-700 dark:text-zinc-300">
-              {templates.map((tpl) => (
-                <tr key={tpl.id} className="hover:bg-slate-50 dark:hover:bg-zinc-900/40 transition-colors">
-                  <td className="py-3.5 px-4 font-semibold text-slate-900 dark:text-white whitespace-nowrap">
-                    <div className="flex items-center gap-2">
-                      <FileText className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                      <span>{tpl.title}</span>
-                    </div>
-                  </td>
-                  <td className="py-3.5 px-4">
-                    <Badge variant={tpl.type === 'media' ? 'warning' : 'outline'} className="text-[10px] uppercase font-mono">
-                      {tpl.type}
-                    </Badge>
-                  </td>
-                  <td className="py-3.5 px-4 max-w-sm">
-                    <div className="line-clamp-2 text-slate-600 dark:text-zinc-400 leading-relaxed font-sans">
-                      {tpl.content}
-                    </div>
-                  </td>
-                  <td className="py-3.5 px-4 font-mono text-[11px] text-slate-500 dark:text-zinc-400">
-                    {tpl.mediaUrl ? (
-                      <span className="text-emerald-600 dark:text-emerald-400 font-semibold truncate block max-w-[120px]">
-                        Ada Gambar
-                      </span>
-                    ) : (
-                      'Teks Saja'
-                    )}
-                  </td>
-                  <td className="py-3.5 px-4 text-right">
-                    <div className="flex items-center justify-end gap-1.5">
-                      <Button
-                        onClick={() => openPreview(tpl)}
-                        variant="outline"
-                        size="sm"
-                        className="h-7 text-[11px]"
-                      >
-                        <Eye className="w-3 h-3 mr-1" />
-                        Preview
-                      </Button>
-                      <Button
-                        onClick={() => openEditor(tpl)}
-                        variant="outline"
-                        size="sm"
-                        className="h-7 text-[11px]"
-                      >
-                        <Edit2 className="w-3 h-3 mr-1" />
-                        Edit
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => setTemplates(templates.filter((t) => t.id !== tpl.id))}
-                        className="h-7 w-7 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+            <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
+              {templates.map((tpl, idx) => {
+                const isMedia = tpl.messageType === 'media' || Boolean(tpl.mediaUrl);
+                const isLocation = tpl.messageType === 'location' || Boolean(tpl.location);
+
+                return (
+                  <tr key={tpl.id} className="hover:bg-slate-50/60 dark:hover:bg-zinc-900/40 transition-colors">
+                    <td className="py-3 px-4 text-center font-mono text-[11px] text-slate-400">
+                      {idx + 1}
+                    </td>
+                    <td className="py-3 px-4 font-semibold text-slate-900 dark:text-zinc-100">
+                      {tpl.title}
+                    </td>
+                    <td className="py-3 px-4">
+                      {isLocation ? (
+                        <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/50">
+                          <MapPin className="w-3 h-3 text-blue-500" />
+                          <span>Lokasi GPS</span>
+                        </span>
+                      ) : isMedia ? (
+                        <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/50">
+                          <Image className="w-3 h-3 text-amber-500" />
+                          <span className="capitalize">{tpl.mediaType || 'Media'}</span>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 border border-slate-200 dark:border-zinc-700">
+                          <FileText className="w-3 h-3 text-emerald-500" />
+                          <span>Teks Formatted</span>
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-3 px-4 max-w-md">
+                      <p className="line-clamp-2 text-slate-600 dark:text-zinc-400 font-mono text-[11px]">
+                        {tpl.content}
+                      </p>
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-slate-500 hover:text-emerald-600"
+                          onClick={() => setPreviewTemplate(tpl)}
+                          title="Pratinjau Balon Chat WA"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-slate-500 hover:text-blue-600"
+                          onClick={() => openEditModal(tpl)}
+                          title="Edit Template"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-slate-500 hover:text-rose-500"
+                          onClick={() => setTemplates(templates.filter((t) => t.id !== tpl.id))}
+                          title="Hapus Template"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* Modal Live WhatsApp Bubble Preview */}
-      <Dialog open={previewModalOpen} onOpenChange={setPreviewModalOpen}>
-        <DialogContent className="max-w-sm p-4 text-center">
-          <DialogHeader className="text-center sm:text-center pb-2">
-            <DialogTitle>{selectedTemplate?.title || 'Preview WhatsApp'}</DialogTitle>
-            <DialogDescription>
-              Tampilan pesan sebagaimana dilihat di aplikasi WhatsApp penerima
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="py-2 flex justify-center">
-            {selectedTemplate && (
-              <WhatsAppBubblePreview
-                content={selectedTemplate.content}
-                mediaUrl={selectedTemplate.mediaUrl}
-                sampleData={{
-                  name: 'Budi Santoso',
-                  phone: '628123456789',
-                  tagihan: 'Rp 250.000',
-                  tempo: '25 Sep 2026',
-                }}
-              />
-            )}
-          </div>
-
-          <DialogFooter className="sm:justify-center pt-3">
-            <Button variant="outline" size="sm" onClick={() => setPreviewModalOpen(false)}>
-              Tutup Pratinjau
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Modal Editor Template Pesan */}
-      <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
-        <DialogContent className="max-w-lg">
+      {/* Modal Form Tambah / Edit Template */}
+      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+        <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Editor Template Pesan</DialogTitle>
-            <DialogDescription>
-              Sesuaikan konten pesan dan sisipkan token dinamis untuk personalisasi
-            </DialogDescription>
+            <DialogTitle>{editingId ? 'Edit Template Pesan' : 'Buat Template Pesan Baru'}</DialogTitle>
           </DialogHeader>
 
-          <form onSubmit={handleSave} className="space-y-3.5 py-1">
+          <form onSubmit={handleSave} className="space-y-3.5 text-xs py-1">
             <div>
-              <label className="text-[11px] font-medium text-slate-600 dark:text-zinc-400 block mb-1">Judul Template</label>
+              <label className="block text-[11px] font-medium text-slate-700 dark:text-zinc-300 mb-1">
+                Judul Template *
+              </label>
               <input
                 type="text"
                 required
+                placeholder="Misal: Promo Flash Sale 9.9"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                className="w-full h-8 px-3 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-200 focus:outline-none focus:border-emerald-500"
+                className="w-full h-8 px-2.5 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-200 focus:outline-none focus:border-emerald-500"
               />
             </div>
 
+            {/* Selector Tipe Pesan WA API */}
             <div>
-              <label className="text-[11px] font-medium text-slate-600 dark:text-zinc-400 block mb-1">Tipe Pesan</label>
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant={type === 'text' ? 'default' : 'outline'}
-                  size="sm"
-                  className="flex-1 text-xs"
-                  onClick={() => setType('text')}
-                >
-                  Teks Saja
-                </Button>
-                <Button
-                  type="button"
-                  variant={type === 'media' ? 'default' : 'outline'}
-                  size="sm"
-                  className="flex-1 text-xs"
-                  onClick={() => setType('media')}
-                >
-                  Teks + Gambar
-                </Button>
+              <label className="block text-[11px] font-medium text-slate-700 dark:text-zinc-300 mb-1.5">
+                Pilih Tipe Pesan WhatsApp API
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { id: 'text', label: 'Teks Format', icon: FileText },
+                  { id: 'media', label: 'Media + Caption', icon: Image },
+                  { id: 'location', label: 'Lokasi GPS', icon: MapPin },
+                ].map((item) => {
+                  const Icon = item.icon;
+                  const isSelected = messageType === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setMessageType(item.id)}
+                      className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg border text-xs font-medium transition-colors cursor-pointer ${
+                        isSelected
+                          ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 font-semibold'
+                          : 'border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-900 text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800'
+                      }`}
+                    >
+                      <Icon className="w-3.5 h-3.5" />
+                      <span>{item.label}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
-            {type === 'media' && (
-              <div>
-                <label className="text-[11px] font-medium text-slate-600 dark:text-zinc-400 block mb-1">URL Media / Gambar</label>
-                <input
-                  type="url"
-                  value={mediaUrl}
-                  onChange={(e) => setMediaUrl(e.target.value)}
-                  placeholder="https://example.com/promo.jpg"
-                  className="w-full h-8 px-3 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-200 font-mono focus:outline-none focus:border-emerald-500"
+            {/* Input Media Upload jika tipe media dipilih */}
+            {messageType === 'media' && (
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-zinc-900/70 border border-slate-200 dark:border-zinc-800 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-medium text-slate-700 dark:text-zinc-300">
+                    File Media (Upload ke Storage Lokal atau URL)
+                  </span>
+                  <select
+                    value={mediaType}
+                    onChange={(e) => setMediaType(e.target.value)}
+                    className="h-7 px-2 rounded bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-[11px] text-slate-800 dark:text-zinc-200 focus:outline-none"
+                  >
+                    <option value="image">Gambar (image)</option>
+                    <option value="document">Dokumen / PDF (document)</option>
+                    <option value="video">Video (video)</option>
+                    <option value="audio">Audio (audio)</option>
+                  </select>
+                </div>
+
+                <MediaUploadField
+                  mediaUrl={mediaUrl}
+                  onMediaChange={setMediaUrl}
+                  mediaType={mediaType}
+                  onMediaTypeChange={setMediaType}
                 />
               </div>
             )}
 
-            {/* Quick Variable Inserts */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5 text-[11px]">
-                <span className="text-slate-600 dark:text-zinc-400 font-medium">Sisipkan Variabel:</span>
-                <button
-                  type="button"
-                  onClick={insertSpintax}
-                  className="text-emerald-600 dark:text-emerald-400 font-mono text-[10px] flex items-center gap-1 cursor-pointer hover:underline"
-                >
-                  <Shuffle className="w-3 h-3" /> + Spintax
-                </button>
+            {/* Input Form Lokasi jika tipe location dipilih */}
+            {messageType === 'location' && (
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-zinc-900/70 border border-slate-200 dark:border-zinc-800 space-y-2.5">
+                <div className="text-[11px] font-medium text-slate-700 dark:text-zinc-300 flex items-center gap-1.5">
+                  <MapPin className="w-3.5 h-3.5 text-blue-500" />
+                  <span>Detail Koordinat Lokasi WA</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <input
+                    type="text"
+                    placeholder="Nama Lokasi / Gedung"
+                    value={locName}
+                    onChange={(e) => setLocName(e.target.value)}
+                    className="h-8 px-2.5 rounded-lg bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-xs text-slate-900 dark:text-zinc-200 focus:outline-none"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Alamat Lengkap"
+                    value={locAddress}
+                    onChange={(e) => setLocAddress(e.target.value)}
+                    className="h-8 px-2.5 rounded-lg bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-xs text-slate-900 dark:text-zinc-200 focus:outline-none"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    type="number"
+                    step="any"
+                    placeholder="Latitude (-6.2088)"
+                    value={locLat}
+                    onChange={(e) => setLocLat(e.target.value)}
+                    className="h-8 px-2.5 rounded-lg bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-xs font-mono text-slate-900 dark:text-zinc-200 focus:outline-none"
+                  />
+                  <input
+                    type="number"
+                    step="any"
+                    placeholder="Longitude (106.8456)"
+                    value={locLng}
+                    onChange={(e) => setLocLng(e.target.value)}
+                    className="h-8 px-2.5 rounded-lg bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-xs font-mono text-slate-900 dark:text-zinc-200 focus:outline-none"
+                  />
+                </div>
               </div>
-              <div className="flex flex-wrap gap-1.5">
-                {['name', 'phone', 'tagihan', 'tempo'].map((v) => (
-                  <button
-                    key={v}
-                    type="button"
-                    onClick={() => insertTag(v)}
-                    className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-300 text-[10px] font-mono border border-slate-200 dark:border-zinc-700 cursor-pointer"
-                  >
-                    +{v}
-                  </button>
-                ))}
-              </div>
-            </div>
+            )}
 
-            {/* Textarea */}
+            {/* WhatsApp Text Editor dengan Formatting & Emoji Toolbar */}
             <div>
-              <label className="text-[11px] font-medium text-slate-600 dark:text-zinc-400 block mb-1">Isi Pesan WhatsApp</label>
+              <label className="block text-[11px] font-medium text-slate-700 dark:text-zinc-300 mb-1">
+                {messageType === 'media' ? 'Caption Pesan Media *' : messageType === 'location' ? 'Catatan Tambahan Lokasi *' : 'Isi Teks Pesan WhatsApp *'}
+              </label>
+
+              <WhatsAppFormattingToolbar
+                value={content}
+                onChange={setContent}
+                textareaRef={textareaRef}
+                availableVariables={['name', 'phone', 'kota', 'tier', 'voucher']}
+              />
+
               <textarea
-                rows={5}
+                ref={textareaRef}
+                required
+                rows={6}
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
-                className="w-full p-2.5 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-200 focus:outline-none focus:border-emerald-500 resize-none font-sans leading-relaxed"
+                placeholder="Tulis pesan dengan format WhatsApp (*tebal*, _miring_, emoji 👋)..."
+                className="w-full p-2.5 rounded-b-lg bg-slate-50 dark:bg-zinc-900 border border-t-0 border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-200 font-sans focus:outline-none focus:border-emerald-500 leading-relaxed"
               />
             </div>
 
-            <DialogFooter className="pt-3">
-              <Button type="button" variant="outline" size="sm" onClick={() => setEditModalOpen(false)}>
+            <DialogFooter className="pt-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => setIsModalOpen(false)}>
                 Batal
               </Button>
               <Button type="submit" variant="default" size="sm">
-                Simpan Perubahan
+                Simpan Template
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Preview Balon WhatsApp */}
+      <Dialog open={Boolean(previewTemplate)} onOpenChange={(open) => !open && setPreviewTemplate(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Pratinjau Pesan WhatsApp</DialogTitle>
+          </DialogHeader>
+          <div className="py-2">
+            {previewTemplate && (
+              <WhatsAppBubblePreview
+                senderName="WA Broadcast Bot"
+                text={previewTemplate.content}
+                mediaUrl={previewTemplate.mediaUrl}
+                time="12:00"
+              />
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setPreviewTemplate(null)}>
+              Tutup
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
