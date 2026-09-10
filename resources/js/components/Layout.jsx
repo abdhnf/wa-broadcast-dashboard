@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import {
   Send,
-  Smartphone,
   Users,
   FolderKanban,
   FileText,
@@ -20,7 +19,6 @@ export function Layout({ currentTab, onTabChange, user, metrics, children }) {
   const navItems = [
     { id: 'dashboard', label: 'Overview', icon: Radio },
     { id: 'broadcast', label: 'Blast Engine', icon: Send, badge: 'Live' },
-    { id: 'sessions', label: 'WhatsApp Sessions', icon: Smartphone, count: metrics?.activeSessionsCount || 3 },
     { id: 'contacts', label: 'Contacts', icon: Users, count: metrics?.totalContacts || 1248 },
     { id: 'groups', label: 'Segments', icon: FolderKanban, count: 4 },
     { id: 'templates', label: 'Templates', icon: FileText, count: 3 },
@@ -157,8 +155,8 @@ export function Layout({ currentTab, onTabChange, user, metrics, children }) {
         {[
           { id: 'dashboard', label: 'Overview', icon: Radio },
           { id: 'broadcast', label: 'Blast', icon: Send },
-          { id: 'sessions', label: 'Sessions', icon: Smartphone },
           { id: 'contacts', label: 'Contacts', icon: Users },
+          { id: 'groups', label: 'Segments', icon: FolderKanban },
           { id: 'templates', label: 'Templates', icon: FileText },
         ].map((item) => {
           const Icon = item.icon;

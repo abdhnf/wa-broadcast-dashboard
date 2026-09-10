@@ -4,7 +4,6 @@ import { createRoot } from 'react-dom/client';
 import { ThemeProvider } from './lib/theme';
 import { Layout } from './components/Layout';
 import { DashboardPage } from './Pages/Dashboard';
-import { SessionsPage } from './Pages/Sessions';
 import { ContactsPage } from './Pages/Contacts';
 import { GroupsPage } from './Pages/Groups';
 import { TemplatesPage } from './Pages/Templates';
@@ -14,7 +13,6 @@ import { SettingsPage } from './Pages/Settings';
 import { LoginPage } from './Pages/Auth/Login';
 import {
   dummyMetrics,
-  dummySessions,
   dummyContacts,
   dummyGroups,
   dummyTemplates,
@@ -50,15 +48,8 @@ export function StandaloneApp() {
         {currentTab === 'dashboard' && (
           <DashboardPage
             metrics={dummyMetrics}
-            sessions={dummySessions}
             campaigns={dummyCampaigns}
             onNavigate={setCurrentTab}
-          />
-        )}
-        {currentTab === 'sessions' && (
-          <SessionsPage
-            sessions={dummySessions}
-            onAddSession={(session) => console.log('Add session', session)}
           />
         )}
         {currentTab === 'contacts' && (
@@ -82,13 +73,11 @@ export function StandaloneApp() {
           <BroadcastPage
             groups={dummyGroups}
             templates={dummyTemplates}
-            sessions={dummySessions}
             campaigns={dummyCampaigns}
           />
         )}
         {currentTab === 'playground' && (
           <PlaygroundPage
-            sessions={dummySessions}
             templates={dummyTemplates}
           />
         )}

@@ -17,8 +17,8 @@ import { WhatsAppFormattingToolbar } from '../components/WhatsAppFormattingToolb
 import { MediaUploadField } from '../components/MediaUploadField';
 import { WhatsAppBubblePreview } from '../components/WhatsAppBubblePreview';
 
-export function PlaygroundPage({ sessions, templates }) {
-  const [selectedSession, setSelectedSession] = useState(sessions?.[0]?.id || 'wa_cs_primary');
+export function PlaygroundPage({ templates }) {
+  const [sessionId, setSessionId] = useState('wa_default');
   const [messageType, setMessageType] = useState('text'); // 'text' | 'media' | 'location'
   const [recipient, setRecipient] = useState('6281234567890');
   const [text, setText] = useState('Halo kak *Budi*! 👋\nIni pesan uji coba dari API server *WA Broadcast*. Silakan balas jika pesan ini sudah masuk.');
@@ -66,7 +66,7 @@ export function PlaygroundPage({ sessions, templates }) {
       if (messageType === 'text') {
         endpoint = 'POST /api/v1/messages/send-text';
         requestPayload = {
-          sessionId: selectedSession,
+          sessionId: sessionId || 'wa_default',
           to: recipient.replace(/\D/g, ''),
           text: text,
           priority: 'high'
@@ -74,7 +74,7 @@ export function PlaygroundPage({ sessions, templates }) {
       } else if (messageType === 'media') {
         endpoint = 'POST /api/v1/messages/send-media';
         requestPayload = {
-          sessionId: selectedSession,
+          sessionId: sessionId || 'wa_default',
           to: recipient.replace(/\D/g, ''),
           mediaType: mediaType,
           mediaUrl: mediaUrl.startsWith('data:') ? undefined : mediaUrl,
@@ -85,7 +85,7 @@ export function PlaygroundPage({ sessions, templates }) {
       } else {
         endpoint = 'POST /api/v1/messages/send-location';
         requestPayload = {
-          sessionId: selectedSession,
+          sessionId: sessionId || 'wa_default',
           to: recipient.replace(/\D/g, ''),
           latitude: parseFloat(locLat) || -6.225588,
           longitude: parseFloat(locLng) || 106.808591,
@@ -102,7 +102,7 @@ export function PlaygroundPage({ sessions, templates }) {
           messageId: `wamid_${Date.now()}_simulated`,
           status: 'QUEUED_ENQUEUED',
           recipient: recipient.replace(/\D/g, ''),
-          pacingDelay: 'Handled automatically by WA API Gaussian Jitter (3-12s)',
+          pacingDelay: 'Handled automatically by WA API Gateway',
           payloadEcho: requestPayload,
         },
         timestamp: new Date().toISOString()
@@ -121,7 +121,7 @@ export function PlaygroundPage({ sessions, templates }) {
           <Badge variant="outline" className="font-mono text-[10px]">Fastify Engine 3100</Badge>
         </div>
         <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
-          Uji coba langsung pengiriman format pesan sesuai skema Fastify WA API: Teks berformat WhatsApp, Media Gambar/Dokumen (Upload/URL), dan Titik Lokasi GPS.
+          Uji coba langsung payload pesan sesuai skema Fastify WA API: Teks berformat WhatsApp, Media Gambar/Dokumen (Upload/URL), dan Titik Lokasi GPS.
         </p>
       </div>
 
@@ -145,23 +145,19 @@ export function PlaygroundPage({ sessions, templates }) {
               </div>
             )}
 
-            {/* Sesi Pengirim & Nomor Tujuan */}
+            {/* Session ID & Nomor Tujuan */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-[11px] font-medium text-slate-700 dark:text-zinc-300 mb-1">
-                  Sesi WhatsApp Pengirim *
+                  Session ID WA API
                 </label>
-                <select
-                  value={selectedSession}
-                  onChange={(e) => setSelectedSession(e.target.value)}
-                  className="w-full h-8 px-2.5 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-200 focus:outline-none focus:border-emerald-500"
-                >
-                  {sessions?.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} ({s.phone})
-                    </option>
-                  ))}
-                </select>
+                <input
+                  type="text"
+                  value={sessionId}
+                  onChange={(e) => setSessionId(e.target.value)}
+                  placeholder="Misal: wa_cs_primary / default"
+                  className="w-full h-8 px-2.5 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs font-mono text-slate-900 dark:text-zinc-200 focus:outline-none focus:border-emerald-500"
+                />
               </div>
 
               <div>
@@ -320,7 +316,6 @@ export function PlaygroundPage({ sessions, templates }) {
 
         {/* Right Column: Live Chat Bubble & Response Echo */}
         <div className="lg:col-span-5 space-y-4">
-          {/* WhatsApp Bubble Preview Card */}
           <div className="bg-white dark:bg-[#0f1117] p-4 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-xs">
             <div className="text-[11px] font-semibold text-slate-700 dark:text-zinc-300 mb-2 flex items-center justify-between">
               <span>Pratinjau Tampilan di WhatsApp</span>
@@ -334,7 +329,6 @@ export function PlaygroundPage({ sessions, templates }) {
             />
           </div>
 
-          {/* JSON Response Terminal Echo */}
           <div className="bg-white dark:bg-[#0f1117] p-4 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-xs">
             <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100 dark:border-zinc-800">
               <span className="text-[11px] font-mono text-slate-500 dark:text-zinc-400 flex items-center gap-1.5">
