@@ -9,6 +9,7 @@ import { ContactsPage } from './Pages/Contacts';
 import { GroupsPage } from './Pages/Groups';
 import { TemplatesPage } from './Pages/Templates';
 import { BroadcastPage } from './Pages/Broadcast';
+import { QueuePage } from './Pages/Queue';
 import { PlaygroundPage } from './Pages/Playground';
 import { SettingsPage } from './Pages/Settings';
 import { LoginPage } from './Pages/Auth/Login';
@@ -84,6 +85,14 @@ export function StandaloneApp() {
             templates={dummyTemplates}
             sessions={dummySessions}
             campaigns={dummyCampaigns}
+            onNavigate={setCurrentTab}
+          />
+        )}
+        {currentTab === 'queue' && (
+          <QueuePage
+            campaigns={dummyCampaigns}
+            sessions={dummySessions}
+            onNavigate={setCurrentTab}
           />
         )}
         {currentTab === 'playground' && (

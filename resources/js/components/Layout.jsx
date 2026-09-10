@@ -9,7 +9,8 @@ import {
   Settings,
   Menu,
   X,
-  Radio
+  Radio,
+  ListOrdered
 } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 import { Badge } from './ui/Badge';
@@ -20,6 +21,7 @@ export function Layout({ currentTab, onTabChange, user, metrics, children }) {
   const navItems = [
     { id: 'dashboard', label: 'Overview', icon: Radio },
     { id: 'broadcast', label: 'Blast Engine', icon: Send, badge: 'Live' },
+    { id: 'queue', label: 'Antrean Pesan', icon: ListOrdered, count: 5 },
     { id: 'sessions', label: 'WhatsApp Sessions', icon: Smartphone, count: metrics?.activeSessionsCount || 3 },
     { id: 'contacts', label: 'Contacts', icon: Users, count: metrics?.totalContacts || 1248 },
     { id: 'groups', label: 'Segments', icon: FolderKanban, count: 4 },
@@ -91,7 +93,7 @@ export function Layout({ currentTab, onTabChange, user, metrics, children }) {
                 <button
                   key={item.id}
                   onClick={() => onTabChange(item.id)}
-                  className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all shrink-0 cursor-pointer ${
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all shrink-0 cursor-pointer ${
                     isActive
                       ? 'bg-slate-900 text-white dark:bg-zinc-100 dark:text-zinc-950 font-semibold shadow-xs'
                       : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-800/60'
@@ -128,7 +130,7 @@ export function Layout({ currentTab, onTabChange, user, metrics, children }) {
                   onTabChange(item.id);
                   setMobileMenuOpen(false);
                 }}
-                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-medium ${
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium ${
                   isActive
                     ? 'bg-slate-900 text-white dark:bg-zinc-100 dark:text-zinc-950 font-semibold'
                     : 'text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800'
@@ -157,9 +159,9 @@ export function Layout({ currentTab, onTabChange, user, metrics, children }) {
         {[
           { id: 'dashboard', label: 'Overview', icon: Radio },
           { id: 'broadcast', label: 'Blast', icon: Send },
+          { id: 'queue', label: 'Antrean', icon: ListOrdered },
           { id: 'sessions', label: 'Sessions', icon: Smartphone },
           { id: 'contacts', label: 'Contacts', icon: Users },
-          { id: 'templates', label: 'Templates', icon: FileText },
         ].map((item) => {
           const Icon = item.icon;
           const isActive = currentTab === item.id;
