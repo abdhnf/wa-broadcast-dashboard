@@ -290,8 +290,22 @@ export function updateRemoteSettings(patchBody) {
   return apiFetch('/settings', { method: 'PATCH', body: patchBody });
 }
 
-export function fetchMessages(sessionId = 'all', { signal } = {}) {
-  return apiFetch(`/messages/${encodeURIComponent(sessionId)}`, { signal }).then((res) => res?.messages ?? []);
+export function fetchMessages(sessionId = 'all', { signal, batchId, limit, offset, status, phones } = {}) {
+  const params = new URLSearchParams();
+  if (batchId) params.set('batchId', batchId);
+  if (limit != null) params.set('limit', String(limit));
+  if (offset != null) params.set('offset', String(offset));
+  if (status) params.set('status', Array.isArray(status) ? status.join(',') : status);
+  if (phones && phones.length > 0) params.set('phones', phones.join(','));
+  const qs = params.toString();
+  return apiFetch(`/messages/${encodeURIComponent(sessionId)}${qs ? `?${qs}` : ''}`, { signal })
+    .then((res) => {
+      const list = Array.isArray(res?.messages) ? res.messages : [];
+      return Object.assign(list, {
+        messages: list,
+        total: typeof res?.total === 'number' ? res.total : list.length,
+      });
+    });
 }
 
 export function fetchAutoRotateSettings({ signal } = {}) {

@@ -21,10 +21,10 @@
         })();
     </script>
     @viteReactRefresh
-    @vite(['resources/css/app.css', 'resources/js/app.jsx'])
     @inertiaHead
 </head>
 <body class="bg-slate-50 text-slate-900 dark:bg-[#0c0e12] dark:text-slate-100 font-sans antialiased selection:bg-emerald-500 selection:text-white min-h-screen">
     @inertia
+    @vite(['resources/css/app.css', 'resources/js/app.jsx'])
 </body>
 </html>

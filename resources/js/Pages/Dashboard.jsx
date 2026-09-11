@@ -108,7 +108,7 @@ export function DashboardPage({ onNavigate }) {
         fetchAutoRotateSettings(),
       ]);
       setSessions(sessionsRes);
-      setMessages(messagesRes);
+      setMessages(Array.isArray(messagesRes) ? messagesRes : (messagesRes?.messages || []));
       setUsage(usageRes);
       if (rotateRes) setAutoRotateEnabled(Boolean(rotateRes.enabled));
       setLastSync(new Date());

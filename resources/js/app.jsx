@@ -239,6 +239,5 @@ export function StandaloneApp() {
 // Support both standard Inertia page rendering and Direct mount fallback
 const el = document.getElementById('app');
 if (el) {
-  const root = createRoot(el);
-  root.render(<StandaloneApp />);
+  createRoot(el).render(<StandaloneApp />);
 }

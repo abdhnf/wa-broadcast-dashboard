@@ -18,6 +18,7 @@ import {
   Filter,
   Search,
   ChevronLeft,
+  ChevronRight,
   RefreshCw,
   Smartphone,
   Square,
@@ -55,6 +56,27 @@ import { renderMessage } from '../lib/utils';
 import { PHONE_ERROR_MESSAGE, isValidPhone, normalizePhone, toPhoneInput } from '../lib/phone';
 import { ContactSearchInput } from '../components/ContactSearchInput';
 
+// Status antrean disamakan dengan `MessageStatus` wa-api (types.ts).
+// Tidak ada nilai lain di gateway, jadi tidak ada label yang bisa tidak cocok.
+const QUEUE_RUNNING_STATUSES = ['pending', 'pacing', 'sending'];
+const QUEUE_SUCCESS_STATUSES = ['sent', 'delivered', 'read'];
+const QUEUE_FAILURE_STATUSES = ['failed', 'invalid_number', 'not_registered'];
+const QUEUE_PAGE_SIZE = 50;
+
+const QUEUE_STATUS_OPTIONS = [
+  { value: 'pending', label: 'Menunggu' },
+  { value: 'pacing', label: 'Jeda anti-ban' },
+  { value: 'sending', label: 'Sedang dikirim' },
+  { value: 'sent', label: 'Terkirim' },
+  { value: 'delivered', label: 'Sampai' },
+  { value: 'read', label: 'Dibaca' },
+  { value: 'failed', label: 'Gagal' },
+  { value: 'invalid_number', label: 'Nomor tidak valid' },
+  { value: 'not_registered', label: 'Tidak terdaftar' },
+];
+
+const QUEUE_STATUS_LABEL = Object.fromEntries(QUEUE_STATUS_OPTIONS.map((s) => [s.value, s.label]));
+
 export function BroadcastPage({ groups, templates, sessions, contacts = [], onSessionsRefresh, campaigns: initialCampaigns, onCampaignCreate, onCampaignUpdate, onCampaignDelete }) {
   // Daftar kampanye berasal dari tabel `wa_campaigns` (MySQL, lewat app.jsx),
   // bukan lagi array di dalam memori komponen. Jadi kampanye yang dibuat di sini
@@ -68,8 +90,10 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
   const [batchId, setBatchId] = useState('');
   const [queueStatusFilter, setQueueStatusFilter] = useState('all');
   const [queueSearch, setQueueSearch] = useState('');
+  const [queuePage, setQueuePage] = useState(1);
 
   const [queueMessages, setQueueMessages] = useState([]);
+  const [queueTotal, setQueueTotal] = useState(0);
   const [queuePaused, setQueuePaused] = useState(false);
   const [loadingQueue, setLoadingQueue] = useState(false);
   const [queueError, setQueueError] = useState('');
@@ -604,11 +628,13 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
   };
 
   const mergedQueue = useMemo(() => {
-    // Live status wa-api mapping
+    // Status live wa-api dipetakan per nomor yang sudah dinormalisasi, supaya
+    // 08/+62/628 tidak pernah gagal cocok dengan baris antrean lokal.
     const liveMap = new Map();
     queueMessages.forEach((m) => {
-      if (!liveMap.has(m.to)) {
-        liveMap.set(m.to, m);
+      const key = normalizePhone(m.to);
+      if (key && !liveMap.has(key)) {
+        liveMap.set(key, m);
       }
     });
 
@@ -640,9 +666,10 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
     const isRunning = sending || selectedCampaign?.status === 'in_progress';
 
     return normalizedQueue.map((item) => {
-      const live = liveMap.get(item.phone);
-      
-      // Hitung realStatus dari integrasi live wa-api vs state lokal DB
+      const live = liveMap.get(normalizePhone(item.phone));
+
+      // Satu definisi status: wa-api adalah sumber kebenaran saat kampanye
+      // sudah pernah jalan; sebelum itu pakai state lokal.
       let realStatus = item.status || 'pending';
       if (isCampaignStarted && live?.status) {
         realStatus = live.status;
@@ -650,10 +677,9 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
         realStatus = item.status;
       }
 
-      // Selama antrean sedang berjalan (sending / in_progress), nomor yang belum selesai
-      // (pending/pacing/sending) TIDAK BOLEH bisa dihapus.
-      const isPending = ['pending', 'waiting'].includes(realStatus);
-      const isFailed = ['failed', 'invalid_number', 'not_registered'].includes(realStatus);
+      // Antrean berjalan = kampanye aktif atau pesan sedang diproses gateway.
+      const isPending = realStatus === 'pending';
+      const isFailed = QUEUE_FAILURE_STATUSES.includes(realStatus);
       const mergedCustom = (item.custom && Object.keys(item.custom).length > 0)
         ? item.custom
         : (contactMap.get(item.phone) || {});
@@ -703,9 +729,28 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
     });
   }, [mergedQueue, queueStatusFilter, queueSearch]);
 
-  const pendingCount = filteredUnifiedQueue.filter((i) => ['pending', 'waiting'].includes(i.status)).length;
-  const sentCount = filteredUnifiedQueue.filter((i) => ['sent', 'delivered', 'read'].includes(i.status)).length;
+  const pendingCount = filteredUnifiedQueue.filter((i) => i.status === 'pending').length;
+  const sentCount = filteredUnifiedQueue.filter((i) => QUEUE_SUCCESS_STATUSES.includes(i.status)).length;
   const activePacingCount = filteredUnifiedQueue.filter((i) => i.status === 'pacing').length;
+
+  // Paginasi: satu halaman berisi 50 baris. Setiap kali filter atau pencarian
+  // berubah, halaman dikembalikan ke awal supaya user tidak mendarat di halaman
+  // kosong.
+  const totalQueuePages = Math.max(1, Math.ceil(filteredUnifiedQueue.length / QUEUE_PAGE_SIZE));
+  const safeQueuePage = Math.min(queuePage, totalQueuePages);
+  const pagedQueue = useMemo(
+    () => filteredUnifiedQueue.slice((safeQueuePage - 1) * QUEUE_PAGE_SIZE, safeQueuePage * QUEUE_PAGE_SIZE),
+    [filteredUnifiedQueue, safeQueuePage],
+  );
+
+  useEffect(() => {
+    setQueuePage(1);
+  }, [queueStatusFilter, queueSearch, selectedCampaign?.id]);
+
+  const pagePhones = useMemo(
+    () => pagedQueue.map((item) => item.phone).filter(Boolean),
+    [pagedQueue],
+  );
 
   // Rata-rata jeda jitter riil yang dicatat backend saat status `pacing`.
   const avgPacingSec = useMemo(() => {
@@ -716,18 +761,30 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
   }, [queueMessages]);
 
   // ---------------- Live queue dari wa-api (batch yang sudah dikirim) ----------------
+  // Status diambil per halaman yang sedang terlihat (maks 50 nomor), jadi
+  // kampanye dengan ratusan target pun tetap akurat tanpa memuat seluruh riwayat.
   const loadLiveQueue = useCallback(async () => {
+    if (pagePhones.length === 0) {
+      setQueueMessages([]);
+      setQueueTotal(0);
+      return;
+    }
     setLoadingQueue(true);
     setQueueError('');
     try {
-      const messages = await fetchMessages('all');
+      const { messages, total } = await fetchMessages('all', {
+        limit: QUEUE_PAGE_SIZE,
+        batchId: selectedCampaign?.batchId || undefined,
+        phones: pagePhones,
+      });
       setQueueMessages(messages);
+      setQueueTotal(total);
     } catch (err) {
       setQueueError(err?.message || 'Gagal mengambil antrean dari wa-api.');
     } finally {
       setLoadingQueue(false);
     }
-  }, []);
+  }, [pagePhones, selectedCampaign?.batchId]);
 
   useEffect(() => {
     if (subView !== 'queue') return;
@@ -827,7 +884,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
     }
   };
 
-  const liveQueued = filteredUnifiedQueue.filter((m) => ['pending', 'pacing', 'sending'].includes(m.status)).length;
+  const liveQueued = filteredUnifiedQueue.filter((m) => QUEUE_RUNNING_STATUSES.includes(m.status)).length;
 
   // Status jeda antrean per sesi pengirim (endpoint queue/status wa-api).
   const monitorSessionId = activeSessionId !== 'auto'
@@ -1115,14 +1172,9 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
                 className="py-1.5 px-3 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs text-slate-800 dark:text-zinc-200 focus:outline-none focus:border-emerald-500"
               >
                 <option value="all">Semua Status</option>
-                <option value="pending">Menunggu (pending)</option>
-                <option value="pacing">Pacing (jeda anti-ban)</option>
-                <option value="sent">Terkirim (sent)</option>
-                <option value="delivered">Delivered</option>
-                <option value="read">Dibaca</option>
-                <option value="failed">Gagal</option>
-                <option value="invalid_number">Nomor tidak valid</option>
-                <option value="not_registered">Tidak terdaftar</option>
+                {QUEUE_STATUS_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
               </select>
 
               <Button
@@ -1187,7 +1239,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
-                  {filteredUnifiedQueue.length === 0 ? (
+                  {pagedQueue.length === 0 ? (
                     <tr>
                       <td colSpan={6} className="py-8 text-center text-slate-400 dark:text-zinc-500">
                         {loadingQueue
@@ -1196,9 +1248,11 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
                       </td>
                     </tr>
                   ) : (
-                    filteredUnifiedQueue.map((item, idx) => (
+                    pagedQueue.map((item, idx) => (
                       <tr key={item.id} className="hover:bg-slate-50/60 dark:hover:bg-zinc-900/40 transition-colors">
-                        <td className="py-2.5 px-4 text-center text-[11px] text-slate-400">{idx + 1}</td>
+                        <td className="py-2.5 px-4 text-center text-[11px] text-slate-400">
+                          {(safeQueuePage - 1) * QUEUE_PAGE_SIZE + idx + 1}
+                        </td>
                         <td className="py-2.5 px-4">
                           <div className="font-semibold text-slate-900 dark:text-zinc-100">{item.name}</div>
                           <div className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">+{item.phone}</div>
@@ -1269,11 +1323,11 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
                                 </div>
                               )}
                             </div>
-                          ) : (item.status === 'queue' || item.status === 'pending' || item.status === 'waiting') ? (
+                          ) : (item.status === 'pending' || item.status === 'sending') ? (
                             <div>
                               <span className="inline-flex items-center gap-1 text-[11px] text-amber-600 dark:text-amber-400 font-medium animate-pulse">
                                 <Clock className="w-3.5 h-3.5" />
-                                <span>{selectedCampaign?.status === 'in_progress' || sending ? 'Di Antrean (wa-api)' : 'Menunggu'}</span>
+                                <span>{QUEUE_STATUS_LABEL[item.status] || 'Menunggu'}</span>
                               </span>
                             </div>
                           ) : (
@@ -1318,6 +1372,45 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
                 </tbody>
               </table>
             </div>
+
+            {filteredUnifiedQueue.length > QUEUE_PAGE_SIZE && (
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-3 py-2.5 border-t border-slate-200 dark:border-zinc-800 text-[11px] text-slate-500 dark:text-zinc-400">
+                <span>
+                  Menampilkan {(safeQueuePage - 1) * QUEUE_PAGE_SIZE + 1}
+                  {' sampai '}
+                  {Math.min(safeQueuePage * QUEUE_PAGE_SIZE, filteredUnifiedQueue.length)}
+                  {' dari '}
+                  {filteredUnifiedQueue.length} target
+                </span>
+                <div className="flex items-center gap-1.5">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs"
+                    disabled={safeQueuePage <= 1}
+                    onClick={() => setQueuePage((p) => Math.max(1, p - 1))}
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5 mr-1" />
+                    <span>Sebelumnya</span>
+                  </Button>
+                  <span className="px-2 font-medium text-slate-700 dark:text-zinc-300">
+                    {safeQueuePage} / {totalQueuePages}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs"
+                    disabled={safeQueuePage >= totalQueuePages}
+                    onClick={() => setQueuePage((p) => Math.min(totalQueuePages, p + 1))}
+                  >
+                    <span>Berikutnya</span>
+                    <ChevronRight className="w-3.5 h-3.5 ml-1" />
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
