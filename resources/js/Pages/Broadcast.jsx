@@ -23,7 +23,8 @@ import {
   Square,
   Info,
   AlertCircle,
-  X
+  X,
+  Edit2
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
@@ -78,6 +79,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
 
   // Form State Setup Campaign
   const [isWizardOpen, setIsWizardOpen] = useState(false);
+  const [editingCampaign, setEditingCampaign] = useState(null); // Kampanye yang sedang diedit
   const [campaignName, setCampaignName] = useState('');
   const [selectedGroup, setSelectedGroup] = useState('');
   const [selectedTemplate, setSelectedTemplate] = useState('');
@@ -160,6 +162,23 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
    * diisi dari daftar kontak segmen yang dipilih (kalau ada). Kalau segmen masih
    * kosong, kampanye tetap dibuat dan pengguna menambah nomor secara manual.
    */
+  // Handler Buka Modal Edit Kampanye (Hanya untuk kampanye yang belum 'completed')
+  const handleOpenEditCampaign = (camp, e) => {
+    e?.stopPropagation();
+    if (camp.status === 'completed') return;
+    setEditingCampaign(camp);
+    setCampaignName(camp.name || '');
+    setSelectedGroup(camp.groupName || '');
+    setSelectedTemplate(camp.templateId || '');
+    setSelectedSessionId(
+      camp.sessionUsed === 'Auto-Rotate Pool' || !camp.sessionUsed ? 'auto_rotate' : (
+        sessions?.find((s) => s.name === camp.sessionUsed || s.id === camp.sessionUsed)?.id || camp.sessionUsed
+      )
+    );
+    setFormError('');
+    setIsWizardOpen(true);
+  };
+
   const handleCreateCampaign = async (e) => {
     e.preventDefault();
     setFormError('');
@@ -186,43 +205,64 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
     const chosenSession = sessions?.find((s) => s.id === selectedSessionId);
     const sessionLabel = selectedSessionId === 'auto_rotate' ? 'Auto-Rotate Pool' : chosenSession?.name || selectedSessionId;
 
-    const seed = groupMembers(selectedGroup).map((c, i) => ({
-      id: `q_${Date.now()}_${i}`,
-      campaignId: '',
-      phone: normalizePhone(c.phone),
-      name: c.name,
-      custom: c.custom || {},
-      status: 'pending',
-      sentAt: '-',
-      session: sessionLabel,
-    }));
-
     setCreating(true);
     try {
-      const created = await onCampaignCreate?.({
-        name: campaignName.trim(),
-        groupName: selectedGroup,
-        templateId: tpl.id,
-        templateTitle: tpl.title,
-        sessionUsed: sessionLabel,
-        totalRecipients: seed.length,
-        status: 'idle',
-        campaignId: `cmp_${Date.now()}`,
-        queue: seed,
-      });
+      if (editingCampaign) {
+        // Mode Update Kampanye
+        const updatedFields = {
+          name: campaignName.trim(),
+          groupName: selectedGroup,
+          templateId: tpl.id,
+          templateTitle: tpl.title,
+          sessionUsed: sessionLabel,
+        };
+        await onCampaignUpdate?.(editingCampaign.id, updatedFields);
+        if (selectedCampaign?.id === editingCampaign.id) {
+          setSelectedCampaign((prev) => (prev ? { ...prev, ...updatedFields } : prev));
+        }
+        setEditingCampaign(null);
+        setCampaignName('');
+        setSelectedTemplate('');
+        setSelectedGroup('');
+        setIsWizardOpen(false);
+      } else {
+        // Mode Buat Kampanye Baru
+        const seed = groupMembers(selectedGroup).map((c, i) => ({
+          id: `q_${Date.now()}_${i}`,
+          campaignId: '',
+          phone: normalizePhone(c.phone),
+          name: c.name,
+          custom: c.custom || {},
+          status: 'pending',
+          sentAt: '-',
+          session: sessionLabel,
+        }));
 
-      if (!created) {
-        setFormError('Kampanye gagal disimpan. Coba lagi.');
-        return;
+        const created = await onCampaignCreate?.({
+          name: campaignName.trim(),
+          groupName: selectedGroup,
+          templateId: tpl.id,
+          templateTitle: tpl.title,
+          sessionUsed: sessionLabel,
+          totalRecipients: seed.length,
+          status: 'idle',
+          campaignId: `cmp_${Date.now()}`,
+          queue: seed,
+        });
+
+        if (!created) {
+          setFormError('Kampanye gagal disimpan. Coba lagi.');
+          return;
+        }
+
+        setCampaignName('');
+        setSelectedTemplate('');
+        setSelectedGroup('');
+        setIsWizardOpen(false);
+        setSelectedCampaign(created);
+        setRecipientQueue(created.queue || []);
+        setSubView('queue');
       }
-
-      setCampaignName('');
-      setSelectedTemplate('');
-      setSelectedGroup('');
-      setIsWizardOpen(false);
-      setSelectedCampaign(created);
-      setRecipientQueue(created.queue || []);
-      setSubView('queue');
     } catch (err) {
       setFormError(err?.message || 'Kampanye gagal disimpan.');
     } finally {
@@ -601,14 +641,18 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
 
     return normalizedQueue.map((item) => {
       const live = liveMap.get(item.phone);
-      // Jika item di queue lokal/DB berstatus 'pending', prioritas adalah 'pending'
-      // agar nomor yang baru saja dibetulkan di CRM atau baru ditambah tidak tertimpa
-      // status pesan lama di liveMap.
-      const realStatus = isCampaignStarted
-        ? (item.status === 'pending' ? 'pending' : (live?.status || item.status || 'pending'))
-        : (item.status || 'pending');
+      
+      // Hitung realStatus dari integrasi live wa-api vs state lokal DB
+      let realStatus = item.status || 'pending';
+      if (isCampaignStarted && live?.status) {
+        realStatus = live.status;
+      } else if (item.status) {
+        realStatus = item.status;
+      }
 
-      const isPending = realStatus === 'pending';
+      // Selama antrean sedang berjalan (sending / in_progress), nomor yang belum selesai
+      // (pending/pacing/sending) TIDAK BOLEH bisa dihapus.
+      const isPending = ['pending', 'waiting'].includes(realStatus);
       const isFailed = ['failed', 'invalid_number', 'not_registered'].includes(realStatus);
       const mergedCustom = (item.custom && Object.keys(item.custom).length > 0)
         ? item.custom
@@ -620,11 +664,11 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
         phone: item.phone,
         custom: mergedCustom,
         status: realStatus,
-        error: live?.error || item.error || null,
+        error: live?.errorDetail || live?.error || item.error || null,
         messageId: live?.id || item.messageId || null,
         liveData: isCampaignStarted ? (live || null) : null,
         canDelete: isPending && !isRunning,
-        canRetry: isFailed,
+        canRetry: isFailed && !isRunning,
       };
     });
   }, [selectedCampaign, recipientQueue, queueMessages, sending]);
@@ -865,17 +909,6 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
             </>
           ) : (
             <>
-              {campaigns.length > 0 && (
-                <Button
-                  onClick={() => handleOpenQueueView(campaigns[0])}
-                  variant="outline"
-                  size="sm"
-                  className="text-xs"
-                >
-                  <ListOrdered className="w-3.5 h-3.5 mr-1 text-emerald-600 dark:text-emerald-400" />
-                  <span>Lihat Antrean</span>
-                </Button>
-              )}
               <Button
                 onClick={() => {
                   setCampaignName('');
@@ -944,16 +977,31 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
                       />
                     </td>
                     <td className="py-3 px-4 text-right">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleOpenQueueView(camp)}
-                        className="text-xs h-7"
-                      >
-                        <ListOrdered className="w-3 h-3 mr-1 text-emerald-600 dark:text-emerald-400" />
-                        <span>Buka Antrean</span>
-                      </Button>
+                      <div className="inline-flex items-center justify-end gap-1.5">
+                        {camp.status !== 'completed' && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => handleOpenEditCampaign(camp, e)}
+                            className="text-xs h-7 text-slate-500 hover:text-slate-900 dark:hover:text-white"
+                            title="Edit informasi kampanye"
+                          >
+                            <Edit2 className="w-3 h-3 mr-1 text-slate-400" />
+                            <span>Edit</span>
+                          </Button>
+                        )}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleOpenQueueView(camp)}
+                          className="text-xs h-7"
+                        >
+                          <ListOrdered className="w-3 h-3 mr-1 text-emerald-600 dark:text-emerald-400" />
+                          <span>Buka Antrean</span>
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -1221,6 +1269,13 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
                                 </div>
                               )}
                             </div>
+                          ) : (item.status === 'queue' || item.status === 'pending' || item.status === 'waiting') ? (
+                            <div>
+                              <span className="inline-flex items-center gap-1 text-[11px] text-amber-600 dark:text-amber-400 font-medium animate-pulse">
+                                <Clock className="w-3.5 h-3.5" />
+                                <span>{selectedCampaign?.status === 'in_progress' || sending ? 'Di Antrean (wa-api)' : 'Menunggu'}</span>
+                              </span>
+                            </div>
                           ) : (
                             <span className="inline-flex items-center gap-1 text-[11px] text-slate-500 dark:text-zinc-400 font-medium">
                               <Clock className="w-3.5 h-3.5" />
@@ -1267,11 +1322,14 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
         </div>
       )}
 
-      {/* Modal Buat Kampanye */}
-      <Dialog open={isWizardOpen} onOpenChange={setIsWizardOpen}>
+      {/* Modal Buat / Edit Kampanye */}
+      <Dialog open={isWizardOpen} onOpenChange={(open) => {
+        setIsWizardOpen(open);
+        if (!open) setEditingCampaign(null);
+      }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Buat Kampanye Blast Baru</DialogTitle>
+            <DialogTitle>{editingCampaign ? 'Edit Informasi Kampanye' : 'Buat Kampanye Blast Baru'}</DialogTitle>
           </DialogHeader>
 
           <form onSubmit={handleCreateCampaign} className="space-y-3.5 text-xs py-1">
@@ -1296,7 +1354,8 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
               <select
                 value={selectedGroup}
                 onChange={(e) => setSelectedGroup(e.target.value)}
-                className="w-full h-8 px-2.5 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-200 focus:outline-none focus:border-emerald-500"
+                disabled={Boolean(editingCampaign)}
+                className="w-full h-8 px-2.5 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-200 focus:outline-none focus:border-emerald-500 disabled:opacity-50"
               >
                 <option value="">Pilih segmen audiens...</option>
                 {groups?.map((g) => (
@@ -1308,6 +1367,11 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
               {groups?.length === 0 && (
                 <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-1">
                   Belum ada segmen. Buat segmen dan tambahkan kontak terlebih dahulu di halaman Kontak.
+                </p>
+              )}
+              {editingCampaign && (
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Segmen awal tidak dapat diubah pada mode edit. Tambah atau kurangi nomor langsung di daftar antrean.
                 </p>
               )}
             </div>
@@ -1392,7 +1456,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
                 Batal
               </Button>
               <Button type="submit" variant="default" size="sm" disabled={creating}>
-                {creating ? 'Menyimpan...' : 'Buat & Buka Antrean'}
+                {creating ? 'Menyimpan...' : editingCampaign ? 'Simpan Perubahan' : 'Buat & Buka Antrean'}
               </Button>
             </DialogFooter>
           </form>
