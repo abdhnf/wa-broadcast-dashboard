@@ -1,6 +1,6 @@
 # WhatsApp Blast Dashboard & CRM Suite
 
-Modern, responsive WhatsApp Broadcast & Campaign Management Dashboard built with **Laravel 14**, **Inertia.js v3**, **React 19**, and **Tailwind CSS v4**.
+Modern, responsive WhatsApp Broadcast & Campaign Management Dashboard built with **Laravel 13**, **Inertia.js v3**, **React 19**, and **Tailwind CSS v4**.
 
 Aplikasi ini didesain khusus sebagai UI/UX layer untuk mengelola kampanye blast WhatsApp terintegrasi langsung dengan gateway [wa-api](https://github.com/abdhnf/wa-api). Dilengkapi sistem CRM kontak & segmen, manajemen template pesan, visualisasi antrean terpadu, penyesuaian parameter anti-ban dinamis, dan fitur **Retry Antrean Gagal**.
 
