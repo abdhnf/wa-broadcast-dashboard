@@ -1,6 +1,6 @@
 # WhatsApp Blast Dashboard & CRM Suite
 
-Modern, responsive WhatsApp Broadcast & Campaign Management Dashboard built with **Laravel 11 / 12**, **Inertia.js v3**, **React 19**, and **Tailwind CSS v4**.
+Modern, responsive WhatsApp Broadcast & Campaign Management Dashboard built with **Laravel 14**, **Inertia.js v3**, **React 19**, and **Tailwind CSS v4**.
 
 Aplikasi ini didesain khusus sebagai UI/UX layer untuk mengelola kampanye blast WhatsApp terintegrasi langsung dengan gateway [wa-api](https://github.com/abdhnf/wa-api). Dilengkapi sistem CRM kontak & segmen, manajemen template pesan, visualisasi antrean terpadu, penyesuaian parameter anti-ban dinamis, dan fitur **Retry Antrean Gagal**.
 
@@ -31,7 +31,7 @@ Pastikan infrastruktur server Anda telah memenuhi spesifikasi berikut:
 - **Spesifikasi Rekomendasi:** 2 vCPU, 2 GB RAM (nyaman untuk multi-tenant & ribuan antrean pesan).
 
 ### 2. Software & Runtime
-- **PHP:** Versi `>= 8.2` atau `8.3` (ekstensi wajib: `pdo_mysql`, `mbstring`, `openssl`, `tokenizer`, `xml`, `ctype`, `json`, `bcmath`, `curl`).
+- **PHP:** Versi `>= 8.2` atau `8.3` / `8.4` (ekstensi wajib: `pdo_mysql`, `mbstring`, `openssl`, `tokenizer`, `xml`, `ctype`, `json`, `bcmath`, `curl`).
 - **Composer:** Versi `>= 2.6`.
 - **Node.js & Package Manager:** Node.js `>= 20.x LTS` dan `npm` / `pnpm`.
 - **Database:** MySQL `>= 8.0` atau MariaDB `>= 10.6` (menggunakan database `wa_blast`).
