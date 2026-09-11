@@ -196,8 +196,14 @@ export function StandaloneApp() {
           <ContactsPage
             groups={groups}
             onGroupsRefresh={refreshGroups}
-            onContactsChange={refreshGroups}
-            onContactsChanged={refreshContacts}
+            onContactsChange={() => {
+              void refreshGroups();
+              void refreshCampaigns();
+            }}
+            onContactsChanged={() => {
+              void refreshContacts();
+              void refreshCampaigns();
+            }}
           />
         )}
         {currentTab === 'groups' && (

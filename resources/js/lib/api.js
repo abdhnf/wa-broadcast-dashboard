@@ -367,6 +367,28 @@ export function fetchQueueStatus(sessionId, { signal } = {}) {
   return apiFetch(`/sessions/${encodeURIComponent(sessionId)}/queue/status`, { signal });
 }
 
+export function pauseBatch(batchId, reason) {
+  return apiFetch(`/batches/${encodeURIComponent(batchId)}/pause`, {
+    method: 'POST',
+    body: { reason },
+  });
+}
+
+export function resumeBatch(batchId) {
+  return apiFetch(`/batches/${encodeURIComponent(batchId)}/resume`, { method: 'POST' });
+}
+
+export function clearBatch(batchId, reason) {
+  return apiFetch(`/batches/${encodeURIComponent(batchId)}/clear`, {
+    method: 'POST',
+    body: { reason },
+  });
+}
+
+export function fetchBatchStatus(batchId, { signal } = {}) {
+  return apiFetch(`/batches/${encodeURIComponent(batchId)}/status`, { signal });
+}
+
 export function pauseQueue(sessionId, reason) {
   return apiFetch(`/sessions/${encodeURIComponent(sessionId)}/queue/pause`, {
     method: 'POST',
@@ -376,6 +398,13 @@ export function pauseQueue(sessionId, reason) {
 
 export function resumeQueue(sessionId) {
   return apiFetch(`/sessions/${encodeURIComponent(sessionId)}/queue/resume`, { method: 'POST' });
+}
+
+export function clearQueue(sessionId, reason, batchId) {
+  return apiFetch(`/sessions/${encodeURIComponent(sessionId)}/queue/clear`, {
+    method: 'POST',
+    body: { reason, batchId },
+  });
 }
 
 /**

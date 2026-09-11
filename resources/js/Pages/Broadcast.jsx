@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Send,
   Users,
@@ -20,6 +20,7 @@ import {
   ChevronLeft,
   RefreshCw,
   Smartphone,
+  Square,
   Info,
   AlertCircle,
   X
@@ -35,6 +36,11 @@ import {
   DialogFooter
 } from '../components/ui/Dialog';
 import {
+  clearQueue,
+  clearBatch,
+  pauseBatch,
+  resumeBatch,
+  fetchBatchStatus,
   fetchMessages,
   fetchQueueStatus,
   pauseQueue,
@@ -67,6 +73,8 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
   const [loadingQueue, setLoadingQueue] = useState(false);
   const [queueError, setQueueError] = useState('');
   const [sending, setSending] = useState(false);
+  const isPausedRef = useRef(false);
+  const isStoppedRef = useRef(false);
 
   // Form State Setup Campaign
   const [isWizardOpen, setIsWizardOpen] = useState(false);
@@ -98,8 +106,16 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
   );
 
   useEffect(() => {
+    if (selectedCampaign) {
+      const liveCamp = campaigns.find((c) => c.id === selectedCampaign.id);
+      if (liveCamp) {
+        setSelectedCampaign(liveCamp);
+        setRecipientQueue(liveCamp.queue || []);
+        return;
+      }
+    }
     setRecipientQueue(selectedCampaign?.queue || []);
-  }, [selectedCampaign]);
+  }, [campaigns, selectedCampaign?.id]);
 
   /**
    * Simpan antrean kampanye ke MySQL.
@@ -341,14 +357,23 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
     };
 
     const nextQueue = [newItem, ...currentCampQueue];
+    const nextStatus = (targetCampaign.status === 'completed' || targetCampaign.status === 'failed')
+      ? 'idle'
+      : targetCampaign.status;
 
     // Jika kampanye yang dipilih sama dengan kampanye aktif di subview antrean
     if (!selectedCampaign || selectedCampaign.id === targetCampaign.id) {
       setRecipientQueue(nextQueue);
-      setSelectedCampaign({ ...targetCampaign, queue: nextQueue, totalRecipients: nextQueue.length });
+      setSelectedCampaign({
+        ...targetCampaign,
+        status: nextStatus,
+        queue: nextQueue,
+        totalRecipients: nextQueue.length,
+      });
     }
 
     void onCampaignUpdate?.(targetCampaign.id, {
+      status: nextStatus,
       queue: nextQueue,
       totalRecipients: nextQueue.length,
     });
@@ -407,7 +432,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
 
     const targets = recipientQueue.filter((item) => item.status === 'pending');
     if (targets.length === 0) {
-      setQueueError('Antrean masih kosong. Tambahkan nomor penerima terlebih dahulu.');
+      setQueueError('Antrean masih kosong atau semua pesan sudah terkirim.');
       return;
     }
 
@@ -417,16 +442,29 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
       return;
     }
 
+    // Pastikan kampanye punya batchId unik yang konsisten
+    const activeBatchId = selectedCampaign.batchId || `camp_${selectedCampaign.id}`;
+    if (!selectedCampaign.batchId) {
+      setSelectedCampaign((prev) => (prev ? { ...prev, batchId: activeBatchId } : prev));
+      void onCampaignUpdate?.(selectedCampaign.id, { batchId: activeBatchId });
+    }
+
+    isPausedRef.current = false;
+    isStoppedRef.current = false;
+    setQueuePaused(false);
     setSending(true);
     setQueueError('');
 
     const statusByPhone = new Map();
-    let batch = '';
+    let batch = activeBatchId;
     let okCount = 0;
     let failCount = 0;
     let lastError = '';
 
     for (const item of targets) {
+      if (isPausedRef.current || isStoppedRef.current) {
+        break;
+      }
       try {
         const rendered = renderMessage(tpl.content, {
           name: item.name,
@@ -443,7 +481,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
               mediaUrl: tpl.mediaUrl,
               caption: rendered,
               priority: 'normal',
-              batchId: selectedCampaign.batchId || undefined,
+              batchId: activeBatchId,
             })
           : tpl.messageType === 'location'
             ? await sendLocation({
@@ -453,17 +491,17 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
                 longitude: tpl.location?.longitude,
                 name: tpl.location?.name,
                 address: tpl.location?.address,
-                batchId: selectedCampaign.batchId || undefined,
+                batchId: activeBatchId,
               })
             : await sendText({
                 sessionId: activeSessionId,
                 to: item.phone,
                 text: rendered,
                 priority: 'normal',
-                batchId: selectedCampaign.batchId || undefined,
+                batchId: activeBatchId,
               });
 
-        batch = batch || res?.batchId || '';
+        batch = batch || res?.batchId || activeBatchId;
         okCount += 1;
         statusByPhone.set(item.phone, {
           status: 'sent',
@@ -486,10 +524,20 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
       return result ? { ...item, ...result } : item;
     });
 
+    const hasPendingRemaining = nextQueue.some((q) => q.status === 'pending');
+    let finalStatus = 'in_progress';
+    if (isStoppedRef.current) {
+      finalStatus = 'completed';
+    } else if (isPausedRef.current || failCount > 0) {
+      finalStatus = 'paused';
+    } else if (!hasPendingRemaining) {
+      finalStatus = 'completed';
+    }
+
     const updated = {
       ...selectedCampaign,
       batchId: batch || selectedCampaign.batchId,
-      status: failCount > 0 ? 'paused' : 'in_progress',
+      status: finalStatus,
       sentCount: (selectedCampaign.sentCount || 0) + okCount,
       failedCount: (selectedCampaign.failedCount || 0) + failCount,
       totalRecipients: nextQueue.length,
@@ -539,17 +587,25 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
       }
     });
 
-    const rawQueue = selectedCampaign?.queue || [];
+    const rawQueue = Array.isArray(selectedCampaign?.queue)
+      ? selectedCampaign.queue
+      : (typeof selectedCampaign?.queue === 'string'
+          ? (() => { try { return JSON.parse(selectedCampaign.queue) || []; } catch { return []; } })()
+          : (recipientQueue || []));
     const normalizedQueue = rawQueue.map((item, idx) => ({
       ...item,
       id: item.id || `q_${item.phone || idx}`,
     }));
 
+    const isRunning = sending || selectedCampaign?.status === 'in_progress';
+
     return normalizedQueue.map((item) => {
       const live = liveMap.get(item.phone);
-      // Status sinkron wa-api HANYA berlaku jika kampanye ini memang sudah mulai/pernah dikirim
+      // Jika item di queue lokal/DB berstatus 'pending', prioritas adalah 'pending'
+      // agar nomor yang baru saja dibetulkan di CRM atau baru ditambah tidak tertimpa
+      // status pesan lama di liveMap.
       const realStatus = isCampaignStarted
-        ? (item.status === 'pending' && (!live || live.status === 'pending') ? 'pending' : (live?.status || item.status || 'pending'))
+        ? (item.status === 'pending' ? 'pending' : (live?.status || item.status || 'pending'))
         : (item.status || 'pending');
 
       const isPending = realStatus === 'pending';
@@ -567,11 +623,11 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
         error: live?.error || item.error || null,
         messageId: live?.id || item.messageId || null,
         liveData: isCampaignStarted ? (live || null) : null,
-        canDelete: isPending,
+        canDelete: isPending && !isRunning,
         canRetry: isFailed,
       };
     });
-  }, [selectedCampaign, recipientQueue, queueMessages]);
+  }, [selectedCampaign, recipientQueue, queueMessages, sending]);
 
   const failedItems = useMemo(() => {
     return mergedQueue.filter((i) => i.canRetry);
@@ -636,33 +692,94 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
     return () => clearInterval(timer);
   }, [subView, loadLiveQueue]);
 
-  // Jeda/Lanjutkan antrean dikirim ke wa-api per sesi pengirim. Backend yang
-  // memegang loop antrean, jadi jeda di sisi UI tidak akan berpengaruh apa pun
-  // kalau tidak dipropagasikan ke sana.
+  // Jeda/Lanjutkan antrean berbasis batchId kampanye agar tidak membekukan sesi secara global
   const handleTogglePause = async () => {
-    const fromQueue = queueMessages.map((m) => m.sessionId).filter(Boolean);
-    const fromSessions = (sessions || [])
-      .filter((s) => s.status === 'connected' || s.status === 'open')
-      .map((s) => s.id);
-    const sessionIds = Array.from(new Set(fromQueue.length > 0 ? fromQueue : fromSessions));
-
-    if (sessionIds.length === 0) {
-      setQueueError('Tidak ada sesi aktif yang bisa dijeda.');
-      return;
-    }
-
     const next = !queuePaused;
+    isPausedRef.current = next;
     setQueuePaused(next);
     setQueueError('');
+
+    if (selectedCampaign) {
+      const nextStatus = next ? 'paused' : 'in_progress';
+      setSelectedCampaign((prev) => (prev ? { ...prev, status: nextStatus } : prev));
+      void onCampaignUpdate?.(selectedCampaign.id, { status: nextStatus });
+    }
+
     try {
-      for (const sid of sessionIds) {
-        if (next) await pauseQueue(sid);
-        else await resumeQueue(sid);
+      const campBatchId = selectedCampaign?.batchId;
+      if (campBatchId) {
+        if (next) await pauseBatch(campBatchId, `Kampanye "${selectedCampaign.name}" dijeda`);
+        else await resumeBatch(campBatchId);
+      } else {
+        // Fallback per sesi hanya jika batchId belum terbentuk
+        const fromQueue = queueMessages.map((m) => m.sessionId).filter(Boolean);
+        const fromSessions = (sessions || [])
+          .filter((s) => s.status === 'connected' || s.status === 'open')
+          .map((s) => s.id);
+        const sessionIds = Array.from(new Set(fromQueue.length > 0 ? fromQueue : fromSessions));
+        for (const sid of sessionIds) {
+          if (next) await pauseQueue(sid);
+          else await resumeQueue(sid);
+        }
       }
       await loadLiveQueue();
+
+      // Jika dilanjutkan (resume) dan masih ada kontak pending yang belum terkirim ke wa-api,
+      // jalankan kembali handleStartBlast untuk mendispatch sisa kontak
+      if (!next && selectedCampaign) {
+        const remainingTargets = recipientQueue.filter((item) => item.status === 'pending');
+        if (remainingTargets.length > 0 && !sending) {
+          void handleStartBlast();
+        }
+      }
     } catch (err) {
+      isPausedRef.current = !next;
       setQueuePaused(!next);
       setQueueError(err?.message || 'Gagal mengubah status antrean di wa-api.');
+    }
+  };
+
+  // Handler Hentikan (Stop) Antrean - hanya batalkan batch kampanye terpilih
+  const handleStopBlast = async () => {
+    if (!selectedCampaign) return;
+    isStoppedRef.current = true;
+    isPausedRef.current = false;
+    setSending(false);
+    setQueuePaused(false);
+
+    const campBatchId = selectedCampaign.batchId;
+
+    try {
+      if (campBatchId) {
+        // Bersihkan hanya antrean yang berasosiasi dengan batchId kampanye ini!
+        try {
+          await clearBatch(campBatchId, `Kampanye "${selectedCampaign.name}" dihentikan oleh pengguna`);
+        } catch {}
+      } else {
+        // Fallback: jika belum ada batchId, bersihkan per sesi pengirim
+        const fromQueue = queueMessages.map((m) => m.sessionId).filter(Boolean);
+        const fromSessions = (sessions || [])
+          .filter((s) => s.status === 'connected' || s.status === 'open')
+          .map((s) => s.id);
+        const sessionIds = Array.from(new Set(fromQueue.length > 0 ? fromQueue : fromSessions));
+        if (sessionIds.length > 0) {
+          for (const sid of sessionIds) {
+            try {
+              await clearQueue(sid, `Kampanye "${selectedCampaign.name}" dihentikan oleh pengguna`);
+            } catch {}
+          }
+        }
+      }
+
+      const updated = {
+        ...selectedCampaign,
+        status: 'completed',
+      };
+      setSelectedCampaign(updated);
+      void onCampaignUpdate?.(selectedCampaign.id, { status: 'completed' });
+      await loadLiveQueue();
+    } catch (err) {
+      setQueueError(err?.message || 'Gagal menghentikan antrean di wa-api.');
     }
   };
 
@@ -737,9 +854,10 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
               )}
               <Button
                 onClick={handleOpenAddRecipientModal}
+                disabled={sending || selectedCampaign?.status === 'in_progress'}
                 variant="default"
                 size="sm"
-                className="text-xs"
+                className="text-xs disabled:opacity-50"
               >
                 <Plus className="w-3.5 h-3.5 mr-1" />
                 <span>Tambah Nomor Antrean</span>
@@ -874,15 +992,26 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
                   type="button"
                   variant="outline"
                   size="sm"
-                  disabled={sending}
+                  disabled={sending || selectedCampaign?.status === 'in_progress'}
                   onClick={handleLoadSegmentContacts}
-                  className="h-7 text-xs"
+                  className="h-7 text-xs disabled:opacity-50"
                 >
                   <Users className="w-3 h-3 mr-1" />
                   <span>Muat Kontak Segmen</span>
                 </Button>
 
-                {selectedCampaign.status === 'idle' || selectedCampaign.status === 'paused' ? (
+                {selectedCampaign.status === 'completed' || (!sending && !queuePaused && recipientQueue.length > 0 && !recipientQueue.some((i) => i.status === 'pending')) ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled
+                    className="h-7 text-xs border-emerald-500/30 text-emerald-600 dark:text-emerald-400 font-medium"
+                  >
+                    <CheckCircle2 className="w-3 h-3 mr-1" />
+                    <span>Selesai (Stop)</span>
+                  </Button>
+                ) : selectedCampaign.status === 'idle' ? (
                   <Button
                     type="button"
                     variant="default"
@@ -895,16 +1024,29 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
                     <span>{sending ? 'Mengirim...' : 'Mulai Blast'}</span>
                   </Button>
                 ) : (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={handleTogglePause}
-                    className="h-7 text-xs"
-                  >
-                    {queuePaused ? <Play className="w-3 h-3 mr-1" /> : <Pause className="w-3 h-3 mr-1" />}
-                    <span>{queuePaused ? 'Lanjutkan Antrean' : 'Jeda Antrean'}</span>
-                  </Button>
+                  <div className="flex items-center gap-1.5">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleTogglePause}
+                      className="h-7 text-xs"
+                    >
+                      {queuePaused ? <Play className="w-3 h-3 mr-1 text-emerald-600" /> : <Pause className="w-3 h-3 mr-1 text-amber-500" />}
+                      <span>{queuePaused ? 'Lanjutkan Antrean' : 'Jeda Antrean'}</span>
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleStopBlast}
+                      className="h-7 text-xs border-rose-500/30 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                      title="Hentikan dan batalkan sisa antrean blast"
+                    >
+                      <Square className="w-3 h-3 mr-1" />
+                      <span>Stop</span>
+                    </Button>
+                  </div>
                 )}
               </div>
             </div>

@@ -289,7 +289,57 @@ class CrmController extends Controller
             $contact->custom = $data['custom'] ?? [];
         }
 
+        $oldPhone = $contact->getOriginal('phone');
         $contact->save();
+
+        // Sinkronkan pembaruan kontak ke seluruh antrean kampanye milik pengguna
+        $campaigns = WaCampaign::where('user_id', $user['id'])->get();
+        foreach ($campaigns as $camp) {
+            $queue = $camp->queue;
+            if (! is_array($queue) || empty($queue)) {
+                continue;
+            }
+
+            $changed = false;
+            foreach ($queue as $idx => $item) {
+                $itemPhone = $item['phone'] ?? '';
+                $itemContactId = isset($item['contactId']) ? (string) $item['contactId'] : null;
+
+                $matches = ($oldPhone && $itemPhone === $oldPhone)
+                    || ($itemPhone === $contact->phone)
+                    || ($itemContactId && $itemContactId === (string) $contact->id);
+
+                if ($matches) {
+                    $queue[$idx]['phone'] = $contact->phone;
+                    $queue[$idx]['name'] = $contact->name;
+                    $queue[$idx]['contactId'] = (string) $contact->id;
+                    if (isset($contact->custom) && is_array($contact->custom)) {
+                        $queue[$idx]['custom'] = $contact->custom;
+                    }
+
+                    // Jika nomor diperbaiki dan sebelumnya berstatus gagal/invalid,
+                    // reset status kontak di antrean menjadi pending agar siap dikirim ulang.
+                    $currentStatus = $queue[$idx]['status'] ?? '';
+                    if ($oldPhone !== $contact->phone && in_array($currentStatus, ['failed', 'invalid_number', 'not_registered'])) {
+                        $queue[$idx]['status'] = 'pending';
+                        $queue[$idx]['error'] = null;
+                        $queue[$idx]['messageId'] = null;
+                        $queue[$idx]['sentAt'] = '-';
+                    }
+
+                    $changed = true;
+                }
+            }
+
+            if ($changed) {
+                $hasPending = collect($queue)->contains(fn ($q) => ($q['status'] ?? '') === 'pending');
+                $patchData = ['queue' => $queue];
+                if ($hasPending && in_array($camp->status, ['completed', 'failed'])) {
+                    $patchData['status'] = 'idle';
+                }
+                $camp->fill($patchData)->save();
+            }
+        }
 
         return response()->json([
             'contact' => [
