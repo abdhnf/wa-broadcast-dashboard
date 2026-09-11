@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { FolderKanban, Plus, Users, Send, Trash2, Edit3, CheckCircle2 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
@@ -10,29 +10,70 @@ import {
   DialogDescription,
   DialogFooter
 } from '../components/ui/Dialog';
+import { createGroup, deleteGroup, fetchGroups } from '../lib/api';
 
-export function GroupsPage({ groups: initialGroups, onNavigate }) {
-  const [groups, setGroups] = useState(initialGroups || []);
+export function GroupsPage({ onNavigate, onGroupsChange }) {
+  const [groups, setGroups] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState('');
   const [newGroupName, setNewGroupName] = useState('');
   const [newGroupDesc, setNewGroupDesc] = useState('');
   const [addModalOpen, setAddModalOpen] = useState(false);
 
-  const handleAddGroup = (e) => {
+  const loadGroups = useCallback(async (signal) => {
+    setLoading(true);
+    setErrorMsg('');
+    try {
+      setGroups(await fetchGroups({ signal }));
+    } catch (err) {
+      setErrorMsg(err?.message || 'Gagal memuat daftar grup.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void loadGroups(controller.signal);
+    return () => controller.abort();
+  }, [loadGroups]);
+
+  const handleAddGroup = async (e) => {
     e.preventDefault();
-    if (!newGroupName) return;
 
-    const newG = {
-      id: `g_${Date.now()}`,
-      name: newGroupName,
-      description: newGroupDesc || 'Segmentasi kontak pelanggan',
-      contactCount: 0,
-      createdAt: 'Baru saja',
-    };
+    // Tolak nama yang hanya berisi spasi: server juga menolaknya, tapi pesan di
+    // sini muncul tanpa satu putaran request.
+    if (!newGroupName.trim()) {
+      setErrorMsg('Nama segmen wajib diisi.');
+      return;
+    }
 
-    setGroups([...groups, newG]);
-    setNewGroupName('');
-    setNewGroupDesc('');
-    setAddModalOpen(false);
+    setErrorMsg('');
+    try {
+      const saved = await createGroup({
+        name: newGroupName.trim(),
+        description: newGroupDesc.trim() || 'Segmentasi kontak pelanggan',
+      });
+      if (saved) setGroups((prev) => [...prev, saved]);
+      // Beri tahu akar aplikasi supaya pemilih segmen di halaman lain ikut segar.
+      void onGroupsChange?.();
+      setNewGroupName('');
+      setNewGroupDesc('');
+      setAddModalOpen(false);
+    } catch (err) {
+      setErrorMsg(err?.message || 'Gagal menyimpan grup.');
+    }
+  };
+
+  const handleDeleteGroup = async (id) => {
+    setErrorMsg('');
+    try {
+      await deleteGroup(id);
+      setGroups((prev) => prev.filter((g) => g.id !== id));
+      void onGroupsChange?.();
+    } catch (err) {
+      setErrorMsg(err?.message || 'Gagal menghapus grup.');
+    }
   };
 
   return (
@@ -56,6 +97,12 @@ export function GroupsPage({ groups: initialGroups, onNavigate }) {
         </Button>
       </div>
 
+      {errorMsg && (
+        <div className="flex items-start gap-2 p-3 rounded-lg bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60 text-xs text-rose-700 dark:text-rose-300">
+          <span>{errorMsg}</span>
+        </div>
+      )}
+
       {/* Tabel Grup / Segmentasi (Full Responsive Table, Menggantikan Card) */}
       <div className="border border-slate-200 dark:border-zinc-800 rounded-xl overflow-hidden bg-white dark:bg-zinc-950">
         <div className="overflow-x-auto">
@@ -70,7 +117,19 @@ export function GroupsPage({ groups: initialGroups, onNavigate }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/60 text-slate-700 dark:text-zinc-300">
-              {groups.map((group) => (
+              {loading ? (
+                <tr>
+                  <td colSpan={5} className="py-8 text-center text-slate-400 dark:text-zinc-500">
+                    Memuat segmen dari database…
+                  </td>
+                </tr>
+              ) : groups.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="py-8 text-center text-slate-400 dark:text-zinc-500">
+                    Belum ada segmen. Buat segmen pertama Anda.
+                  </td>
+                </tr>
+              ) : groups.map((group) => (
                 <tr key={group.id} className="hover:bg-slate-50 dark:hover:bg-zinc-900/40 transition-colors">
                   <td className="py-3.5 px-4 font-semibold text-slate-900 dark:text-white">
                     <div className="flex items-center gap-2">
@@ -82,7 +141,7 @@ export function GroupsPage({ groups: initialGroups, onNavigate }) {
                     {group.description}
                   </td>
                   <td className="py-3.5 px-4 font-mono font-medium text-slate-900 dark:text-white">
-                    {group.contactCount} Penerima
+                    {group.count} Penerima
                   </td>
                   <td className="py-3.5 px-4">
                     <span className="inline-flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
@@ -103,7 +162,7 @@ export function GroupsPage({ groups: initialGroups, onNavigate }) {
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => setGroups(groups.filter((g) => g.id !== group.id))}
+                        onClick={() => void handleDeleteGroup(group.id)}
                         className="h-7 w-7 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400"
                       >
                         <Trash2 className="w-3 h-3" />

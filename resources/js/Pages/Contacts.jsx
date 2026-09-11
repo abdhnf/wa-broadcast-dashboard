@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Users,
   Search,
@@ -24,24 +24,62 @@ import {
   DialogTitle,
   DialogFooter
 } from '../components/ui/Dialog';
+import { createContact, deleteContact, fetchContacts, updateContact } from '../lib/api';
+import { PHONE_ERROR_MESSAGE, isValidPhone, toPhoneInput } from '../lib/phone';
 
-export function ContactsPage({ contacts: initialContacts, groups }) {
-  const [contacts, setContacts] = useState(initialContacts || []);
+export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, onContactsChanged }) {
+  const [contacts, setContacts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedGroup, setSelectedGroup] = useState('all');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingContact, setEditingContact] = useState(null);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importSummary, setImportSummary] = useState('');
+  const csvInputRef = useRef(null);
 
   // Form State Tambah Kontak
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
-  const [group, setGroup] = useState(groups?.[0]?.name || 'Pelanggan VIP');
+  const [group, setGroup] = useState('');
   const [tag, setTag] = useState('Member');
   // Variabel dinamis kustom (key-value array)
-  const [customFields, setCustomFields] = useState([
-    { key: 'kota', value: '' },
-    { key: 'tier', value: '' }
-  ]);
+  const [customFields, setCustomFields] = useState([]);
+
+  // Form State Edit Kontak
+  const [editName, setEditName] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [editGroup, setEditGroup] = useState('');
+  const [editTag, setEditTag] = useState('');
+  const [editCustomFields, setEditCustomFields] = useState([]);
+  const [editErrorMsg, setEditErrorMsg] = useState('');
+
+  // Grup default mengikuti segmen pertama yang benar-benar ada di database.
+  useEffect(() => {
+    if (!group && groups.length > 0) setGroup(groups[0].name);
+  }, [groups, group]);
+
+  const loadContacts = useCallback(async (signal) => {
+    setLoading(true);
+    setErrorMsg('');
+    try {
+      setContacts(await fetchContacts({ signal }));
+    } catch (err) {
+      if (err?.status === 0 && signal?.aborted) return;
+      setErrorMsg(err?.message || 'Gagal memuat daftar kontak.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void loadContacts(controller.signal);
+    return () => controller.abort();
+  }, [loadContacts]);
 
   const addCustomField = () => {
     setCustomFields([...customFields, { key: '', value: '' }]);
@@ -68,9 +106,16 @@ export function ContactsPage({ contacts: initialContacts, groups }) {
     return matchesSearch && matchesGroup;
   });
 
-  const handleSaveContact = (e) => {
+  const handleSaveContact = async (e) => {
     e.preventDefault();
     if (!name || !phone) return;
+
+    // Validasi bentuk nomor di klien. Backend tetap memvalidasi ulang, ini hanya
+    // supaya pengguna tahu lebih cepat tanpa satu putaran request.
+    if (!isValidPhone(phone)) {
+      setErrorMsg(PHONE_ERROR_MESSAGE);
+      return;
+    }
 
     // Convert customFields array ke object key-value
     const customObj = {};
@@ -80,23 +125,252 @@ export function ContactsPage({ contacts: initialContacts, groups }) {
       }
     });
 
-    const newEntry = {
-      id: `c_${Date.now()}`,
-      name,
-      phone: phone.replace(/\D/g, ''),
-      group,
-      tag,
-      custom: customObj,
-    };
+    setErrorMsg('');
+    try {
+      const saved = await createContact({ name, phone, group, tag, custom: customObj });
+      if (saved) setContacts((prev) => [saved, ...prev]);
+      // Jumlah anggota segmen berubah; segarkan daftar grup di akar aplikasi.
+      void onGroupsRefresh?.();
+      void onContactsChange?.();
+      void onContactsChanged?.();
+      setName('');
+      setPhone('');
+      setCustomFields([
+        { key: 'kota', value: '' },
+        { key: 'tier', value: '' }
+      ]);
+      setIsAddModalOpen(false);
+    } catch (err) {
+      // Pesan validasi server (nomor duplikat, format salah) tampil di modal
+      // tanpa menutupnya, agar isian pengguna tidak hilang.
+      setErrorMsg(err?.message || 'Gagal menyimpan kontak.');
+    }
+  };
 
-    setContacts([newEntry, ...contacts]);
-    setName('');
-    setPhone('');
-    setCustomFields([
-      { key: 'kota', value: '' },
-      { key: 'tier', value: '' }
-    ]);
-    setIsAddModalOpen(false);
+  const handleOpenEdit = (contact) => {
+    setEditingContact(contact);
+    setEditName(contact.name || '');
+    setEditPhone(contact.phone || '');
+    setEditGroup(contact.group || (groups[0]?.name || ''));
+    setEditTag(contact.tag || '');
+    setEditErrorMsg('');
+
+    // Konversi object custom ke array key-value untuk form editor
+    const fields = Object.entries(contact.custom || {}).map(([k, v]) => ({
+      key: k,
+      value: String(v ?? ''),
+    }));
+    setEditCustomFields(fields.length > 0 ? fields : [{ key: '', value: '' }]);
+    setIsEditModalOpen(true);
+  };
+
+  const addEditCustomField = () => {
+    setEditCustomFields([...editCustomFields, { key: '', value: '' }]);
+  };
+
+  const removeEditCustomField = (index) => {
+    setEditCustomFields(editCustomFields.filter((_, i) => i !== index));
+  };
+
+  const updateEditCustomField = (index, field, value) => {
+    const updated = [...editCustomFields];
+    updated[index][field] = value;
+    setEditCustomFields(updated);
+  };
+
+  const handleUpdateContact = async (e) => {
+    e.preventDefault();
+    if (!editingContact || !editName || !editPhone) return;
+
+    if (!isValidPhone(editPhone)) {
+      setEditErrorMsg(PHONE_ERROR_MESSAGE);
+      return;
+    }
+
+    // Convert editCustomFields array ke object key-value
+    const customObj = {};
+    editCustomFields.forEach((item) => {
+      if (item.key.trim()) {
+        customObj[item.key.trim()] = item.value;
+      }
+    });
+
+    setEditErrorMsg('');
+    try {
+      const updated = await updateContact(editingContact.id, {
+        name: editName,
+        phone: editPhone,
+        group: editGroup,
+        tag: editTag,
+        custom: customObj,
+      });
+
+      if (updated) {
+        setContacts((prev) =>
+          prev.map((item) => (item.id === editingContact.id ? updated : item))
+        );
+      }
+
+      void onGroupsRefresh?.();
+      void onContactsChange?.();
+      setIsEditModalOpen(false);
+      setEditingContact(null);
+    } catch (err) {
+      setEditErrorMsg(err?.message || 'Gagal memperbarui data kontak.');
+    }
+  };
+
+  /**
+   * Parser CSV sederhana yang menghormati tanda kutip.
+   * Dipakai untuk import kontak; dipisah dari modul nomor karena murni soal
+   * format berkas, bukan aturan nomor.
+   */
+  const parseCsv = (text) => {
+    const rows = [];
+    let row = [];
+    let field = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < text.length; i += 1) {
+      const char = text[i];
+
+      if (inQuotes) {
+        if (char === '"') {
+          if (text[i + 1] === '"') {
+            field += '"';
+            i += 1;
+          } else {
+            inQuotes = false;
+          }
+        } else {
+          field += char;
+        }
+        continue;
+      }
+
+      if (char === '"') inQuotes = true;
+      else if (char === ',' || char === ';') {
+        row.push(field);
+        field = '';
+      } else if (char === '\n') {
+        row.push(field);
+        rows.push(row);
+        row = [];
+        field = '';
+      } else if (char !== '\r') {
+        field += char;
+      }
+    }
+
+    if (field !== '' || row.length > 0) {
+      row.push(field);
+      rows.push(row);
+    }
+
+    return rows.filter((r) => r.some((cell) => String(cell).trim() !== ''));
+  };
+
+  /**
+   * Import kontak dari berkas CSV yang dipilih pengguna.
+   *
+   * Berkas dibaca di browser lalu tiap baris dikirim ke endpoint kontak yang
+   * sama dengan form manual, sehingga normalisasi nomor dan penolakan duplikat
+   * tetap satu aturan. Baris yang gagal dilewati dan dihitung, bukan dibuatkan
+   * seluruh proses jadi gagal.
+   */
+  const handleImportCsv = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setErrorMsg('');
+    setImportSummary('');
+    setIsImporting(true);
+
+    try {
+      const text = await file.text();
+      const rows = parseCsv(text);
+      if (rows.length < 2) {
+        throw new Error('Berkas CSV kosong atau hanya berisi baris header.');
+      }
+
+      const header = rows[0].map((h) => String(h).trim().toLowerCase());
+      const idx = (col) => header.indexOf(col);
+
+      if (idx('name') === -1 || idx('phone') === -1) {
+        throw new Error('Header CSV wajib memuat kolom name dan phone.');
+      }
+
+      const dataRows = rows.slice(1, 5001);
+      const known = header.filter((h) => ['name', 'phone', 'group'].includes(h));
+
+      let inserted = 0;
+      let skipped = 0;
+      const created = [];
+
+      for (const cols of dataRows) {
+        const rawName = String(cols[idx('name')] ?? '').trim();
+        const rawPhone = String(cols[idx('phone')] ?? '').trim();
+
+        if (!rawName || !isValidPhone(rawPhone)) {
+          skipped += 1;
+          continue;
+        }
+
+        // Semua kolom di luar name/phone/group disimpan sebagai variabel kustom.
+        const custom = {};
+        header.forEach((col, i) => {
+          if (!col || known.includes(col)) return;
+          const value = String(cols[i] ?? '').trim();
+          if (value) custom[col] = value;
+        });
+
+        const groupIdx = idx('group');
+        const groupName = groupIdx === -1 ? '' : String(cols[groupIdx] ?? '').trim();
+
+        try {
+          const saved = await createContact({
+            name: rawName,
+            phone: normalizePhone(rawPhone),
+            group: groupName || groups?.[0]?.name || '',
+            custom,
+          });
+          if (saved) {
+            created.push(saved);
+            inserted += 1;
+          }
+        } catch {
+          // Umumnya nomor duplikat: lewati tanpa menghentikan sisa berkas.
+          skipped += 1;
+        }
+      }
+
+      if (created.length > 0) {
+        setContacts((prev) => [...created, ...prev]);
+        void onGroupsRefresh?.();
+        void onContactsChange?.();
+        void onContactsChanged?.();
+      }
+      setImportSummary(`${inserted} kontak ditambahkan, ${skipped} baris dilewati (nomor tidak valid atau sudah ada).`);
+      if (inserted > 0) setIsImportModalOpen(false);
+    } catch (err) {
+      setErrorMsg(err?.message || 'Gagal membaca berkas CSV.');
+    } finally {
+      setIsImporting(false);
+      if (csvInputRef.current) csvInputRef.current.value = '';
+    }
+  };
+
+  const handleDeleteContact = async (id) => {
+    setErrorMsg('');
+    try {
+      await deleteContact(id);
+      setContacts((prev) => prev.filter((item) => item.id !== id));
+      void onGroupsRefresh?.();
+      void onContactsChange?.();
+      void onContactsChanged?.();
+    } catch (err) {
+      setErrorMsg(err?.message || 'Gagal menghapus kontak.');
+    }
   };
 
   // Kumpulkan semua keys variabel dinamis unik untuk header tabel
@@ -169,6 +443,14 @@ export function ContactsPage({ contacts: initialContacts, groups }) {
         </div>
       </div>
 
+      {/* Pesan galat tingkat halaman: kegagalan muat atau hapus data. */}
+      {errorMsg && (
+        <div className="flex items-start gap-2 p-3 rounded-lg bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60 text-xs text-rose-700 dark:text-rose-300">
+          <X className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+          <span>{errorMsg}</span>
+        </div>
+      )}
+
       {/* Modern High-Density Table with Responsive Horizontal Scroll */}
       <div className="bg-white dark:bg-[#0f1117] rounded-xl border border-slate-200 dark:border-zinc-800 overflow-hidden shadow-xs">
         <div className="overflow-x-auto">
@@ -184,10 +466,18 @@ export function ContactsPage({ contacts: initialContacts, groups }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80 font-normal">
-              {filteredContacts.length === 0 ? (
+              {loading ? (
                 <tr>
                   <td colSpan={6} className="py-8 text-center text-slate-400 dark:text-zinc-500">
-                    Tidak ada kontak yang cocok dengan filter.
+                    Memuat kontak dari database…
+                  </td>
+                </tr>
+              ) : filteredContacts.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-8 text-center text-slate-400 dark:text-zinc-500">
+                    {contacts.length === 0
+                      ? 'Belum ada kontak. Tambahkan kontak pertama Anda.'
+                      : 'Tidak ada kontak yang cocok dengan filter.'}
                   </td>
                 </tr>
               ) : (
@@ -234,13 +524,24 @@ export function ContactsPage({ contacts: initialContacts, groups }) {
                       </div>
                     </td>
                     <td className="py-2.5 px-4 text-right">
-                      <button
-                        onClick={() => setContacts(contacts.filter((item) => item.id !== c.id))}
-                        className="p-1 rounded text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors"
-                        title="Hapus kontak"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEdit(c)}
+                          className="p-1 rounded text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors"
+                          title="Edit kontak & variabel"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleDeleteContact(c.id)}
+                          className="p-1 rounded text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors"
+                          title="Hapus kontak"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -280,13 +581,27 @@ export function ContactsPage({ contacts: initialContacts, groups }) {
                 <input
                   type="text"
                   required
+                  inputMode="numeric"
+                  autoComplete="off"
+                  maxLength={15}
                   placeholder="628123456789"
                   value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
+                  onChange={(e) => setPhone(toPhoneInput(e.target.value))}
                   className="w-full h-8 px-2.5 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-200 font-mono focus:outline-none focus:border-emerald-500"
                 />
+                <p className="text-[10px] text-slate-400 dark:text-zinc-500 mt-1">
+                  Ketik 0851... otomatis jadi 62851...
+                </p>
               </div>
             </div>
+
+            {/* Galat dari server (nomor duplikat / format tidak sah) tampil di dalam
+                modal supaya isian yang sudah diketik tidak hilang. */}
+            {errorMsg && (
+              <p className="text-[11px] text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60 rounded-lg px-2.5 py-2">
+                {errorMsg}
+              </p>
+            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
@@ -390,6 +705,157 @@ export function ContactsPage({ contacts: initialContacts, groups }) {
         </DialogContent>
       </Dialog>
 
+      {/* Modal Edit Kontak & Variabel JSON */}
+      <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit Data Kontak</DialogTitle>
+          </DialogHeader>
+
+          <form onSubmit={handleUpdateContact} className="space-y-3.5 text-xs py-1">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] font-medium text-slate-700 dark:text-zinc-300 mb-1">
+                  Nama Lengkap Penerima *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Misal: Budi Santoso"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="w-full h-8 px-2.5 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-200 focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-medium text-slate-700 dark:text-zinc-300 mb-1">
+                  Nomor WhatsApp *
+                </label>
+                <input
+                  type="text"
+                  required
+                  inputMode="numeric"
+                  autoComplete="off"
+                  maxLength={15}
+                  placeholder="628123456789"
+                  value={editPhone}
+                  onChange={(e) => setEditPhone(toPhoneInput(e.target.value))}
+                  className="w-full h-8 px-2.5 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-200 font-mono focus:outline-none focus:border-emerald-500"
+                />
+                <p className="text-[10px] text-slate-400 dark:text-zinc-500 mt-1">
+                  Ketik 0851... otomatis jadi 62851...
+                </p>
+              </div>
+            </div>
+
+            {editErrorMsg && (
+              <p className="text-[11px] text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60 rounded-lg px-2.5 py-2">
+                {editErrorMsg}
+              </p>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] font-medium text-slate-700 dark:text-zinc-300 mb-1">
+                  Segmen Grup
+                </label>
+                <select
+                  value={editGroup}
+                  onChange={(e) => setEditGroup(e.target.value)}
+                  className="w-full h-8 px-2 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-200 focus:outline-none focus:border-emerald-500"
+                >
+                  {groups?.map((g) => (
+                    <option key={g.id} value={g.name}>{g.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-medium text-slate-700 dark:text-zinc-300 mb-1">
+                  Tag / Label Ringkas
+                </label>
+                <input
+                  type="text"
+                  placeholder="Misal: VIP, Member, Prioritas"
+                  value={editTag}
+                  onChange={(e) => setEditTag(e.target.value)}
+                  className="w-full h-8 px-2.5 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-200 focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+            </div>
+
+            {/* Variabel Dinamis Kustom JSON */}
+            <div className="pt-2 border-t border-slate-200 dark:border-zinc-800">
+              <div className="flex items-center justify-between mb-2">
+                <div>
+                  <div className="text-[11px] font-semibold text-slate-800 dark:text-zinc-200 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-emerald-500" />
+                    <span>Variabel Dinamis Pesan (JSON)</span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 dark:text-zinc-500">
+                    Bisa dipanggil di pesan via template: <code className="text-emerald-600 dark:text-emerald-400">{'{{nama_key}}'}</code>
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={addEditCustomField}
+                  className="h-7 text-[10px]"
+                >
+                  <Plus className="w-3 h-3 mr-1" />
+                  <span>Tambah Variabel</span>
+                </Button>
+              </div>
+
+              <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                {editCustomFields.map((field, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      placeholder="Nama key (mis: kota)"
+                      value={field.key}
+                      onChange={(e) => updateEditCustomField(idx, 'key', e.target.value)}
+                      className="w-1/2 h-7 px-2 rounded bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-[11px] font-mono text-slate-900 dark:text-zinc-200 focus:outline-none focus:border-emerald-500"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Nilai untuk kontak ini"
+                      value={field.value}
+                      onChange={(e) => updateEditCustomField(idx, 'value', e.target.value)}
+                      className="w-1/2 h-7 px-2 rounded bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-[11px] text-slate-900 dark:text-zinc-200 focus:outline-none focus:border-emerald-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeEditCustomField(idx)}
+                      className="p-1 text-slate-400 hover:text-rose-500 transition-colors"
+                      title="Hapus baris variabel"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <DialogFooter className="pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setIsEditModalOpen(false)}
+              >
+                Batal
+              </Button>
+              <Button type="submit" variant="default" size="sm">
+                Perbarui Kontak
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
       {/* Modal Import CSV */}
       <Dialog open={isImportModalOpen} onOpenChange={setIsImportModalOpen}>
         <DialogContent className="sm:max-w-md">
@@ -407,20 +873,45 @@ export function ContactsPage({ contacts: initialContacts, groups }) {
               </p>
             </div>
 
-            <div className="border-2 border-dashed border-slate-300 dark:border-zinc-800 rounded-xl p-6 text-center hover:border-emerald-500 transition-colors cursor-pointer">
+            {/* Berkas CSV dibaca di browser (tanpa unggah ke server) lalu tiap
+                barisnya disimpan lewat endpoint kontak yang sama dengan form
+                manual, supaya aturan normalisasi & deteksi duplikat tetap satu. */}
+            <input
+              type="file"
+              ref={csvInputRef}
+              onChange={handleImportCsv}
+              accept=".csv,text/csv"
+              className="hidden"
+            />
+
+            <button
+              type="button"
+              onClick={() => csvInputRef.current?.click()}
+              disabled={isImporting}
+              className="w-full border-2 border-dashed border-slate-300 dark:border-zinc-800 rounded-xl p-6 text-center hover:border-emerald-500 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-wait"
+            >
               <UploadCloud className="w-8 h-8 text-slate-400 mx-auto mb-2" />
               <div className="text-xs font-medium text-slate-700 dark:text-zinc-300">
-                Pilih atau seret berkas CSV kontak ke sini
+                {isImporting ? 'Mengimpor kontak...' : 'Pilih berkas CSV kontak'}
               </div>
               <p className="text-[10px] text-slate-400 mt-1">Maksimal 5.000 baris per unggahan</p>
-            </div>
+            </button>
+
+            {importSummary && (
+              <p className="text-[11px] rounded-lg px-2.5 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-300">
+                {importSummary}
+              </p>
+            )}
+
+            {errorMsg && (
+              <p className="text-[11px] text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60 rounded-lg px-2.5 py-2">
+                {errorMsg}
+              </p>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" size="sm" onClick={() => setIsImportModalOpen(false)}>
               Tutup
-            </Button>
-            <Button variant="default" size="sm" onClick={() => setIsImportModalOpen(false)}>
-              Mulai Import
             </Button>
           </DialogFooter>
         </DialogContent>

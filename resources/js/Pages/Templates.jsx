@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 import {
   FileText,
   Plus,
@@ -23,11 +23,15 @@ import {
 import { WhatsAppFormattingToolbar } from '../components/WhatsAppFormattingToolbar';
 import { MediaUploadField } from '../components/MediaUploadField';
 import { WhatsAppBubblePreview } from '../components/WhatsAppBubblePreview';
+import { createTemplate, deleteTemplate, fetchTemplates, updateTemplate } from '../lib/api';
 
-export function TemplatesPage({ templates: initialTemplates }) {
-  const [templates, setTemplates] = useState(initialTemplates || []);
+export function TemplatesPage({ onTemplatesChange, contacts = [] }) {
+  const [templates, setTemplates] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [previewTemplate, setPreviewTemplate] = useState(null);
+  const [previewContactId, setPreviewContactId] = useState('');
 
   // Form State
   const [editingId, setEditingId] = useState(null);
@@ -43,6 +47,24 @@ export function TemplatesPage({ templates: initialTemplates }) {
   const [locLng, setLocLng] = useState(106.8456);
 
   const textareaRef = useRef(null);
+
+  const loadTemplates = useCallback(async (signal) => {
+    setLoading(true);
+    setErrorMsg('');
+    try {
+      setTemplates(await fetchTemplates({ signal }));
+    } catch (err) {
+      setErrorMsg(err?.message || 'Gagal memuat template.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void loadTemplates(controller.signal);
+    return () => controller.abort();
+  }, [loadTemplates]);
 
   const openAddModal = () => {
     setEditingId(null);
@@ -74,9 +96,30 @@ export function TemplatesPage({ templates: initialTemplates }) {
     setIsModalOpen(true);
   };
 
-  const handleSave = (e) => {
+  const handleSave = async (e) => {
     e.preventDefault();
-    if (!title || !content) return;
+
+    if (!title.trim()) {
+      setErrorMsg('Judul template wajib diisi.');
+      return;
+    }
+    if (!content.trim()) {
+      setErrorMsg('Isi pesan template wajib diisi.');
+      return;
+    }
+    // Pesan media tanpa URL akan terkirim sebagai teks kosong oleh wa-api.
+    if (messageType === 'media' && !String(mediaUrl || '').trim()) {
+      setErrorMsg('Template bertipe media wajib punya berkas atau URL media.');
+      return;
+    }
+    if (messageType === 'location') {
+      const lat = parseFloat(locLat);
+      const lng = parseFloat(locLng);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng) || (lat === 0 && lng === 0)) {
+        setErrorMsg('Koordinat lokasi wajib diisi (latitude & longitude).');
+        return;
+      }
+    }
 
     const locationData =
       messageType === 'location'
@@ -88,36 +131,46 @@ export function TemplatesPage({ templates: initialTemplates }) {
           }
         : null;
 
-    if (editingId) {
-      setTemplates(
-        templates.map((t) =>
-          t.id === editingId
-            ? {
-                ...t,
-                title,
-                messageType,
-                mediaType: messageType === 'media' ? mediaType : null,
-                mediaUrl: messageType === 'media' ? mediaUrl : null,
-                content,
-                location: locationData
-              }
-            : t
-        )
-      );
-    } else {
-      const newTpl = {
-        id: `tpl_${Date.now()}`,
-        title,
-        messageType,
-        mediaType: messageType === 'media' ? mediaType : null,
-        mediaUrl: messageType === 'media' ? mediaUrl : null,
-        content,
-        location: locationData
-      };
-      setTemplates([newTpl, ...templates]);
-    }
+    const payload = {
+      title,
+      messageType,
+      mediaType: messageType === 'media' ? mediaType : null,
+      mediaUrl: messageType === 'media' ? mediaUrl : null,
+      content,
+      location: locationData
+    };
 
-    setIsModalOpen(false);
+    setErrorMsg('');
+    try {
+      if (editingId) {
+        const updated = await updateTemplate(editingId, payload);
+        if (updated) {
+          setTemplates((prev) => prev.map((t) => (t.id === editingId ? updated : t)));
+          void onTemplatesChange?.();
+        }
+      } else {
+        const created = await createTemplate(payload);
+        if (created) {
+          setTemplates((prev) => [created, ...prev]);
+          void onTemplatesChange?.();
+        }
+      }
+      setIsModalOpen(false);
+    } catch (err) {
+      // Modal tetap terbuka agar draf template tidak hilang saat server menolak.
+      setErrorMsg(err?.message || 'Gagal menyimpan template.');
+    }
+  };
+
+  const handleDeleteTemplate = async (id) => {
+    setErrorMsg('');
+    try {
+      await deleteTemplate(id);
+      setTemplates((prev) => prev.filter((t) => t.id !== id));
+      void onTemplatesChange?.();
+    } catch (err) {
+      setErrorMsg(err?.message || 'Gagal menghapus template.');
+    }
   };
 
   return (
@@ -140,6 +193,13 @@ export function TemplatesPage({ templates: initialTemplates }) {
         </Button>
       </div>
 
+      {/* Galat daftar (bukan galat di dalam modal form). */}
+      {errorMsg && !isModalOpen && (
+        <div className="p-3 rounded-lg bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60 text-xs text-rose-700 dark:text-rose-300">
+          {errorMsg}
+        </div>
+      )}
+
       {/* Modern High-Density Table */}
       <div className="bg-white dark:bg-[#0f1117] rounded-xl border border-slate-200 dark:border-zinc-800 overflow-hidden shadow-xs">
         <div className="overflow-x-auto">
@@ -154,7 +214,19 @@ export function TemplatesPage({ templates: initialTemplates }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
-              {templates.map((tpl, idx) => {
+              {loading ? (
+                <tr>
+                  <td colSpan={5} className="py-8 text-center text-slate-400 dark:text-zinc-500">
+                    Memuat template dari database…
+                  </td>
+                </tr>
+              ) : templates.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="py-8 text-center text-slate-400 dark:text-zinc-500">
+                    Belum ada template. Buat template pertama Anda.
+                  </td>
+                </tr>
+              ) : templates.map((tpl, idx) => {
                 const isMedia = tpl.messageType === 'media' || Boolean(tpl.mediaUrl);
                 const isLocation = tpl.messageType === 'location' || Boolean(tpl.location);
 
@@ -216,7 +288,7 @@ export function TemplatesPage({ templates: initialTemplates }) {
                           variant="ghost"
                           size="icon"
                           className="h-7 w-7 text-slate-500 hover:text-rose-500"
-                          onClick={() => setTemplates(templates.filter((t) => t.id !== tpl.id))}
+                          onClick={() => void handleDeleteTemplate(tpl.id)}
                           title="Hapus Template"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -367,7 +439,7 @@ export function TemplatesPage({ templates: initialTemplates }) {
                 value={content}
                 onChange={setContent}
                 textareaRef={textareaRef}
-                availableVariables={['name', 'phone', 'kota', 'tier', 'voucher']}
+                contacts={contacts}
               />
 
               <textarea
@@ -380,6 +452,13 @@ export function TemplatesPage({ templates: initialTemplates }) {
                 className="w-full p-2.5 rounded-b-lg bg-slate-50 dark:bg-zinc-900 border border-t-0 border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-200 font-sans focus:outline-none focus:border-emerald-500 leading-relaxed"
               />
             </div>
+
+            {/* Galat dari server tampil di dalam modal agar draf tidak hilang. */}
+            {errorMsg && (
+              <p className="text-[11px] text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60 rounded-lg px-2.5 py-2">
+                {errorMsg}
+              </p>
+            )}
 
             <DialogFooter className="pt-2">
               <Button type="button" variant="outline" size="sm" onClick={() => setIsModalOpen(false)}>
@@ -399,15 +478,51 @@ export function TemplatesPage({ templates: initialTemplates }) {
           <DialogHeader>
             <DialogTitle>Pratinjau Pesan WhatsApp</DialogTitle>
           </DialogHeader>
+
+          {contacts && contacts.length > 0 && (
+            <div className="pt-1 pb-2">
+              <label className="block text-[11px] font-medium text-slate-700 dark:text-zinc-300 mb-1">
+                Uji Coba dengan Data Kontak Riil
+              </label>
+              <select
+                value={previewContactId}
+                onChange={(e) => setPreviewContactId(e.target.value)}
+                className="w-full h-8 px-2 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-200 focus:outline-none focus:border-emerald-500"
+              >
+                <option value="">-- Contoh Standar (Budi Santoso) --</option>
+                {contacts.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} ({c.phone})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <div className="py-2">
-            {previewTemplate && (
-              <WhatsAppBubblePreview
-                senderName="WA Broadcast Bot"
-                text={previewTemplate.content}
-                mediaUrl={previewTemplate.mediaUrl}
-                time="12:00"
-              />
-            )}
+            {previewTemplate && (() => {
+              const matchedContact = contacts?.find((c) => String(c.id) === String(previewContactId));
+              const sampleContact = matchedContact || (contacts?.length > 0 ? contacts[0] : { name: 'Budi Santoso', phone: '62812345678' });
+              const sampleData = {
+                name: sampleContact.name,
+                nama: sampleContact.name,
+                phone: sampleContact.phone,
+                ...(sampleContact.custom || {}),
+              };
+
+              return (
+                <WhatsAppBubblePreview
+                  senderName="WA Broadcast Bot"
+                  content={previewTemplate.content}
+                  mediaUrl={previewTemplate.mediaUrl}
+                  mediaType={previewTemplate.mediaType || 'image'}
+                  location={previewTemplate.location}
+                  contact={sampleContact}
+                  sampleData={sampleData}
+                  time="12:00"
+                />
+              );
+            })()}
           </div>
           <DialogFooter>
             <Button variant="outline" size="sm" onClick={() => setPreviewTemplate(null)}>

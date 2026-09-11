@@ -11,20 +11,28 @@ import {
   Code2,
   Sparkles,
   Smartphone,
-  RefreshCw
+  RefreshCw,
+  RotateCcw
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { WhatsAppFormattingToolbar } from '../components/WhatsAppFormattingToolbar';
 import { MediaUploadField } from '../components/MediaUploadField';
 import { WhatsAppBubblePreview } from '../components/WhatsAppBubblePreview';
+import { ContactSearchInput } from '../components/ContactSearchInput';
+import { ApiError, sendLocation, sendMedia, sendText } from '../lib/api';
+import { renderMessage } from '../lib/utils';
+import { PHONE_ERROR_MESSAGE, isValidPhone, normalizePhone } from '../lib/phone';
 
-export function PlaygroundPage({ sessions, templates }) {
+export function PlaygroundPage({ sessions, templates, contacts = [] }) {
   // Session Selector: mendukung auto-rotate atau pilih sesi nomor spesifik seperti di wa-api
   const [selectedSessionId, setSelectedSessionId] = useState('auto_rotate');
   const [messageType, setMessageType] = useState('text'); // 'text' | 'media' | 'location'
-  const [recipient, setRecipient] = useState('6281234567890');
-  const [text, setText] = useState('Halo kak *Budi*! 👋\nIni pesan uji coba dari API server *WA Broadcast*. Silakan balas jika pesan ini sudah masuk.');
+  // Nomor tujuan sengaja dikosongkan: jangan pernah mengirim ke kontak contoh
+  // hanya karena user menekan Kirim tanpa mengisi nomor.
+  const [recipient, setRecipient] = useState('');
+  const [selectedContact, setSelectedContact] = useState(null);
+  const [text, setText] = useState('Halo kak *{{name}}*! 👋\nIni pesan uji coba dari API server *WA Broadcast*. Silakan balas jika pesan ini sudah masuk.');
   
   // Media State
   const [mediaType, setMediaType] = useState('image');
@@ -40,6 +48,9 @@ export function PlaygroundPage({ sessions, templates }) {
   const [apiResponse, setApiResponse] = useState(null);
 
   const textareaRef = useRef(null);
+
+  // Kontak aktif: diambil dari kontak yang dipilih via autocomplete atau yang cocok nomornya
+  const activeContact = selectedContact || contacts.find((c) => c.phone === recipient) || null;
 
   const handleApplyTemplate = (tplId) => {
     const found = templates?.find((t) => t.id === tplId);
@@ -58,67 +69,118 @@ export function PlaygroundPage({ sessions, templates }) {
     }
   };
 
-  const handleSendTest = (e) => {
+  const handleResetForm = () => {
+    setText('Halo kak *{{name}}*! 👋\nIni pesan uji coba dari API server *WA Broadcast*. Silakan balas jika pesan ini sudah masuk.');
+    setRecipient('');
+    setSelectedContact(null);
+    setMessageType('text');
+    setMediaUrl('');
+    setMediaType('image');
+    setLocName('');
+    setLocAddress('');
+    setLocLat(-6.225588);
+    setLocLng(106.808591);
+    setApiResponse(null);
+  };
+
+  const handleSendTest = async (e) => {
     e.preventDefault();
+    setApiResponse(null);
+
+    // 'auto_rotate' dipetakan ke 'auto' — wa-api yang memilih sesi sehat dari pool user.
+    const activeSession = selectedSessionId === 'auto_rotate' ? 'auto' : selectedSessionId;
+    const target = normalizePhone(recipient);
+
+    if (!target) {
+      setApiResponse({
+        endpoint: 'validasi klien',
+        status: 400,
+        error: 'Nomor tujuan wajib diisi sebelum mengirim pesan uji.',
+        data: null,
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    if (!isValidPhone(target)) {
+      setApiResponse({
+        endpoint: 'validasi klien',
+        status: 400,
+        error: PHONE_ERROR_MESSAGE,
+        data: null,
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
     setLoading(true);
 
-    const activeSession =
-      selectedSessionId === 'auto_rotate'
-        ? sessions?.find((s) => s.status === 'connected')?.id || 'wa_cs_primary'
-        : selectedSessionId;
+    try {
+      let result;
+      let endpoint;
 
-    setTimeout(() => {
-      let requestPayload = {};
-      let endpoint = '';
+      // Interpolasi variabel pesan dan spintax sebelum dikirim ke WA API gateway
+      const outgoingText = renderMessage(text, {
+        name: activeContact?.name || recipient,
+        nama: activeContact?.name || recipient,
+        phone: target,
+        ...(activeContact?.custom || {}),
+      });
 
       if (messageType === 'text') {
-        endpoint = 'POST /api/v1/messages/send-text';
-        requestPayload = {
-          sessionId: activeSession,
-          to: recipient.replace(/\D/g, ''),
-          text: text,
-          priority: 'high'
-        };
+        endpoint = 'POST /api/v1/messages/send';
+        result = await sendText({ sessionId: activeSession, to: target, text: outgoingText, priority: 'high' });
       } else if (messageType === 'media') {
         endpoint = 'POST /api/v1/messages/send-media';
-        requestPayload = {
+        if (!mediaUrl) throw new ApiError('Berkas media belum diunggah atau URL media masih kosong.', 400);
+        const isDataUrl = mediaUrl.startsWith('data:');
+        result = await sendMedia({
           sessionId: activeSession,
-          to: recipient.replace(/\D/g, ''),
-          mediaType: mediaType,
-          mediaUrl: mediaUrl.startsWith('data:') ? undefined : mediaUrl,
-          mediaBase64: mediaUrl.startsWith('data:') ? mediaUrl.split(',')[1] : undefined,
-          caption: text,
-          priority: 'high'
-        };
+          to: target,
+          mediaType,
+          mediaUrl: isDataUrl ? undefined : mediaUrl,
+          mediaBase64: isDataUrl ? mediaUrl.split(',')[1] : undefined,
+          mediaMimeType: isDataUrl ? mediaUrl.slice(5, mediaUrl.indexOf(';')) : undefined,
+          caption: outgoingText || undefined,
+          priority: 'high',
+        });
       } else {
         endpoint = 'POST /api/v1/messages/send-location';
-        requestPayload = {
+        result = await sendLocation({
           sessionId: activeSession,
-          to: recipient.replace(/\D/g, ''),
+          to: target,
           latitude: parseFloat(locLat) || -6.225588,
           longitude: parseFloat(locLng) || 106.808591,
           name: locName,
-          address: locAddress
-        };
+          address: locAddress,
+        });
       }
 
       setApiResponse({
         endpoint,
-        status: 200,
+        status: 202,
         data: {
-          success: true,
-          messageId: `wamid_${Date.now()}_simulated`,
-          status: 'QUEUED_ENQUEUED',
-          sessionUsed: activeSession,
+          ...result,
+          sessionUsed: result?.sessionUsed || activeSession,
           isAutoRotated: selectedSessionId === 'auto_rotate',
-          recipient: recipient.replace(/\D/g, ''),
-          pacingDelay: 'Handled automatically by WA API Gaussian Jitter',
-          payloadEcho: requestPayload,
+          recipient: target,
         },
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       });
+    } catch (err) {
+      setApiResponse({
+        endpoint: messageType === 'text'
+          ? 'POST /api/v1/messages/send'
+          : messageType === 'media'
+            ? 'POST /api/v1/messages/send-media'
+            : 'POST /api/v1/messages/send-location',
+        status: err?.status || 0,
+        error: err?.message || 'Permintaan gagal.',
+        data: err?.payload || null,
+        timestamp: new Date().toISOString(),
+      });
+    } finally {
       setLoading(false);
-    }, 450);
+    }
   };
 
   return (
@@ -139,21 +201,37 @@ export function PlaygroundPage({ sessions, templates }) {
         {/* Left Column: Form Simulator */}
         <div className="lg:col-span-7 bg-white dark:bg-[#0f1117] p-4 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-xs">
           <form onSubmit={handleSendTest} className="space-y-3.5 text-xs">
-            {/* Quick Template Selector */}
-            {templates && templates.length > 0 && (
-              <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-zinc-800/80">
-                <span className="text-[11px] text-slate-500 dark:text-zinc-400">Muat dari template:</span>
-                <select
-                  onChange={(e) => handleApplyTemplate(e.target.value)}
-                  className="h-7 px-2 rounded bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-[11px] text-slate-700 dark:text-zinc-300 focus:outline-none"
-                >
-                  <option value="">Pilih template pesan...</option>
-                  {templates.map((t) => (
-                    <option key={t.id} value={t.id}>{t.title}</option>
-                  ))}
-                </select>
+            {/* Quick Template Selector & Reset */}
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-zinc-800/80">
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-slate-500 dark:text-zinc-400">Template:</span>
+                {templates && templates.length > 0 ? (
+                  <select
+                    onChange={(e) => handleApplyTemplate(e.target.value)}
+                    className="h-7 px-2 rounded bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-[11px] text-slate-700 dark:text-zinc-300 focus:outline-none"
+                  >
+                    <option value="">Pilih template pesan...</option>
+                    {templates.map((t) => (
+                      <option key={t.id} value={t.id}>{t.title}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <span className="text-[10px] text-slate-400">Belum ada template</span>
+                )}
               </div>
-            )}
+
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={handleResetForm}
+                className="h-7 px-2 text-[11px] text-slate-500 hover:text-slate-900 dark:hover:text-zinc-200"
+                title="Reset seluruh isian form pesan"
+              >
+                <RotateCcw className="w-3 h-3 mr-1" />
+                <span>Reset Form</span>
+              </Button>
+            </div>
 
             {/* Pilihan Sesi WhatsApp (Sama dengan Playground WA API: Bisa Auto Rotate atau Pilih Nomor Spesifik) */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -166,10 +244,10 @@ export function PlaygroundPage({ sessions, templates }) {
                   onChange={(e) => setSelectedSessionId(e.target.value)}
                   className="w-full h-8 px-2.5 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-200 focus:outline-none focus:border-emerald-500"
                 >
-                  <option value="auto_rotate">🔄 Auto Rotate (Round-Robin Sesi Online)</option>
+                  <option value="auto_rotate">Auto Rotate (Round-Robin Sesi Online)</option>
                   {sessions?.map((s) => (
                     <option key={s.id} value={s.id}>
-                      📱 {s.name} (+{s.phone}) - {s.status}
+                      {s.name} (+{s.phone}) - {s.status}
                     </option>
                   ))}
                 </select>
@@ -179,12 +257,20 @@ export function PlaygroundPage({ sessions, templates }) {
                 <label className="block text-[11px] font-medium text-slate-700 dark:text-zinc-300 mb-1">
                   Nomor Tujuan WhatsApp (628xxx) *
                 </label>
-                <input
-                  type="text"
-                  required
+                <ContactSearchInput
+                  contacts={contacts}
                   value={recipient}
-                  onChange={(e) => setRecipient(e.target.value)}
-                  className="w-full h-8 px-2.5 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs font-mono text-slate-900 dark:text-zinc-200 focus:outline-none focus:border-emerald-500"
+                  onChange={(val) => {
+                    setRecipient(val);
+                    if (selectedContact && selectedContact.phone !== val) {
+                      setSelectedContact(null);
+                    }
+                  }}
+                  onSelectContact={(c) => {
+                    setRecipient(c.phone);
+                    setSelectedContact(c);
+                  }}
+                  placeholder="Ketik nomor atau cari nama kontak..."
                 />
               </div>
             </div>
@@ -302,7 +388,8 @@ export function PlaygroundPage({ sessions, templates }) {
                 value={text}
                 onChange={setText}
                 textareaRef={textareaRef}
-                availableVariables={['name', 'kota', 'voucher']}
+                contacts={contacts}
+                activeContact={activeContact}
               />
 
               <textarea
@@ -338,8 +425,12 @@ export function PlaygroundPage({ sessions, templates }) {
             </div>
             <WhatsAppBubblePreview
               senderName={selectedSessionId === 'auto_rotate' ? 'Auto Rotate Pool' : 'Fastify Bot'}
-              text={text}
+              content={text}
               mediaUrl={messageType === 'media' ? mediaUrl : null}
+              mediaType={mediaType}
+              location={messageType === 'location' ? { name: locName, address: locAddress, latitude: locLat, longitude: locLng } : null}
+              contact={activeContact || { name: 'Budi Santoso', phone: recipient || '62812345678' }}
+              sampleData={activeContact ? { name: activeContact.name, phone: activeContact.phone, ...(activeContact.custom || {}) } : { name: 'Budi Santoso', kota: 'Jakarta', tier: 'Gold' }}
               time="Sekarang"
             />
           </div>
@@ -351,8 +442,12 @@ export function PlaygroundPage({ sessions, templates }) {
                 <span>Respon JSON Server Gateway</span>
               </span>
               {apiResponse && (
-                <span className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-800">
-                  HTTP 200 OK
+                <span className={`text-[10px] px-1.5 py-0.5 rounded border ${
+                  apiResponse.error
+                    ? 'text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800'
+                    : 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800'
+                }`}>
+                  HTTP {apiResponse.status || '-'} {apiResponse.error ? 'ERROR' : 'OK'}
                 </span>
               )}
             </div>

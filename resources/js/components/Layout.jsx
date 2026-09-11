@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   Send,
   Users,
@@ -13,16 +13,42 @@ import {
 } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 import { Badge } from './ui/Badge';
+import { fetchSessions } from '../lib/api';
 
 export function Layout({ currentTab, onTabChange, user, onLogout, metrics, children }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  // Status gateway diambil dari hasil panggilan nyata ke wa-api. Sebelumnya
+  // label ini selalu "Online" sehingga pengguna tidak pernah tahu backend mati
+  // atau alamatnya salah.
+  const [gatewayStatus, setGatewayStatus] = useState('memeriksa');
+
+  const checkGateway = useCallback(async () => {
+    try {
+      await fetchSessions();
+      setGatewayStatus('online');
+    } catch (err) {
+      // 401/403/429 tetap berarti gateway terjangkau, hanya kredensialnya
+      // bermasalah — bukan koneksi putus.
+      setGatewayStatus(err?.status ? 'online' : 'offline');
+    }
+  }, []);
+
+  useEffect(() => {
+    void checkGateway();
+    const timer = setInterval(() => void checkGateway(), 30000);
+    return () => clearInterval(timer);
+  }, [checkGateway]);
+
   const navItems = [
     { id: 'dashboard', label: 'Overview', icon: Radio },
     { id: 'broadcast', label: 'Blast Engine', icon: Send, badge: 'Live' },
-    { id: 'contacts', label: 'Contacts', icon: Users, count: metrics?.totalContacts || 1248 },
-    { id: 'groups', label: 'Segments', icon: FolderKanban, count: 4 },
-    { id: 'templates', label: 'Templates', icon: FileText, count: 3 },
+    // Angka lencana diambil dari data yang benar-benar dimuat. Sebelumnya
+    // Segments dan Templates di-hardcode (4 dan 3), sehingga angkanya bohong
+    // begitu dashboard tersambung ke MySQL.
+    { id: 'contacts', label: 'Contacts', icon: Users, count: metrics?.totalContacts },
+    { id: 'groups', label: 'Segments', icon: FolderKanban, count: metrics?.totalGroups },
+    { id: 'templates', label: 'Templates', icon: FileText, count: metrics?.totalTemplates },
     { id: 'playground', label: 'Playground', icon: Terminal },
     { id: 'settings', label: 'API & Auth', icon: Settings },
   ];
@@ -58,9 +84,23 @@ export function Layout({ currentTab, onTabChange, user, onLogout, metrics, child
             {/* Right Tools: Server Status, Theme Toggle, Profile */}
             <div className="flex items-center gap-2 sm:gap-3">
               <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 dark:bg-zinc-900/80 border border-slate-200 dark:border-zinc-800 text-[11px]">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span className={`w-1.5 h-1.5 rounded-full ${
+                  gatewayStatus === 'online'
+                    ? 'bg-emerald-500 animate-pulse'
+                    : gatewayStatus === 'offline'
+                      ? 'bg-rose-500'
+                      : 'bg-amber-400 animate-pulse'
+                }`} />
                 <span className="text-slate-500 dark:text-zinc-400 font-mono">Gateway 3100:</span>
-                <span className="text-emerald-700 dark:text-emerald-400 font-mono font-semibold">Online</span>
+                <span className={`font-mono font-semibold ${
+                  gatewayStatus === 'online'
+                    ? 'text-emerald-700 dark:text-emerald-400'
+                    : gatewayStatus === 'offline'
+                      ? 'text-rose-600 dark:text-rose-400'
+                      : 'text-amber-600 dark:text-amber-400'
+                }`}>
+                  {gatewayStatus === 'online' ? 'Online' : gatewayStatus === 'offline' ? 'Terputus' : 'Memeriksa'}
+                </span>
               </div>
 
               {/* Theme Toggle (Dark / Light / System) */}
@@ -113,7 +153,7 @@ export function Layout({ currentTab, onTabChange, user, onLogout, metrics, child
                     <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-emerald-500 text-white font-mono font-bold">
                       {item.badge}
                     </span>
-                  ) : item.count ? (
+                  ) : Number.isFinite(item.count) ? (
                     <span className={`text-[10px] font-mono ${isActive ? 'text-slate-300 dark:text-zinc-600' : 'text-slate-400 dark:text-zinc-500'}`}>
                       {item.count}
                     </span>
@@ -148,7 +188,7 @@ export function Layout({ currentTab, onTabChange, user, onLogout, metrics, child
                   <Icon className="w-4 h-4" />
                   <span>{item.label}</span>
                 </div>
-                {item.count && (
+                {Number.isFinite(item.count) && (
                   <span className="text-[10px] font-mono text-slate-400 dark:text-zinc-500">{item.count}</span>
                 )}
               </button>

@@ -1,8 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { Send, Lock, ShieldCheck, AlertCircle, RefreshCw, KeyRound, ExternalLink } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
+import { saveApiConfig } from '../../lib/api';
 
-export function LoginPage({ onLogin, apiUrl = 'http://172.30.30.229:3100/api/v1' }) {
+export function LoginPage({ onLogin }) {
+  // Host wa-api default mengikuti hostname dashboard saat ini (hostname yang sama,
+  // port backend 3100), sehingga tidak ada alamat IP yang di-hardcode.
+  const apiUrl = React.useMemo(() => {
+    if (import.meta?.env?.VITE_WA_API_BASE) return import.meta.env.VITE_WA_API_BASE;
+    if (typeof window !== 'undefined') {
+      return `${window.location.protocol}//${window.location.hostname}:3100/api/v1`;
+    }
+    return 'http://127.0.0.1:3100/api/v1';
+  }, []);
   const [token, setToken] = useState('');
   const [pin, setPin] = useState('');
   const [loading, setLoading] = useState(false);
@@ -63,6 +73,7 @@ export function LoginPage({ onLogin, apiUrl = 'http://172.30.30.229:3100/api/v1'
       }
 
       // Login berhasil, berikan data profil & API Key ke state global app
+      saveApiConfig({ url: apiUrl, apiKey: data.user.apiKey });
       onLogin({
         id: data.user.id,
         name: data.user.name,
@@ -70,11 +81,12 @@ export function LoginPage({ onLogin, apiUrl = 'http://172.30.30.229:3100/api/v1'
         role: data.user.role,
         apiKey: data.user.apiKey,
         quotaPerWeek: data.user.quotaPerWeek,
+        quotaLimit: data.user.quotaLimit,
         usedInPeriod: data.user.usedInPeriod,
         avatarUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent(data.user.name)}&background=059669&color=fff`,
       });
 
-    } catch (err) {
+    } catch {
       setError('Gagal menghubungi server WA API gateway. Pastikan backend di port 3100 aktif.');
     } finally {
       setLoading(false);
@@ -174,7 +186,11 @@ export function LoginPage({ onLogin, apiUrl = 'http://172.30.30.229:3100/api/v1'
 
           <div className="pt-2 border-t border-slate-100 dark:border-zinc-900 text-center">
             <a
-              href="http://172.30.30.229:5174"
+              href={
+                typeof window !== 'undefined'
+                  ? `${window.location.protocol}//${window.location.hostname}:5174`
+                  : 'http://127.0.0.1:5174'
+              }
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-emerald-500 transition"
