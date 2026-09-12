@@ -57,14 +57,16 @@ import { PHONE_ERROR_MESSAGE, isValidPhone, normalizePhone, toPhoneInput } from 
 import { ContactSearchInput } from '../components/ContactSearchInput';
 
 // Status antrean disamakan dengan `MessageStatus` wa-api (types.ts).
-// Tidak ada nilai lain di gateway, jadi tidak ada label yang bisa tidak cocok.
+// Status yang sah dari wa-api gateway dan status draft lokal
 const QUEUE_RUNNING_STATUSES = ['pending', 'pacing', 'sending'];
 const QUEUE_SUCCESS_STATUSES = ['sent', 'delivered', 'read'];
 const QUEUE_FAILURE_STATUSES = ['failed', 'invalid_number', 'not_registered'];
 const QUEUE_PAGE_SIZE = 50;
 
 const QUEUE_STATUS_OPTIONS = [
-  { value: 'pending', label: 'Menunggu' },
+  { value: 'all', label: 'Semua Status' },
+  { value: 'draft', label: 'Siap Dikirim' },
+  { value: 'pending', label: 'Antrean Gateway' },
   { value: 'pacing', label: 'Jeda anti-ban' },
   { value: 'sending', label: 'Sedang dikirim' },
   { value: 'sent', label: 'Terkirim' },
@@ -76,6 +78,88 @@ const QUEUE_STATUS_OPTIONS = [
 ];
 
 const QUEUE_STATUS_LABEL = Object.fromEntries(QUEUE_STATUS_OPTIONS.map((s) => [s.value, s.label]));
+
+/**
+ * Hitung metrik dan status turunan kampanye secara reaktif mengikuti isi antreannya.
+ */
+function getCampaignStats(camp) {
+  const queue = Array.isArray(camp?.queue)
+    ? camp.queue
+    : (typeof camp?.queue === 'string'
+        ? (() => { try { return JSON.parse(camp.queue) || []; } catch { return []; } })()
+        : []);
+
+  let total = Number(camp?.totalRecipients) || queue.length;
+  if (total === 0 && queue.length > 0) total = queue.length;
+
+  let successCount = Number(camp?.sentCount) || 0;
+  let failedCount = Number(camp?.failedCount) || 0;
+  let inFlightCount = 0;
+  let draftCount = 0;
+
+  const isCampActive = camp?.status === 'in_progress' || camp?.status === 'paused';
+
+  if (queue.length > 0) {
+    let qSuccess = 0;
+    let qFailed = 0;
+    let qInFlight = 0;
+    let qDraft = 0;
+
+    queue.forEach((item) => {
+      const st = item?.status;
+      if (['sent', 'delivered', 'read'].includes(st)) {
+        qSuccess += 1;
+      } else if (['failed', 'invalid_number', 'not_registered'].includes(st)) {
+        qFailed += 1;
+      } else if (['pacing', 'sending'].includes(st) || (st === 'pending' && isCampActive)) {
+        qInFlight += 1;
+      } else {
+        qDraft += 1;
+      }
+    });
+
+    if (qSuccess > 0 || qFailed > 0 || qInFlight > 0) {
+      successCount = qSuccess;
+      failedCount = qFailed;
+      inFlightCount = qInFlight;
+      draftCount = qDraft;
+      total = queue.length;
+    } else {
+      draftCount = Math.max(0, total - (successCount + failedCount));
+    }
+  }
+
+  // Tentukan status turunan yang sinkron dengan antrean
+  let derivedStatus = camp?.status || 'idle';
+
+  if (derivedStatus === 'in_progress') {
+    if (inFlightCount === 0 && draftCount === 0 && total > 0) {
+      derivedStatus = 'completed';
+    }
+  } else if (derivedStatus === 'idle') {
+    if (total > 0 && draftCount === 0 && inFlightCount === 0) {
+      derivedStatus = 'completed';
+    }
+  }
+
+  const successPct = total > 0 ? (successCount / total) * 100 : 0;
+  const failedPct = total > 0 ? (failedCount / total) * 100 : 0;
+  const inFlightPct = total > 0 ? (inFlightCount / total) * 100 : 0;
+  const draftPct = total > 0 ? (draftCount / total) * 100 : 0;
+
+  return {
+    total,
+    successCount,
+    failedCount,
+    inFlightCount,
+    draftCount,
+    successPct,
+    failedPct,
+    inFlightPct,
+    draftPct,
+    derivedStatus,
+  };
+}
 
 export function BroadcastPage({ groups, templates, sessions, contacts = [], onSessionsRefresh, campaigns: initialCampaigns, onCampaignCreate, onCampaignUpdate, onCampaignDelete }) {
   // Daftar kampanye berasal dari tabel `wa_campaigns` (MySQL, lewat app.jsx),
@@ -486,17 +570,16 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
     persistQueue([...additions, ...recipientQueue]);
   };
 
-  // Handler Mulai Blast - benar-benar mengirim ke wa-api sesuai mode template.
-  //
-  // Setiap penerima dibungkus try/catch sendiri: satu nomor bermasalah tidak
-  // boleh menghentikan sisa kampanye. Penerima yang gagal ditandai `failed`
-  // supaya bisa dicoba ulang tanpa mengirim ulang ke yang sudah sukses.
+  // Handler Mulai Blast - kirim antrean ke wa-api gateway dengan batchId kampanye
   const handleStartBlast = async () => {
     if (!selectedCampaign || sending) return;
 
-    const targets = recipientQueue.filter((item) => item.status === 'pending');
+    // Ambil target yang belum selesai (draft / pending lokal)
+    const targets = recipientQueue.filter(
+      (item) => !item.status || item.status === 'draft' || item.status === 'pending'
+    );
     if (targets.length === 0) {
-      setQueueError('Antrean masih kosong atau semua pesan sudah terkirim.');
+      setQueueError('Antrean masih kosong atau semua target sudah terkirim.');
       return;
     }
 
@@ -508,16 +591,23 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
 
     // Pastikan kampanye punya batchId unik yang konsisten
     const activeBatchId = selectedCampaign.batchId || `camp_${selectedCampaign.id}`;
-    if (!selectedCampaign.batchId) {
-      setSelectedCampaign((prev) => (prev ? { ...prev, batchId: activeBatchId } : prev));
-      void onCampaignUpdate?.(selectedCampaign.id, { batchId: activeBatchId });
-    }
-
     isPausedRef.current = false;
     isStoppedRef.current = false;
     setQueuePaused(false);
     setSending(true);
     setQueueError('');
+
+    // Status kampanye aktif seketika menjadi in_progress
+    const startingCamp = {
+      ...selectedCampaign,
+      batchId: activeBatchId,
+      status: 'in_progress',
+    };
+    setSelectedCampaign(startingCamp);
+    void onCampaignUpdate?.(selectedCampaign.id, {
+      batchId: activeBatchId,
+      status: 'in_progress',
+    });
 
     const statusByPhone = new Map();
     let batch = activeBatchId;
@@ -567,8 +657,9 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
 
         batch = batch || res?.batchId || activeBatchId;
         okCount += 1;
+        // Status riil dari gateway adalah pending / pacing (bukan langsung sent)
         statusByPhone.set(item.phone, {
-          status: 'sent',
+          status: res?.status || 'pending',
           messageId: res?.messageId,
           sentAt: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
         });
@@ -581,21 +672,23 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
 
     setSending(false);
 
-    // Antrean berikutnya dibangun sebagai objek baru, tidak mengubah objek
-    // state yang sedang dipakai React.
+    // Update antrean lokal dengan status yang diterima gateway
     const nextQueue = recipientQueue.map((item) => {
       const result = statusByPhone.get(item.phone);
       return result ? { ...item, ...result } : item;
     });
 
-    const hasPendingRemaining = nextQueue.some((q) => q.status === 'pending');
+    // Setelah seluruh target di-enqueue ke wa-api, pesan sedang diproses oleh gateway
+    // Kampanye tetap in_progress (atau paused jika dijeda), bukan langsung completed.
     let finalStatus = 'in_progress';
     if (isStoppedRef.current) {
       finalStatus = 'completed';
-    } else if (isPausedRef.current || failCount > 0) {
+    } else if (isPausedRef.current) {
       finalStatus = 'paused';
-    } else if (!hasPendingRemaining) {
-      finalStatus = 'completed';
+    } else if (failCount > 0 && okCount === 0) {
+      finalStatus = 'failed';
+    } else {
+      finalStatus = 'in_progress';
     }
 
     const updated = {
@@ -609,7 +702,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
     };
 
     if (failCount > 0) {
-      setQueueError(`${failCount} dari ${targets.length} pesan gagal terkirim. Terakhir: ${lastError}`);
+      setQueueError(`${failCount} dari ${targets.length} pesan gagal diserahkan ke gateway. Terakhir: ${lastError}`);
     }
 
     void onCampaignUpdate?.(updated.id, {
@@ -625,11 +718,11 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
     setSelectedCampaign(updated);
     setBatchId((prev) => prev || updated.batchId || '');
     if (okCount > 0) void onSessionsRefresh?.();
+    void loadLiveQueue();
   };
 
   const mergedQueue = useMemo(() => {
-    // Status live wa-api dipetakan per nomor yang sudah dinormalisasi, supaya
-    // 08/+62/628 tidak pernah gagal cocok dengan baris antrean lokal.
+    // Status live wa-api dipetakan per nomor yang sudah dinormalisasi
     const liveMap = new Map();
     queueMessages.forEach((m) => {
       const key = normalizePhone(m.to);
@@ -640,6 +733,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
 
     const isCampaignStarted = selectedCampaign && (
       selectedCampaign.status === 'in_progress' ||
+      selectedCampaign.status === 'paused' ||
       selectedCampaign.status === 'completed' ||
       Number(selectedCampaign.sentCount) > 0 ||
       Boolean(selectedCampaign.batchId)
@@ -668,21 +762,36 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
     return normalizedQueue.map((item) => {
       const live = liveMap.get(normalizePhone(item.phone));
 
-      // Satu definisi status: wa-api adalah sumber kebenaran saat kampanye
-      // sudah pernah jalan; sebelum itu pakai state lokal.
-      let realStatus = item.status || 'pending';
-      if (isCampaignStarted && live?.status) {
+      // Diferensiasi status:
+      // 1. Jika sudah diserahkan ke gateway (liveMap ada atau status lokal gateway): gunakan status gateway.
+      // 2. Jika belum diserahkan ke gateway (belum di-start / draft): status 'draft' (Siap Dikirim).
+      let realStatus = 'draft';
+      let isEnqueuedToGateway = false;
+
+      if (live && live.status) {
         realStatus = live.status;
-      } else if (item.status) {
+        isEnqueuedToGateway = true;
+      } else if (item.status && item.status !== 'pending' && item.status !== 'draft') {
         realStatus = item.status;
+        isEnqueuedToGateway = true;
+      } else if (isCampaignStarted && (selectedCampaign?.status === 'in_progress' || selectedCampaign?.status === 'paused')) {
+        realStatus = 'pending';
+        isEnqueuedToGateway = true;
+      } else {
+        realStatus = 'draft';
+        isEnqueuedToGateway = false;
       }
 
-      // Antrean berjalan = kampanye aktif atau pesan sedang diproses gateway.
-      const isPending = realStatus === 'pending';
+      // canDelete HANYA berlaku untuk data draft lokal yang belum diserahkan ke gateway wa-api.
+      // Pesan yang sudah berada di gateway wa-api terkunci (tidak bisa dihapus dari tabel lokal).
+      const canDelete = !isEnqueuedToGateway && realStatus === 'draft' && !isRunning;
       const isFailed = QUEUE_FAILURE_STATUSES.includes(realStatus);
+      const canRetry = isFailed && !isRunning;
       const mergedCustom = (item.custom && Object.keys(item.custom).length > 0)
         ? item.custom
         : (contactMap.get(item.phone) || {});
+
+      const sessionLabel = live?.sessionId || item.session || selectedCampaign?.sessionUsed || 'Auto-Rotate';
 
       return {
         id: item.id,
@@ -690,14 +799,16 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
         phone: item.phone,
         custom: mergedCustom,
         status: realStatus,
+        sessionDisplay: sessionLabel,
+        isEnqueuedToGateway,
         error: live?.errorDetail || live?.error || item.error || null,
         messageId: live?.id || item.messageId || null,
         liveData: isCampaignStarted ? (live || null) : null,
-        canDelete: isPending && !isRunning,
-        canRetry: isFailed && !isRunning,
+        canDelete,
+        canRetry,
       };
     });
-  }, [selectedCampaign, recipientQueue, queueMessages, sending]);
+  }, [selectedCampaign, recipientQueue, queueMessages, sending, contacts]);
 
   const failedItems = useMemo(() => {
     return mergedQueue.filter((i) => i.canRetry);
@@ -724,11 +835,13 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
         !needle ||
         String(item.name).toLowerCase().includes(needle) ||
         String(item.phone).includes(queueSearch) ||
+        String(item.sessionDisplay || '').toLowerCase().includes(needle) ||
         String(item.liveData?.text || '').toLowerCase().includes(needle);
       return matchStatus && matchSearch;
     });
   }, [mergedQueue, queueStatusFilter, queueSearch]);
 
+  const draftCount = filteredUnifiedQueue.filter((i) => i.status === 'draft').length;
   const pendingCount = filteredUnifiedQueue.filter((i) => i.status === 'pending').length;
   const sentCount = filteredUnifiedQueue.filter((i) => QUEUE_SUCCESS_STATUSES.includes(i.status)).length;
   const activePacingCount = filteredUnifiedQueue.filter((i) => i.status === 'pacing').length;
@@ -752,6 +865,8 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
     [pagedQueue],
   );
 
+  const pagePhonesKey = useMemo(() => pagePhones.join(','), [pagePhones]);
+
   // Rata-rata jeda jitter riil yang dicatat backend saat status `pacing`.
   const avgPacingSec = useMemo(() => {
     const withDelay = queueMessages.filter((m) => Number(m.jitterDelayMs) > 0);
@@ -761,37 +876,114 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
   }, [queueMessages]);
 
   // ---------------- Live queue dari wa-api (batch yang sudah dikirim) ----------------
-  // Status diambil per halaman yang sedang terlihat (maks 50 nomor), jadi
-  // kampanye dengan ratusan target pun tetap akurat tanpa memuat seluruh riwayat.
+  // Guard ref agar tidak terjadi request ganda / loop rate limit
+  const inFlightRef = useRef(false);
+  const backoffUntilRef = useRef(0);
+
   const loadLiveQueue = useCallback(async () => {
+    if (inFlightRef.current) return;
+    if (Date.now() < backoffUntilRef.current) return;
     if (pagePhones.length === 0) {
       setQueueMessages([]);
       setQueueTotal(0);
       return;
     }
+    inFlightRef.current = true;
     setLoadingQueue(true);
-    setQueueError('');
     try {
-      const { messages, total } = await fetchMessages('all', {
-        limit: QUEUE_PAGE_SIZE,
-        batchId: selectedCampaign?.batchId || undefined,
-        phones: pagePhones,
-      });
+      const campBatchId = selectedCampaign?.batchId;
+      const [msgRes, batchStatus] = await Promise.all([
+        fetchMessages('all', {
+          limit: QUEUE_PAGE_SIZE,
+          batchId: campBatchId || undefined,
+          phones: pagePhones,
+        }),
+        campBatchId ? fetchBatchStatus(campBatchId).catch(() => null) : Promise.resolve(null),
+      ]);
+
+      const messages = Array.isArray(msgRes) ? msgRes : (msgRes?.messages || []);
+      const total = typeof msgRes?.total === 'number' ? msgRes.total : messages.length;
+
       setQueueMessages(messages);
       setQueueTotal(total);
+      setQueueError('');
+
+      // Sinkronkan status pesan riil dari wa-api ke data antrean kampanye
+      if (messages.length > 0 && selectedCampaign) {
+        const liveMap = new Map();
+        messages.forEach((m) => {
+          const k = normalizePhone(m.to);
+          if (k && m.status) liveMap.set(k, m.status);
+        });
+
+        const rawCampQueue = Array.isArray(selectedCampaign.queue)
+          ? selectedCampaign.queue
+          : (typeof selectedCampaign.queue === 'string'
+              ? (() => { try { return JSON.parse(selectedCampaign.queue) || []; } catch { return []; } })()
+              : []);
+
+        let hasDiff = false;
+        const nextQueue = rawCampQueue.map((item) => {
+          const liveSt = liveMap.get(normalizePhone(item.phone));
+          if (liveSt && liveSt !== item.status) {
+            hasDiff = true;
+            return { ...item, status: liveSt };
+          }
+          return item;
+        });
+
+        if (hasDiff) {
+          const sCount = nextQueue.filter((i) => QUEUE_SUCCESS_STATUSES.includes(i.status)).length;
+          const fCount = nextQueue.filter((i) => QUEUE_FAILURE_STATUSES.includes(i.status)).length;
+          const allDone = nextQueue.length > 0 && nextQueue.every((i) =>
+            QUEUE_SUCCESS_STATUSES.includes(i.status) || QUEUE_FAILURE_STATUSES.includes(i.status)
+          );
+          const nextCampStatus = allDone ? 'completed' : selectedCampaign.status;
+
+          setSelectedCampaign((prev) =>
+            prev ? { ...prev, queue: nextQueue, sentCount: sCount, failedCount: fCount, status: nextCampStatus } : prev
+          );
+          void onCampaignUpdate?.(selectedCampaign.id, {
+            queue: nextQueue,
+            sentCount: sCount,
+            failedCount: fCount,
+            status: nextCampStatus,
+          });
+        }
+      }
+
+      if (batchStatus && typeof batchStatus.isPaused === 'boolean') {
+        setQueuePaused(batchStatus.isPaused);
+        if (batchStatus.isPaused && selectedCampaign && selectedCampaign.status !== 'paused') {
+          setSelectedCampaign((prev) => (prev ? { ...prev, status: 'paused' } : prev));
+          void onCampaignUpdate?.(selectedCampaign.id, { status: 'paused' });
+        }
+      }
     } catch (err) {
-      setQueueError(err?.message || 'Gagal mengambil antrean dari wa-api.');
+      const msg = String(err?.message || '');
+      if (msg.includes('429') || msg.includes('rate limit') || msg.includes('melebihi batas')) {
+        backoffUntilRef.current = Date.now() + 15000;
+        setQueueError('Menyesuaikan ritme monitoring gateway (rate limit backoff 15 detik)...');
+      } else {
+        setQueueError(msg || 'Gagal mengambil antrean dari wa-api.');
+      }
     } finally {
+      inFlightRef.current = false;
       setLoadingQueue(false);
     }
-  }, [pagePhones, selectedCampaign?.batchId]);
+  }, [pagePhonesKey, selectedCampaign?.batchId, selectedCampaign?.id]);
+
+  const loadLiveQueueRef = useRef(loadLiveQueue);
+  loadLiveQueueRef.current = loadLiveQueue;
 
   useEffect(() => {
     if (subView !== 'queue') return;
-    void loadLiveQueue();
-    const timer = setInterval(() => void loadLiveQueue(), 5000);
+    void loadLiveQueueRef.current();
+    const timer = setInterval(() => {
+      void loadLiveQueueRef.current();
+    }, 5000);
     return () => clearInterval(timer);
-  }, [subView, loadLiveQueue]);
+  }, [subView, selectedCampaign?.id, pagePhonesKey]);
 
   // Jeda/Lanjutkan antrean berbasis batchId kampanye agar tidak membekukan sesi secara global
   const handleTogglePause = async () => {
@@ -1019,19 +1211,97 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
                         <span>{camp.sessionUsed || 'Auto-Rotate'}</span>
                       </span>
                     </td>
-                    <td className="py-3 px-4 w-44">
-                      <div className="flex items-center justify-between text-[10px] font-mono mb-1">
-                        <span className="capitalize text-emerald-600 dark:text-emerald-400 font-bold">
-                          {camp.status.replace('_', ' ')}
-                        </span>
-                        <span>
-                          {camp.sentCount} / {camp.totalRecipients}
-                        </span>
-                      </div>
-                      <Progress
-                        value={(camp.sentCount / (camp.totalRecipients || 1)) * 100}
-                        className="h-1.5"
-                      />
+                    <td className="py-3 px-4 w-56">
+                      {(() => {
+                        const stats = getCampaignStats(camp);
+                        return (
+                          <div className="space-y-1.5">
+                            {/* Baris Atas: Badge Status & Rasio Ringkas */}
+                            <div className="flex items-center justify-between gap-2 text-[10px]">
+                              {stats.derivedStatus === 'in_progress' ? (
+                                <span className="inline-flex items-center gap-1 font-semibold text-emerald-600 dark:text-emerald-400">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                  <span>Berjalan</span>
+                                </span>
+                              ) : stats.derivedStatus === 'paused' ? (
+                                <span className="inline-flex items-center gap-1 font-semibold text-amber-600 dark:text-amber-400">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                                  <span>Dijeda</span>
+                                </span>
+                              ) : stats.derivedStatus === 'completed' ? (
+                                <span className="inline-flex items-center gap-1 font-semibold text-emerald-600 dark:text-emerald-400">
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                                  <span>Selesai</span>
+                                </span>
+                              ) : stats.derivedStatus === 'failed' ? (
+                                <span className="inline-flex items-center gap-1 font-semibold text-rose-600 dark:text-rose-400">
+                                  <AlertCircle className="w-3 h-3 text-rose-500" />
+                                  <span>Gagal</span>
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 font-semibold text-slate-500 dark:text-zinc-400">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-slate-300 dark:bg-zinc-600" />
+                                  <span>Siap Mulai</span>
+                                </span>
+                              )}
+
+                              <span className="font-mono text-slate-500 dark:text-zinc-400">
+                                {stats.successCount + stats.failedCount} / {stats.total}
+                              </span>
+                            </div>
+
+                            {/* Baris Tengah: Multi-Segment Stacked Progress Bar */}
+                            <div className="h-2 w-full rounded-full bg-slate-100 dark:bg-zinc-800 overflow-hidden flex">
+                              {stats.successPct > 0 && (
+                                <div
+                                  style={{ width: `${stats.successPct}%` }}
+                                  className="h-full bg-emerald-500 transition-all duration-300"
+                                  title={`${stats.successCount} Berhasil`}
+                                />
+                              )}
+                              {stats.failedPct > 0 && (
+                                <div
+                                  style={{ width: `${stats.failedPct}%` }}
+                                  className="h-full bg-rose-500 transition-all duration-300"
+                                  title={`${stats.failedCount} Gagal`}
+                                />
+                              )}
+                              {stats.inFlightPct > 0 && (
+                                <div
+                                  style={{ width: `${stats.inFlightPct}%` }}
+                                  className="h-full bg-amber-400 animate-pulse transition-all duration-300"
+                                  title={`${stats.inFlightCount} Sedang Diproses`}
+                                />
+                              )}
+                            </div>
+
+                            {/* Baris Bawah: Breakdown Angka Berhasil & Gagal */}
+                            <div className="flex items-center gap-2 text-[10px] flex-wrap font-medium">
+                              <span className="text-emerald-600 dark:text-emerald-400 inline-flex items-center gap-0.5">
+                                <span>✓</span>
+                                <span>{stats.successCount} berhasil</span>
+                              </span>
+                              {stats.failedCount > 0 && (
+                                <span className="text-rose-600 dark:text-rose-400 inline-flex items-center gap-0.5">
+                                  <span>✕</span>
+                                  <span>{stats.failedCount} gagal</span>
+                                </span>
+                              )}
+                              {stats.inFlightCount > 0 && (
+                                <span className="text-amber-600 dark:text-amber-400 inline-flex items-center gap-0.5">
+                                  <span>⏳</span>
+                                  <span>{stats.inFlightCount} proses</span>
+                                </span>
+                              )}
+                              {stats.draftCount > 0 && stats.derivedStatus === 'idle' && (
+                                <span className="text-slate-400 dark:text-zinc-500">
+                                  {stats.draftCount} siap
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td className="py-3 px-4 text-right">
                       <div className="inline-flex items-center justify-end gap-1.5">
@@ -1075,15 +1345,23 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
           {selectedCampaign && (
             <div className="bg-white dark:bg-[#0f1117] p-3 rounded-xl border border-slate-200 dark:border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className={`w-2 h-2 rounded-full ${sending ? 'bg-amber-500 animate-pulse' : queuePaused ? 'bg-rose-500' : 'bg-emerald-500'}`} />
+                <span className={`w-2 h-2 rounded-full ${sending ? 'bg-amber-500 animate-pulse' : (queuePaused || selectedCampaign.status === 'paused') ? 'bg-amber-500' : selectedCampaign.status === 'in_progress' ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
                 <span className="font-semibold text-slate-900 dark:text-white">{selectedCampaign.name}</span>
                 {selectedCampaign.batchId ? (
                   <span className="text-slate-400 text-[11px]">({selectedCampaign.batchId})</span>
                 ) : (
-                  <span className="text-slate-400 text-[11px]">(belum dikirim)</span>
+                  <span className="text-slate-400 text-[11px]">(draft lokal)</span>
                 )}
                 <Badge variant={selectedCampaign.status === 'in_progress' ? 'default' : 'secondary'} className="text-[10px]">
-                  {sending ? 'Mengirim...' : selectedCampaign.status === 'in_progress' ? 'Berjalan' : selectedCampaign.status === 'paused' ? 'Terhenti' : 'Idle (Siap)'}
+                  {sending
+                    ? 'Menyerahkan ke Gateway...'
+                    : selectedCampaign.status === 'in_progress'
+                      ? 'Berjalan di Gateway'
+                      : selectedCampaign.status === 'paused' || queuePaused
+                        ? 'Dijeda'
+                        : selectedCampaign.status === 'completed'
+                          ? 'Selesai'
+                          : 'Siap Mulai'}
                 </Badge>
                 {avgPacingSec > 0 && (
                   <Badge variant="outline" className="text-[10px]">
@@ -1092,12 +1370,12 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
                 )}
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  disabled={sending || selectedCampaign?.status === 'in_progress'}
+                  disabled={sending || selectedCampaign?.status === 'in_progress' || selectedCampaign?.status === 'paused'}
                   onClick={handleLoadSegmentContacts}
                   className="h-7 text-xs disabled:opacity-50"
                 >
@@ -1105,18 +1383,66 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
                   <span>Muat Kontak Segmen</span>
                 </Button>
 
-                {selectedCampaign.status === 'completed' || (!sending && !queuePaused && recipientQueue.length > 0 && !recipientQueue.some((i) => i.status === 'pending')) ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled
-                    className="h-7 text-xs border-emerald-500/30 text-emerald-600 dark:text-emerald-400 font-medium"
-                  >
-                    <CheckCircle2 className="w-3 h-3 mr-1" />
-                    <span>Selesai (Stop)</span>
-                  </Button>
-                ) : selectedCampaign.status === 'idle' ? (
+                {/* Kontrol Antrean: Jeda / Lanjutkan / Stop / Mulai Blast */}
+                {(sending || selectedCampaign.status === 'in_progress' || selectedCampaign.status === 'paused' || queuePaused || activePacingCount > 0) ? (
+                  <div className="flex items-center gap-1.5">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleTogglePause}
+                      className="h-7 text-xs"
+                    >
+                      {queuePaused || selectedCampaign.status === 'paused' ? (
+                        <>
+                          <Play className="w-3 h-3 mr-1 text-emerald-600 dark:text-emerald-400" />
+                          <span>Lanjutkan Antrean</span>
+                        </>
+                      ) : (
+                        <>
+                          <Pause className="w-3 h-3 mr-1 text-amber-500" />
+                          <span>Jeda Antrean</span>
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleStopBlast}
+                      className="h-7 text-xs border-rose-500/30 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                      title="Hentikan dan batalkan sisa antrean blast di gateway"
+                    >
+                      <Square className="w-3 h-3 mr-1" />
+                      <span>Stop</span>
+                    </Button>
+                  </div>
+                ) : selectedCampaign.status === 'completed' ? (
+                  <div className="flex items-center gap-1.5">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled
+                      className="h-7 text-xs border-emerald-500/30 text-emerald-600 dark:text-emerald-400 font-medium cursor-default"
+                    >
+                      <CheckCircle2 className="w-3 h-3 mr-1" />
+                      <span>Selesai</span>
+                    </Button>
+                    {recipientQueue.some((i) => !i.status || i.status === 'draft' || QUEUE_FAILURE_STATUSES.includes(i.status)) && (
+                      <Button
+                        type="button"
+                        variant="default"
+                        size="sm"
+                        onClick={handleStartBlast}
+                        className="h-7 text-xs bg-emerald-600 hover:bg-emerald-500 text-white"
+                      >
+                        <Play className="w-3 h-3 mr-1" />
+                        <span>Kirim Sisa Target</span>
+                      </Button>
+                    )}
+                  </div>
+                ) : (
                   <Button
                     type="button"
                     variant="default"
@@ -1126,32 +1452,8 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
                     className="h-7 text-xs bg-emerald-600 hover:bg-emerald-500 text-white"
                   >
                     <Play className="w-3 h-3 mr-1" />
-                    <span>{sending ? 'Mengirim...' : 'Mulai Blast'}</span>
+                    <span>{sending ? 'Menyerahkan ke Gateway...' : 'Mulai Blast'}</span>
                   </Button>
-                ) : (
-                  <div className="flex items-center gap-1.5">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={handleTogglePause}
-                      className="h-7 text-xs"
-                    >
-                      {queuePaused ? <Play className="w-3 h-3 mr-1 text-emerald-600" /> : <Pause className="w-3 h-3 mr-1 text-amber-500" />}
-                      <span>{queuePaused ? 'Lanjutkan Antrean' : 'Jeda Antrean'}</span>
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={handleStopBlast}
-                      className="h-7 text-xs border-rose-500/30 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30"
-                      title="Hentikan dan batalkan sisa antrean blast"
-                    >
-                      <Square className="w-3 h-3 mr-1" />
-                      <span>Stop</span>
-                    </Button>
-                  </div>
                 )}
               </div>
             </div>
@@ -1227,11 +1529,12 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs text-slate-600 dark:text-zinc-300 min-w-[700px]">
+              <table className="w-full text-left text-xs text-slate-600 dark:text-zinc-300 min-w-[760px]">
                 <thead className="bg-slate-50 dark:bg-zinc-900/60 text-slate-700 dark:text-zinc-400 uppercase text-[10px] tracking-wider font-semibold border-b border-slate-200 dark:border-zinc-800">
                   <tr>
                     <th className="py-2.5 px-4 w-12 text-center">#</th>
                     <th className="py-2.5 px-4">Kontak & Nomor</th>
+                    <th className="py-2.5 px-4">Sesi Pengirim</th>
                     <th className="py-2.5 px-4">Kampanye / Pesan</th>
                     <th className="py-2.5 px-4">Variabel Khusus</th>
                     <th className="py-2.5 px-4">Status & Jeda</th>
@@ -1241,7 +1544,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
                 <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
                   {pagedQueue.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-8 text-center text-slate-400 dark:text-zinc-500">
+                      <td colSpan={7} className="py-8 text-center text-slate-400 dark:text-zinc-500">
                         {loadingQueue
                           ? 'Memuat antrean...'
                           : 'Belum ada nomor target pada filter ini. Klik "Tambah Nomor Antrean" atau "Muat Kontak Segmen".'}
@@ -1256,6 +1559,12 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
                         <td className="py-2.5 px-4">
                           <div className="font-semibold text-slate-900 dark:text-zinc-100">{item.name}</div>
                           <div className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">+{item.phone}</div>
+                        </td>
+                        <td className="py-2.5 px-4">
+                          <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-slate-100 dark:bg-zinc-800/80 border border-slate-200 dark:border-zinc-700/60 text-[11px] font-medium text-slate-700 dark:text-zinc-300">
+                            <Smartphone className="w-3 h-3 text-emerald-500 shrink-0" />
+                            <span className="truncate max-w-[120px]" title={item.sessionDisplay}>{item.sessionDisplay}</span>
+                          </div>
                         </td>
                         <td className="py-2.5 px-4">
                           <div className="text-[11px] font-medium text-slate-700 dark:text-zinc-300">
@@ -1284,11 +1593,16 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
                           )}
                         </td>
                         <td className="py-2.5 px-4">
-                          {['sent', 'delivered', 'read'].includes(item.status) ? (
+                          {item.status === 'draft' ? (
+                            <span className="inline-flex items-center gap-1 text-[11px] text-slate-600 dark:text-zinc-400 font-medium">
+                              <Clock className="w-3.5 h-3.5 text-slate-400" />
+                              <span>Siap Dikirim</span>
+                            </span>
+                          ) : ['sent', 'delivered', 'read'].includes(item.status) ? (
                             <div>
                               <span className="inline-flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
                                 <CheckCircle2 className="w-3.5 h-3.5" />
-                                <span>{item.status === 'read' ? 'Dibaca' : item.status === 'delivered' ? 'Delivered' : 'Terkirim'}</span>
+                                <span>{item.status === 'read' ? 'Dibaca' : item.status === 'delivered' ? 'Sampai' : 'Terkirim'}</span>
                               </span>
                               {item.liveData?.timestamp && (
                                 <div className="text-[10px] text-slate-400">
@@ -1298,12 +1612,12 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
                             </div>
                           ) : item.status === 'pacing' ? (
                             <div>
-                              <span className="inline-flex items-center gap-1 text-[11px] text-amber-500 font-medium animate-pulse">
+                              <span className="inline-flex items-center gap-1 text-[11px] text-indigo-600 dark:text-indigo-400 font-medium animate-pulse">
                                 <Clock className="w-3.5 h-3.5" />
-                                <span>Pacing anti-ban</span>
+                                <span>Jeda anti-ban</span>
                               </span>
                               {Number(item.liveData?.jitterDelayMs) > 0 && (
-                                <div className="text-[10px] text-amber-600 dark:text-amber-400 font-mono">
+                                <div className="text-[10px] text-indigo-600 dark:text-indigo-400 font-mono">
                                   {(Number(item.liveData.jitterDelayMs) / 1000).toFixed(1)}s jeda
                                 </div>
                               )}
@@ -1323,17 +1637,24 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
                                 </div>
                               )}
                             </div>
-                          ) : (item.status === 'pending' || item.status === 'sending') ? (
+                          ) : item.status === 'sending' ? (
+                            <div>
+                              <span className="inline-flex items-center gap-1 text-[11px] text-cyan-600 dark:text-cyan-400 font-medium animate-pulse">
+                                <Clock className="w-3.5 h-3.5" />
+                                <span>Sedang dikirim</span>
+                              </span>
+                            </div>
+                          ) : item.status === 'pending' ? (
                             <div>
                               <span className="inline-flex items-center gap-1 text-[11px] text-amber-600 dark:text-amber-400 font-medium animate-pulse">
                                 <Clock className="w-3.5 h-3.5" />
-                                <span>{QUEUE_STATUS_LABEL[item.status] || 'Menunggu'}</span>
+                                <span>Antrean Gateway</span>
                               </span>
                             </div>
                           ) : (
                             <span className="inline-flex items-center gap-1 text-[11px] text-slate-500 dark:text-zinc-400 font-medium">
                               <Clock className="w-3.5 h-3.5" />
-                              <span>Menunggu</span>
+                              <span>{QUEUE_STATUS_LABEL[item.status] || item.status}</span>
                             </span>
                           )}
                         </td>
@@ -1356,13 +1677,13 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
                               <button
                                 type="button"
                                 onClick={() => setDeletingRecipient({ id: item.id, phone: item.phone, name: item.name })}
-                                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors"
-                                title="Hapus dari antrean"
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors cursor-pointer"
+                                title="Hapus nomor dari antrean lokal"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
                             ) : !item.canRetry ? (
-                              <span className="text-[10px] text-slate-400 italic">Terkunci</span>
+                              <span className="text-[10px] text-slate-400 dark:text-zinc-500 italic">Terkunci</span>
                             ) : null}
                           </div>
                         </td>

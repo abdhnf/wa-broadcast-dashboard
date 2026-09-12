@@ -569,7 +569,7 @@ class CrmController extends Controller
             'queue' => ['nullable', 'array', 'max:5000'],
             'queue.*.phone' => ['required_with:queue', 'string'],
             'queue.*.name' => ['nullable', 'string', 'max:150'],
-            'queue.*.status' => ['nullable', 'in:pending,sent,failed'],
+            'queue.*.status' => ['nullable', 'string', 'max:40'],
         ])->validate();
 
         $campaign = WaCampaign::create([
@@ -617,7 +617,7 @@ class CrmController extends Controller
             'queue' => ['sometimes', 'nullable', 'array', 'max:5000'],
             'queue.*.phone' => ['required_with:queue', 'string', 'regex:/^\d{8,15}$/'],
             'queue.*.name' => ['nullable', 'string', 'max:150'],
-            'queue.*.status' => ['nullable', 'in:pending,sent,failed'],
+            'queue.*.status' => ['nullable', 'string', 'max:40'],
         ])->validate();
 
         // Hanya field yang benar-benar dikirim yang diubah, supaya pemanggil bisa
