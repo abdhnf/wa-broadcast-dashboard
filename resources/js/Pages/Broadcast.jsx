@@ -192,6 +192,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
   const [selectedGroup, setSelectedGroup] = useState('');
   const [selectedTemplate, setSelectedTemplate] = useState('');
   const [selectedSessionId, setSelectedSessionId] = useState('auto_rotate'); // Default: Auto Rotate
+  const [campaignPriority, setCampaignPriority] = useState('normal'); // 'normal' | 'high'
   const [formError, setFormError] = useState('');
   const [creating, setCreating] = useState(false);
 
@@ -291,6 +292,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
     setCampaignName(camp.name || '');
     setSelectedGroup(camp.groupName || '');
     setSelectedTemplate(camp.templateId || '');
+    setCampaignPriority(camp.priority || 'normal');
     setSelectedSessionId(
       camp.sessionUsed === 'Auto-Rotate Pool' || !camp.sessionUsed ? 'auto_rotate' : (
         sessions?.find((s) => s.name === camp.sessionUsed || s.id === camp.sessionUsed)?.id || camp.sessionUsed
@@ -336,6 +338,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
           templateId: tpl.id,
           templateTitle: tpl.title,
           sessionUsed: sessionLabel,
+          priority: campaignPriority,
         };
         await onCampaignUpdate?.(editingCampaign.id, updatedFields);
         if (selectedCampaign?.id === editingCampaign.id) {
@@ -345,6 +348,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
         setCampaignName('');
         setSelectedTemplate('');
         setSelectedGroup('');
+        setCampaignPriority('normal');
         setIsWizardOpen(false);
       } else {
         // Mode Buat Kampanye Baru - gunakan batchId unik agar terisolasi dari kampanye lain
@@ -367,6 +371,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
           templateId: tpl.id,
           templateTitle: tpl.title,
           sessionUsed: sessionLabel,
+          priority: campaignPriority,
           totalRecipients: seed.length,
           status: 'idle',
           campaignId: newBatchId,
@@ -381,6 +386,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
         setCampaignName('');
         setSelectedTemplate('');
         setSelectedGroup('');
+        setCampaignPriority('normal');
         setIsWizardOpen(false);
         setSelectedCampaign(created);
         setRecipientQueue(created.queue || []);
@@ -423,7 +429,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
             mediaType: tpl.mediaType || 'image',
             mediaUrl: tpl.mediaUrl,
             caption: rendered,
-            priority: 'normal',
+            priority: selectedCampaign?.priority || 'normal',
             batchId: selectedCampaign?.batchId || undefined,
           });
         } else {
@@ -431,7 +437,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
             sessionId: activeSessionId,
             to: item.phone,
             text: rendered,
-            priority: 'normal',
+            priority: selectedCampaign?.priority || 'normal',
             batchId: selectedCampaign?.batchId || undefined,
           });
         }
@@ -649,7 +655,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
               mediaType: tpl.mediaType || 'image',
               mediaUrl: tpl.mediaUrl,
               caption: rendered,
-              priority: 'normal',
+              priority: selectedCampaign?.priority || campaignPriority || 'normal',
               batchId: activeBatchId,
             })
           : tpl.messageType === 'location'
@@ -660,13 +666,14 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
                 longitude: tpl.location?.longitude,
                 name: tpl.location?.name,
                 address: tpl.location?.address,
+                priority: selectedCampaign?.priority || campaignPriority || 'normal',
                 batchId: activeBatchId,
               })
             : await sendText({
                 sessionId: activeSessionId,
                 to: item.phone,
                 text: rendered,
-                priority: 'normal',
+                priority: selectedCampaign?.priority || campaignPriority || 'normal',
                 batchId: activeBatchId,
               });
 
@@ -1148,6 +1155,11 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
             <h1 className="text-base font-bold text-slate-900 dark:text-white">
               {subView === 'campaigns' ? 'Blast Engine & Kampanye' : `Antrean Pesan: ${selectedCampaign?.name || 'Semua Kampanye'}`}
             </h1>
+            {subView === 'queue' && selectedCampaign?.priority === 'high' && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                <Zap className="w-3 h-3" /> Prioritas High
+              </span>
+            )}
             <Badge variant="outline" className="text-[10px]">
               {subView === 'campaigns'
                 ? `${campaigns.length} Kampanye`
@@ -1243,7 +1255,14 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
                 {campaigns.map((camp) => (
                   <tr key={camp.id} className="hover:bg-slate-50/60 dark:hover:bg-zinc-900/40 transition-colors">
                     <td className="py-3 px-4 font-semibold text-slate-900 dark:text-zinc-100">
-                      <div>{camp.name}</div>
+                      <div className="flex items-center gap-1.5">
+                        <span>{camp.name}</span>
+                        {camp.priority === 'high' && (
+                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                            <Zap className="w-2.5 h-2.5" /> High
+                          </span>
+                        )}
+                      </div>
                       <div className="text-[10px] text-slate-400 font-mono mt-0.5">{camp.createdAt}</div>
                     </td>
                     <td className="py-3 px-4">
@@ -1900,6 +1919,50 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
                   </option>
                 ))}
               </select>
+            </div>
+
+            {/* Prioritas Pengiriman (Queue Priority) */}
+            <div>
+              <label className="block text-[11px] font-medium text-slate-700 dark:text-zinc-300 mb-1.5">
+                Prioritas Antrean (Priority)
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCampaignPriority('normal')}
+                  className={`flex items-start gap-2 p-2 rounded-lg border text-left transition ${
+                    campaignPriority === 'normal'
+                      ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-500/60 text-emerald-800 dark:text-emerald-300 ring-1 ring-emerald-500/30'
+                      : 'bg-slate-50 dark:bg-zinc-900/60 border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400 hover:border-slate-300 dark:hover:border-zinc-700'
+                  }`}
+                >
+                  <div className={`p-1 rounded shrink-0 ${campaignPriority === 'normal' ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400' : 'bg-slate-200 dark:bg-zinc-800 text-slate-500'}`}>
+                    <Clock className="w-3.5 h-3.5" />
+                  </div>
+                  <div>
+                    <div className="text-[11px] font-semibold">Normal</div>
+                    <div className="text-[9px] text-slate-400 dark:text-zinc-400 leading-tight">Antrean santai anti-ban</div>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setCampaignPriority('high')}
+                  className={`flex items-start gap-2 p-2 rounded-lg border text-left transition ${
+                    campaignPriority === 'high'
+                      ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-500/60 text-amber-800 dark:text-amber-300 ring-1 ring-amber-500/30'
+                      : 'bg-slate-50 dark:bg-zinc-900/60 border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400 hover:border-slate-300 dark:hover:border-zinc-700'
+                  }`}
+                >
+                  <div className={`p-1 rounded shrink-0 ${campaignPriority === 'high' ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400' : 'bg-slate-200 dark:bg-zinc-800 text-slate-500'}`}>
+                    <Zap className="w-3.5 h-3.5" />
+                  </div>
+                  <div>
+                    <div className="text-[11px] font-semibold">Prioritas (High)</div>
+                    <div className="text-[9px] text-slate-400 dark:text-zinc-400 leading-tight">Salip antrean utama</div>
+                  </div>
+                </button>
+              </div>
             </div>
 
             <div className="flex items-start gap-2 p-2.5 rounded-lg bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/40 text-[11px] text-emerald-800 dark:text-emerald-300">

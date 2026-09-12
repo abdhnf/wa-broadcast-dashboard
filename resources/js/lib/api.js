@@ -349,7 +349,7 @@ export function retryMessage(messageId) {
   });
 }
 
-export function sendLocation({ sessionId, to, latitude, longitude, name, address, batchId }) {
+export function sendLocation({ sessionId, to, latitude, longitude, name, address, batchId, priority }) {
   const body = {
     sessionId: sessionId || 'auto',
     to: normalizePhone(to),
@@ -359,6 +359,7 @@ export function sendLocation({ sessionId, to, latitude, longitude, name, address
     address,
   };
   if (batchId) body.batchId = batchId;
+  if (priority) body.priority = priority;
   return apiFetch('/messages/send-location', {
     method: 'POST',
     body,

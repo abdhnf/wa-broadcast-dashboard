@@ -12,7 +12,9 @@ import {
   Sparkles,
   Smartphone,
   RefreshCw,
-  RotateCcw
+  RotateCcw,
+  Clock,
+  Zap
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
@@ -37,6 +39,7 @@ export function PlaygroundPage({ sessions, templates, contacts = [] }) {
   // Media State
   const [mediaType, setMediaType] = useState('image');
   const [mediaUrl, setMediaUrl] = useState('');
+  const [priority, setPriority] = useState('normal'); // 'normal' | 'high'
   
   // Location State
   const [locName, setLocName] = useState('Kantor Pusat Operasional');
@@ -76,6 +79,7 @@ export function PlaygroundPage({ sessions, templates, contacts = [] }) {
     setMessageType('text');
     setMediaUrl('');
     setMediaType('image');
+    setPriority('normal');
     setLocName('');
     setLocAddress('');
     setLocLat(-6.225588);
@@ -128,7 +132,7 @@ export function PlaygroundPage({ sessions, templates, contacts = [] }) {
 
       if (messageType === 'text') {
         endpoint = 'POST /api/v1/messages/send';
-        result = await sendText({ sessionId: activeSession, to: target, text: outgoingText, priority: 'high' });
+        result = await sendText({ sessionId: activeSession, to: target, text: outgoingText, priority });
       } else if (messageType === 'media') {
         endpoint = 'POST /api/v1/messages/send-media';
         if (!mediaUrl) throw new ApiError('Berkas media belum diunggah atau URL media masih kosong.', 400);
@@ -141,7 +145,7 @@ export function PlaygroundPage({ sessions, templates, contacts = [] }) {
           mediaBase64: isDataUrl ? mediaUrl.split(',')[1] : undefined,
           mediaMimeType: isDataUrl ? mediaUrl.slice(5, mediaUrl.indexOf(';')) : undefined,
           caption: outgoingText || undefined,
-          priority: 'high',
+          priority,
         });
       } else {
         endpoint = 'POST /api/v1/messages/send-location';
@@ -152,6 +156,7 @@ export function PlaygroundPage({ sessions, templates, contacts = [] }) {
           longitude: parseFloat(locLng) || 106.808591,
           name: locName,
           address: locAddress,
+          priority,
         });
       }
 
@@ -401,6 +406,50 @@ export function PlaygroundPage({ sessions, templates, contacts = [] }) {
                 className="w-full p-2.5 rounded-b-lg bg-slate-50 dark:bg-zinc-900 border border-t-0 border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-200 font-sans focus:outline-none focus:border-emerald-500 leading-relaxed"
                 placeholder="Tulis pesan dengan format WhatsApp (*tebal*, _miring_, emoji 👋)..."
               />
+            </div>
+
+            {/* Prioritas Pengiriman (Queue Priority) */}
+            <div>
+              <label className="block text-[11px] font-medium text-slate-700 dark:text-zinc-300 mb-1.5">
+                Prioritas Antrean (Priority)
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPriority('normal')}
+                  className={`flex items-start gap-2 p-2 rounded-lg border text-left transition ${
+                    priority === 'normal'
+                      ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-500/60 text-emerald-800 dark:text-emerald-300 ring-1 ring-emerald-500/30'
+                      : 'bg-slate-50 dark:bg-zinc-900/60 border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400 hover:border-slate-300 dark:hover:border-zinc-700'
+                  }`}
+                >
+                  <div className={`p-1 rounded shrink-0 ${priority === 'normal' ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400' : 'bg-slate-200 dark:bg-zinc-800 text-slate-500'}`}>
+                    <Clock className="w-3.5 h-3.5" />
+                  </div>
+                  <div>
+                    <div className="text-[11px] font-semibold">Normal</div>
+                    <div className="text-[9px] text-slate-400 dark:text-zinc-400 leading-tight">Antrean santai anti-ban</div>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setPriority('high')}
+                  className={`flex items-start gap-2 p-2 rounded-lg border text-left transition ${
+                    priority === 'high'
+                      ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-500/60 text-amber-800 dark:text-amber-300 ring-1 ring-amber-500/30'
+                      : 'bg-slate-50 dark:bg-zinc-900/60 border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400 hover:border-slate-300 dark:hover:border-zinc-700'
+                  }`}
+                >
+                  <div className={`p-1 rounded shrink-0 ${priority === 'high' ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400' : 'bg-slate-200 dark:bg-zinc-800 text-slate-500'}`}>
+                    <Zap className="w-3.5 h-3.5" />
+                  </div>
+                  <div>
+                    <div className="text-[11px] font-semibold">Prioritas (High)</div>
+                    <div className="text-[9px] text-slate-400 dark:text-zinc-400 leading-tight">Salip antrean utama</div>
+                  </div>
+                </button>
+              </div>
             </div>
 
             <Button
