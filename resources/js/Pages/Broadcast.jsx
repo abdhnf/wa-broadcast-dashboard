@@ -1155,7 +1155,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
                     selectedCampaign?.status === 'completed'
                       ? 'Selesai'
                       : isRunning
-                      ? `${activeRunningCount} Berjalan`
+                      ? `${pendingCount + activePacingCount} Berjalan`
                       : selectedCampaign?.status === 'in_progress'
                       ? 'Diproses Gateway'
                       : `${draftCount} Siap Kirim`
