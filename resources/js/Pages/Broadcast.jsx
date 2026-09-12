@@ -209,6 +209,19 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
   const [newRecipientCustom, setNewRecipientCustom] = useState({});
 
   const activeSessionId = selectedSessionId === 'auto_rotate' ? 'auto' : selectedSessionId;
+  const isRunning = Boolean(sending || selectedCampaign?.status === 'in_progress');
+
+  // Resolusi nama sesi WhatsApp agar selalu ramah manusia (bukan ID teknis sess-xxx)
+  const resolveSessionName = useCallback(
+    (raw) => {
+      if (!raw || raw === 'auto_rotate' || raw === 'all' || raw === 'auto' || raw === 'Auto-Rotate Pool') {
+        return 'Auto-Rotate';
+      }
+      const s = sessions?.find((sess) => sess.id === raw || sess.name === raw);
+      return s?.name || raw;
+    },
+    [sessions],
+  );
 
   const groupMembers = useCallback(
     (groupName) => (contacts || []).filter((c) => c.group === groupName || c.group_name === groupName),
@@ -334,27 +347,29 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
         setSelectedGroup('');
         setIsWizardOpen(false);
       } else {
-        // Mode Buat Kampanye Baru
+        // Mode Buat Kampanye Baru - gunakan batchId unik agar terisolasi dari kampanye lain
+        const newBatchId = `cmp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
         const seed = groupMembers(selectedGroup).map((c, i) => ({
           id: `q_${Date.now()}_${i}`,
-          campaignId: '',
+          campaignId: newBatchId,
           phone: normalizePhone(c.phone),
           name: c.name,
           custom: c.custom || {},
-          status: 'pending',
+          status: 'draft',
           sentAt: '-',
           session: sessionLabel,
         }));
 
         const created = await onCampaignCreate?.({
           name: campaignName.trim(),
+          batchId: newBatchId,
           groupName: selectedGroup,
           templateId: tpl.id,
           templateTitle: tpl.title,
           sessionUsed: sessionLabel,
           totalRecipients: seed.length,
           status: 'idle',
-          campaignId: `cmp_${Date.now()}`,
+          campaignId: newBatchId,
           queue: seed,
         });
 
@@ -499,7 +514,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
       phone,
       name: newRecipientName.trim() || phone,
       custom: newRecipientCustom || {},
-      status: 'pending',
+      status: 'draft',
       sentAt: '-',
       session: targetCampaign.sessionUsed || 'Auto-Rotate Pool',
     };
@@ -555,7 +570,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
         phone: normalizePhone(c.phone),
         name: c.name,
         custom: c.custom || {},
-        status: 'pending',
+        status: 'draft',
         sentAt: '-',
         session: selectedCampaign.sessionUsed || 'Auto-Rotate Pool',
       }))
@@ -757,8 +772,6 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
       id: item.id || `q_${item.phone || idx}`,
     }));
 
-    const isRunning = sending || selectedCampaign?.status === 'in_progress';
-
     return normalizedQueue.map((item) => {
       const live = liveMap.get(normalizePhone(item.phone));
 
@@ -791,7 +804,8 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
         ? item.custom
         : (contactMap.get(item.phone) || {});
 
-      const sessionLabel = live?.sessionId || item.session || selectedCampaign?.sessionUsed || 'Auto-Rotate';
+      const rawSession = live?.sessionId || item.session || selectedCampaign?.sessionUsed || 'Auto-Rotate';
+      const sessionLabel = resolveSessionName(rawSession);
 
       return {
         id: item.id,
@@ -888,17 +902,35 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
       setQueueTotal(0);
       return;
     }
+
+    const campBatchId = selectedCampaign?.batchId;
+    const isCampActiveOrStarted = selectedCampaign && (
+      selectedCampaign.status === 'in_progress' ||
+      selectedCampaign.status === 'paused' ||
+      selectedCampaign.status === 'completed' ||
+      Number(selectedCampaign.sentCount) > 0 ||
+      Number(selectedCampaign.failedCount) > 0
+    );
+
+    // Proteksi isolasi: Kampanye baru / idle yang belum pernah di-start tidak boleh query wa-api
+    // agar riwayat pesan nomor telepon dari kampanye terdahulu tidak bocor ke kampanye baru!
+    if (!campBatchId || !isCampActiveOrStarted) {
+      setQueueMessages([]);
+      setQueueTotal(0);
+      setLoadingQueue(false);
+      return;
+    }
+
     inFlightRef.current = true;
     setLoadingQueue(true);
     try {
-      const campBatchId = selectedCampaign?.batchId;
       const [msgRes, batchStatus] = await Promise.all([
         fetchMessages('all', {
           limit: QUEUE_PAGE_SIZE,
-          batchId: campBatchId || undefined,
+          batchId: campBatchId,
           phones: pagePhones,
         }),
-        campBatchId ? fetchBatchStatus(campBatchId).catch(() => null) : Promise.resolve(null),
+        fetchBatchStatus(campBatchId).catch(() => null),
       ]);
 
       const messages = Array.isArray(msgRes) ? msgRes : (msgRes?.messages || []);
@@ -971,7 +1003,14 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
       inFlightRef.current = false;
       setLoadingQueue(false);
     }
-  }, [pagePhonesKey, selectedCampaign?.batchId, selectedCampaign?.id]);
+  }, [
+    pagePhonesKey,
+    selectedCampaign?.batchId,
+    selectedCampaign?.id,
+    selectedCampaign?.status,
+    selectedCampaign?.sentCount,
+    selectedCampaign?.failedCount,
+  ]);
 
   const loadLiveQueueRef = useRef(loadLiveQueue);
   loadLiveQueueRef.current = loadLiveQueue;
@@ -1110,7 +1149,17 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
               {subView === 'campaigns' ? 'Blast Engine & Kampanye' : `Antrean Pesan: ${selectedCampaign?.name || 'Semua Kampanye'}`}
             </h1>
             <Badge variant="outline" className="text-[10px]">
-              {subView === 'campaigns' ? `${campaigns.length} Kampanye` : `${pendingCount} Lokal · ${liveQueued} Antrean`}
+              {subView === 'campaigns'
+                ? `${campaigns.length} Kampanye`
+                : `${filteredUnifiedQueue.length} Target · ${
+                    selectedCampaign?.status === 'completed'
+                      ? 'Selesai'
+                      : isRunning
+                      ? `${activeRunningCount} Berjalan`
+                      : selectedCampaign?.status === 'in_progress'
+                      ? 'Diproses Gateway'
+                      : `${draftCount} Siap Kirim`
+                  }`}
             </Badge>
           </div>
           <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
@@ -1208,7 +1257,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
                     <td className="py-3 px-4">
                       <span className="inline-flex items-center gap-1 font-mono text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">
                         <Smartphone className="w-3 h-3 text-slate-400" />
-                        <span>{camp.sessionUsed || 'Auto-Rotate'}</span>
+                        <span>{resolveSessionName(camp.sessionUsed)}</span>
                       </span>
                     </td>
                     <td className="py-3 px-4 w-56">
