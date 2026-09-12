@@ -25,6 +25,7 @@ import {
   Info,
   AlertCircle,
   X,
+  XCircle,
   Edit2
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
@@ -204,6 +205,8 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
 
   // Antrean Filter & Modal State
   const [isAddRecipientModalOpen, setIsAddRecipientModalOpen] = useState(false);
+  const [isCancelConfirmOpen, setIsCancelConfirmOpen] = useState(false);
+  const [isCancellingQueue, setIsCancellingQueue] = useState(false);
   const [targetCampaignId, setTargetCampaignId] = useState('');
   const [newRecipientPhone, setNewRecipientPhone] = useState('');
   const [newRecipientName, setNewRecipientName] = useState('');
@@ -1122,6 +1125,16 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
     }
   };
 
+  const handleConfirmCancelQueue = async () => {
+    setIsCancellingQueue(true);
+    try {
+      await handleStopBlast();
+      setIsCancelConfirmOpen(false);
+    } finally {
+      setIsCancellingQueue(false);
+    }
+  };
+
   const liveQueued = filteredUnifiedQueue.filter((m) => QUEUE_RUNNING_STATUSES.includes(m.status)).length;
 
   // Status jeda antrean per sesi pengirim (endpoint queue/status wa-api).
@@ -1194,6 +1207,18 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
                 <ChevronLeft className="w-3.5 h-3.5 mr-1" />
                 <span>Daftar Kampanye</span>
               </Button>
+              {selectedCampaign && (liveQueued > 0 || isRunning || draftCount > 0) && (
+                <Button
+                  onClick={() => setIsCancelConfirmOpen(true)}
+                  disabled={isCancellingQueue}
+                  variant="outline"
+                  size="sm"
+                  className="text-xs border-rose-500/30 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                >
+                  <XCircle className="w-3.5 h-3.5 mr-1" />
+                  <span>Batalkan Sisa Antrean</span>
+                </Button>
+              )}
               {failedItems.length > 0 && (
                 <Button
                   onClick={handleRetryAllFailed}
@@ -1919,6 +1944,61 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
                   </option>
                 ))}
               </select>
+
+              {/* Indikator Beban Sesi (Pre-Flight Load Info) */}
+              {(() => {
+                if (selectedSessionId === 'auto_rotate') {
+                  const connected = (sessions || []).filter((s) => s.status === 'connected' || s.status === 'open');
+                  const totalPending = connected.reduce((acc, s) => acc + (s.queue?.pendingCount || 0), 0);
+                  const totalWaitSec = Math.round((totalPending * 3.5) / Math.max(connected.length, 1));
+
+                  if (totalPending > 0) {
+                    return (
+                      <div className="mt-2 p-2 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40 text-[11px] text-amber-800 dark:text-amber-300">
+                        <div className="flex items-center gap-1.5 font-medium">
+                          <AlertCircle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                          <span>Pool memiliki {totalPending} antrean aktif (est. {totalWaitSec > 60 ? `~${Math.ceil(totalWaitSec / 60)} menit` : `${totalWaitSec} detik`})</span>
+                        </div>
+                        <p className="text-[10px] text-amber-700/90 dark:text-amber-400/90 mt-0.5 ml-5 leading-relaxed">
+                          Pesan kampanye baru akan didistribusikan merata ke {connected.length} nomor aktif secara bergantian.
+                        </p>
+                      </div>
+                    );
+                  }
+                  return (
+                    <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                      <span>Pool siap: {connected.length} nomor online tanpa antrean menumpuk.</span>
+                    </div>
+                  );
+                }
+
+                const sess = sessions?.find((s) => s.id === selectedSessionId);
+                if (!sess) return null;
+                const qPending = sess.queue?.pendingCount || 0;
+                const qSec = sess.queue?.estimatedWaitSeconds || Math.round(qPending * 3.5);
+
+                if (qPending > 0) {
+                  return (
+                    <div className="mt-2 p-2 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40 text-[11px] text-amber-800 dark:text-amber-300">
+                      <div className="flex items-center gap-1.5 font-medium">
+                        <AlertCircle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                        <span>Nomor ini sedang memproses {qPending} antrean (est. {qSec > 60 ? `~${Math.ceil(qSec / 60)} menit` : `${qSec} detik`})</span>
+                      </div>
+                      <p className="text-[10px] text-amber-700/90 dark:text-amber-400/90 mt-0.5 ml-5 leading-relaxed">
+                        Pesan baru akan diproses bergantian secara adil (fair interleaving). Gunakan Auto-Rotate jika ingin membagi beban ke nomor lain.
+                      </p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                    <span>Nomor siap digunakan, antrean kosong.</span>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Prioritas Pengiriman (Queue Priority) */}
@@ -2105,6 +2185,48 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
               className="text-xs bg-rose-600 hover:bg-rose-700 text-white"
             >
               Hapus Nomor
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Konfirmasi Pembatalan Sisa Antrean */}
+      <Dialog open={isCancelConfirmOpen} onOpenChange={setIsCancelConfirmOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-sm text-rose-600 dark:text-rose-400">
+              <AlertCircle className="w-4 h-4" />
+              <span>Batalkan Sisa Antrean Kampanye</span>
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-2 text-xs text-slate-600 dark:text-zinc-300 space-y-2">
+            <p>
+              Apakah Anda yakin ingin membatalkan sisa antrean untuk kampanye{' '}
+              <strong className="text-slate-900 dark:text-zinc-100">{selectedCampaign?.name}</strong>?
+            </p>
+            <p className="text-[11px] text-slate-500 dark:text-zinc-400">
+              Pesan yang belum terkirim di wa-api akan dibatalkan, dan kuota nomor pengirim akan langsung dibebaskan untuk kampanye lainnya.
+            </p>
+          </div>
+          <DialogFooter className="flex items-center justify-end gap-2 pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setIsCancelConfirmOpen(false)}
+              disabled={isCancellingQueue}
+              className="text-xs"
+            >
+              Tutup
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={handleConfirmCancelQueue}
+              disabled={isCancellingQueue}
+              className="text-xs bg-rose-600 hover:bg-rose-700 text-white"
+            >
+              {isCancellingQueue ? 'Membatalkan...' : 'Ya, Batalkan Sekarang'}
             </Button>
           </DialogFooter>
         </DialogContent>
