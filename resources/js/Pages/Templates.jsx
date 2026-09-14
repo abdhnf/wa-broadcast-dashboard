@@ -39,6 +39,7 @@ export function TemplatesPage({ onTemplatesChange, contacts = [] }) {
   const [messageType, setMessageType] = useState('text'); // 'text' | 'media' | 'location'
   const [mediaType, setMediaType] = useState('image'); // 'image' | 'video' | 'audio' | 'document'
   const [mediaUrl, setMediaUrl] = useState('');
+  const [fileName, setFileName] = useState('');
   const [content, setContent] = useState('');
   // Location form state
   const [locName, setLocName] = useState('');
@@ -72,6 +73,7 @@ export function TemplatesPage({ onTemplatesChange, contacts = [] }) {
     setMessageType('text');
     setMediaType('image');
     setMediaUrl('');
+    setFileName('');
     setContent('');
     setLocName('');
     setLocAddress('');
@@ -86,6 +88,7 @@ export function TemplatesPage({ onTemplatesChange, contacts = [] }) {
     setMessageType(t.messageType || (t.mediaUrl ? 'media' : 'text'));
     setMediaType(t.mediaType || 'image');
     setMediaUrl(t.mediaUrl || '');
+    setFileName(t.fileName || '');
     setContent(t.content);
     if (t.location) {
       setLocName(t.location.name || '');
@@ -136,6 +139,7 @@ export function TemplatesPage({ onTemplatesChange, contacts = [] }) {
       messageType,
       mediaType: messageType === 'media' ? mediaType : null,
       mediaUrl: messageType === 'media' ? mediaUrl : null,
+      fileName: messageType === 'media' ? fileName || null : null,
       content,
       location: locationData
     };
@@ -381,6 +385,8 @@ export function TemplatesPage({ onTemplatesChange, contacts = [] }) {
                   onMediaChange={setMediaUrl}
                   mediaType={mediaType}
                   onMediaTypeChange={setMediaType}
+                  fileName={fileName}
+                  onFileNameChange={setFileName}
                 />
               </div>
             )}

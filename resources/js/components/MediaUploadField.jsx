@@ -26,11 +26,17 @@ function formatSize(bytes) {
   return `${bytes} B`;
 }
 
-export function MediaUploadField({ mediaUrl, onMediaChange, mediaType = 'image', onMediaTypeChange }) {
+export function MediaUploadField({ mediaUrl, onMediaChange, mediaType = 'image', onMediaTypeChange, fileName: externalFileName, onFileNameChange }) {
   const fileInputRef = useRef(null);
   const [isUploading, setIsUploading] = useState(false);
-  const [fileName, setFileName] = useState('');
+  const [localFileName, setLocalFileName] = useState('');
   const [error, setError] = useState('');
+
+  const currentFileName = externalFileName !== undefined ? externalFileName : localFileName;
+  const updateFileName = (val) => {
+    setLocalFileName(val);
+    onFileNameChange?.(val);
+  };
 
   const detectAndApplyType = (file) => {
     if (!onMediaTypeChange) return;
@@ -50,24 +56,27 @@ export function MediaUploadField({ mediaUrl, onMediaChange, mediaType = 'image',
     // membuang waktu unggah lalu ditolak backend tanpa penjelasan.
     if (file.size > MAX_FILE_BYTES) {
       setError(`Berkas terlalu besar (${formatSize(file.size)}). Batas maksimum ${formatSize(MAX_FILE_BYTES)}.`);
-      setFileName('');
+      updateFileName('');
       onMediaChange('');
       if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
 
     setIsUploading(true);
-    setFileName(file.name);
+    updateFileName(file.name);
     detectAndApplyType(file);
 
     try {
       const result = await uploadMediaFile(file);
       if (!result?.url) throw new Error('Server tidak mengembalikan URL berkas.');
       onMediaChange(result.url);
+      if (result.fileName) {
+        updateFileName(result.fileName);
+      }
     } catch (err) {
       setError(err?.message || 'Gagal mengunggah berkas ke wa-api.');
       onMediaChange('');
-      setFileName('');
+      updateFileName('');
       if (fileInputRef.current) fileInputRef.current.value = '';
     } finally {
       setIsUploading(false);
@@ -76,7 +85,7 @@ export function MediaUploadField({ mediaUrl, onMediaChange, mediaType = 'image',
 
   const handleClear = () => {
     onMediaChange('');
-    setFileName('');
+    updateFileName('');
     setError('');
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
@@ -126,10 +135,10 @@ export function MediaUploadField({ mediaUrl, onMediaChange, mediaType = 'image',
         )}
       </div>
 
-      {fileName && mediaUrl && !error && (
+      {currentFileName && mediaUrl && !error && (
         <div className="flex items-center gap-1.5 text-[11px] text-emerald-600 dark:text-emerald-400 font-mono">
           <CheckCircle2 className="w-3.5 h-3.5" />
-          <span>Berkas siap dikirim: {fileName}</span>
+          <span>Berkas siap dikirim: {currentFileName}</span>
         </div>
       )}
 

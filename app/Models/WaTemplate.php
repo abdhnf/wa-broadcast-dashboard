@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Model;
 class WaTemplate extends Model
 {
     protected $fillable = [
-        'user_id', 'title', 'message_type', 'media_type', 'media_url', 'content', 'location',
+        'user_id', 'title', 'message_type', 'media_type', 'media_url', 'file_name', 'content', 'location',
     ];
 
     protected $casts = [

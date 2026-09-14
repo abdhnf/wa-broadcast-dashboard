@@ -39,6 +39,7 @@ export function PlaygroundPage({ sessions, templates, contacts = [] }) {
   // Media State
   const [mediaType, setMediaType] = useState('image');
   const [mediaUrl, setMediaUrl] = useState('');
+  const [fileName, setFileName] = useState('');
   const [priority, setPriority] = useState('normal'); // 'normal' | 'high'
   
   // Location State
@@ -62,6 +63,7 @@ export function PlaygroundPage({ sessions, templates, contacts = [] }) {
     if (found.messageType) setMessageType(found.messageType);
     if (found.mediaUrl) {
       setMediaUrl(found.mediaUrl);
+      setFileName(found.fileName || '');
       if (found.mediaType) setMediaType(found.mediaType);
     }
     if (found.location) {
@@ -144,6 +146,7 @@ export function PlaygroundPage({ sessions, templates, contacts = [] }) {
           mediaUrl: isDataUrl ? undefined : mediaUrl,
           mediaBase64: isDataUrl ? mediaUrl.split(',')[1] : undefined,
           mediaMimeType: isDataUrl ? mediaUrl.slice(5, mediaUrl.indexOf(';')) : undefined,
+          fileName: fileName || undefined,
           caption: outgoingText || undefined,
           priority,
         });
@@ -335,6 +338,8 @@ export function PlaygroundPage({ sessions, templates, contacts = [] }) {
                   onMediaChange={setMediaUrl}
                   mediaType={mediaType}
                   onMediaTypeChange={setMediaType}
+                  fileName={fileName}
+                  onFileNameChange={setFileName}
                 />
               </div>
             )}

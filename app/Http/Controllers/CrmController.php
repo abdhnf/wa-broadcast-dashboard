@@ -537,6 +537,7 @@ class CrmController extends Controller
                 'messageType' => $t->message_type,
                 'mediaType' => $t->media_type,
                 'mediaUrl' => $t->media_url,
+                'fileName' => $t->file_name,
                 'content' => $t->content,
                 'location' => $t->location,
             ])->values(),
@@ -555,6 +556,7 @@ class CrmController extends Controller
             'mediaType' => ['nullable', 'in:image,video,audio,document'],
             // URL media wajib http(s) bila diisi, supaya tidak tersimpan teks bebas.
             'mediaUrl' => ['nullable', 'string', 'max:2048', 'url:http,https'],
+            'fileName' => ['nullable', 'string', 'max:255'],
             'content' => ['required', 'string', 'max:20000', 'regex:/\S/'],
             'location' => ['nullable', 'array'],
         ])->validate();
@@ -565,6 +567,7 @@ class CrmController extends Controller
             'message_type' => $data['messageType'],
             'media_type' => $data['mediaType'] ?? null,
             'media_url' => $data['mediaUrl'] ?? null,
+            'file_name' => $data['fileName'] ?? null,
             'content' => $data['content'],
             'location' => $data['location'] ?? null,
         ]);
@@ -576,6 +579,7 @@ class CrmController extends Controller
                 'messageType' => $template->message_type,
                 'mediaType' => $template->media_type,
                 'mediaUrl' => $template->media_url,
+                'fileName' => $template->file_name,
                 'content' => $template->content,
                 'location' => $template->location,
             ],
@@ -599,18 +603,20 @@ class CrmController extends Controller
             'mediaType' => ['nullable', 'in:image,video,audio,document'],
             // URL media wajib http(s) bila diisi, supaya tidak tersimpan teks bebas.
             'mediaUrl' => ['nullable', 'string', 'max:2048', 'url:http,https'],
+            'fileName' => ['nullable', 'string', 'max:255'],
             'content' => ['required', 'string', 'max:20000', 'regex:/\S/'],
             'location' => ['nullable', 'array'],
         ])->validate();
 
-        $template->fill([
+        $template->update([
             'title' => $data['title'],
             'message_type' => $data['messageType'],
             'media_type' => $data['mediaType'] ?? null,
             'media_url' => $data['mediaUrl'] ?? null,
+            'file_name' => $data['fileName'] ?? null,
             'content' => $data['content'],
             'location' => $data['location'] ?? null,
-        ])->save();
+        ]);
 
         return response()->json([
             'template' => [
@@ -619,6 +625,7 @@ class CrmController extends Controller
                 'messageType' => $template->message_type,
                 'mediaType' => $template->media_type,
                 'mediaUrl' => $template->media_url,
+                'fileName' => $template->file_name,
                 'content' => $template->content,
                 'location' => $template->location,
             ],
