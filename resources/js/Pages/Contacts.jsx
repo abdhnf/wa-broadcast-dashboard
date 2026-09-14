@@ -13,7 +13,9 @@ import {
   CheckCircle2,
   Sparkles,
   Tag,
-  X
+  X,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
@@ -38,6 +40,10 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
   const [editingContact, setEditingContact] = useState(null);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+
+  // Pagination state (pola wa-panel)
+  const [currentPage, setCurrentPage] = useState(1);
+  const [perPage, setPerPage] = useState(20);
   const [importSummary, setImportSummary] = useState('');
   const csvInputRef = useRef(null);
 
@@ -105,6 +111,18 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
     const matchesGroup = selectedGroup === 'all' || c.group === selectedGroup;
     return matchesSearch && matchesGroup;
   });
+
+  // Reset page saat filter/search berubah
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedGroup]);
+
+  const totalFiltered = filteredContacts.length;
+  const totalPages = Math.max(1, Math.ceil(totalFiltered / perPage));
+  const paginatedContacts = filteredContacts.slice(
+    (currentPage - 1) * perPage,
+    currentPage * perPage
+  );
 
   const handleSaveContact = async (e) => {
     e.preventDefault();
@@ -381,13 +399,13 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
   return (
     <div className="space-y-4">
       {/* Header & Controls */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-[#0f1117] p-4 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-xs">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-surface  p-4 rounded-lg border border-line border-line ">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-base font-bold text-slate-900 dark:text-white">Daftar Kontak Audiens</h1>
+            <h1 className="text-base font-bold text-ink dark:text-white">Daftar Kontak Audiens</h1>
             <Badge variant="outline" className="font-mono text-[10px]">{contacts.length} Total</Badge>
           </div>
-          <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
+          <p className="text-xs text-ink-muted text-ink-muted mt-0.5">
             Kelola database nomor tujuan, segmentasi grup, dan parameter variabel dinamis kustom.
           </p>
         </div>
@@ -399,7 +417,7 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
             size="sm"
             className="text-xs"
           >
-            <FileSpreadsheet className="w-3.5 h-3.5 mr-1 text-emerald-600 dark:text-emerald-400" />
+            <FileSpreadsheet className="w-3.5 h-3.5 mr-1 text-brand-deep" />
             <span>Import CSV</span>
           </Button>
 
@@ -416,24 +434,24 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
       </div>
 
       {/* Filter & Live Search Toolbar */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 bg-white dark:bg-[#0f1117] p-3 rounded-xl border border-slate-200 dark:border-zinc-800 text-xs">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 bg-surface  p-3 rounded-lg border border-line border-line text-xs">
         <div className="relative flex-1">
-          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint" />
           <input
             type="text"
             placeholder="Cari nama, nomor WhatsApp (628xxx), atau variabel kustom..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-200 focus:outline-none focus:border-emerald-500 transition-colors"
+            className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-shell bg-surface border border-line border-line text-xs text-ink text-ink-soft focus:outline-none focus:border-brand transition-colors"
           />
         </div>
 
         <div className="flex items-center gap-2">
-          <Filter className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+          <Filter className="w-3.5 h-3.5 text-ink-faint shrink-0" />
           <select
             value={selectedGroup}
             onChange={(e) => setSelectedGroup(e.target.value)}
-            className="py-1.5 px-3 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs text-slate-800 dark:text-zinc-200 focus:outline-none focus:border-emerald-500"
+            className="py-1.5 px-3 rounded-lg bg-shell bg-surface border border-line border-line text-xs text-ink text-ink-soft focus:outline-none focus:border-brand"
           >
             <option value="all">Semua Segmen ({contacts.length})</option>
             {groups?.map((g) => (
@@ -445,17 +463,17 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
 
       {/* Pesan galat tingkat halaman: kegagalan muat atau hapus data. */}
       {errorMsg && (
-        <div className="flex items-start gap-2 p-3 rounded-lg bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60 text-xs text-rose-700 dark:text-rose-300">
+        <div className="flex items-start gap-2 p-3 rounded-lg bg-clay-wash dark:bg-rose-950/30 border border-clay-line dark:border-rose-900/60 text-xs text-clay-deep">
           <X className="w-3.5 h-3.5 mt-0.5 shrink-0" />
           <span>{errorMsg}</span>
         </div>
       )}
 
       {/* Modern High-Density Table with Responsive Horizontal Scroll */}
-      <div className="bg-white dark:bg-[#0f1117] rounded-xl border border-slate-200 dark:border-zinc-800 overflow-hidden shadow-xs">
+      <div className="bg-surface  rounded-lg border border-line border-line overflow-hidden ">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-600 dark:text-zinc-300 min-w-[750px]">
-            <thead className="bg-slate-50 dark:bg-zinc-900/60 text-slate-700 dark:text-zinc-400 uppercase text-[10px] tracking-wider font-semibold border-b border-slate-200 dark:border-zinc-800">
+          <table className="w-full text-left text-xs text-ink-soft text-ink-soft min-w-[750px]">
+            <thead className="bg-shell bg-surface text-ink-soft text-ink-muted uppercase text-[10px] tracking-wider font-semibold border-b border-line border-line">
               <tr>
                 <th className="py-2.5 px-4 w-10 text-center">#</th>
                 <th className="py-2.5 px-4">Nama Penerima</th>
@@ -465,40 +483,40 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
                 <th className="py-2.5 px-4 text-right">Aksi</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80 font-normal">
+            <tbody className="divide-y divide-line font-normal">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-slate-400 dark:text-zinc-500">
+                  <td colSpan={6} className="py-8 text-center text-ink-faint text-ink-faint">
                     Memuat kontak dari database…
                   </td>
                 </tr>
-              ) : filteredContacts.length === 0 ? (
+              ) : paginatedContacts.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-slate-400 dark:text-zinc-500">
+                  <td colSpan={6} className="py-8 text-center text-ink-faint text-ink-faint">
                     {contacts.length === 0
                       ? 'Belum ada kontak. Tambahkan kontak pertama Anda.'
                       : 'Tidak ada kontak yang cocok dengan filter.'}
                   </td>
                 </tr>
               ) : (
-                filteredContacts.map((c, idx) => (
-                  <tr key={c.id} className="hover:bg-slate-50/60 dark:hover:bg-zinc-900/40 transition-colors">
-                    <td className="py-2.5 px-4 text-center font-mono text-[11px] text-slate-400">
-                      {idx + 1}
+                paginatedContacts.map((c, idx) => (
+                  <tr key={c.id} className="hover:bg-surface-alt/60 transition-colors">
+                    <td className="py-2.5 px-4 text-center font-mono text-[11px] text-ink-faint">
+                      {(currentPage - 1) * perPage + idx + 1}
                     </td>
-                    <td className="py-2.5 px-4 font-medium text-slate-900 dark:text-zinc-100">
+                    <td className="py-2.5 px-4 font-medium text-ink text-ink">
                       <div className="flex items-center gap-2">
                         <span>{c.name}</span>
                         {c.tag && (
-                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400 border border-slate-200 dark:border-zinc-700/50">
+                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface-sunken bg-surface-alt text-ink-soft text-ink-muted border border-line border-line">
                             {c.tag}
                           </span>
                         )}
                       </div>
                     </td>
-                    <td className="py-2.5 px-4 font-mono text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">
+                    <td className="py-2.5 px-4 font-mono text-[11px] text-leaf-deep text-brand-soft font-medium">
                       <div className="flex items-center gap-1.5">
-                        <Phone className="w-3 h-3 text-slate-400" />
+                        <Phone className="w-3 h-3 text-ink-faint" />
                         <span>+{c.phone}</span>
                       </div>
                     </td>
@@ -510,14 +528,14 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
                     <td className="py-2.5 px-4">
                       <div className="flex flex-wrap items-center gap-1.5">
                         {Object.entries(c.custom || {}).length === 0 ? (
-                          <span className="text-[10px] text-slate-400 italic">-</span>
+                          <span className="text-[10px] text-ink-faint italic">-</span>
                         ) : (
                           Object.entries(c.custom || {}).map(([k, v]) => (
                             <span
                               key={k}
-                              className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-100 dark:bg-zinc-800/80 text-slate-700 dark:text-zinc-300 border border-slate-200 dark:border-zinc-700/60"
+                              className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface-sunken text-ink-soft border border-line"
                             >
-                              <strong className="text-emerald-600 dark:text-emerald-400 font-semibold">{k}:</strong> {String(v)}
+                              <strong className="text-brand-deep font-semibold">{k}:</strong> {String(v)}
                             </span>
                           ))
                         )}
@@ -528,7 +546,7 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
                         <button
                           type="button"
                           onClick={() => handleOpenEdit(c)}
-                          className="p-1 rounded text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors"
+                          className="p-1 rounded text-ink-faint hover:text-brand-deep hover:bg-brand-wash  transition-colors"
                           title="Edit kontak & variabel"
                         >
                           <Edit2 className="w-3.5 h-3.5" />
@@ -536,7 +554,7 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
                         <button
                           type="button"
                           onClick={() => void handleDeleteContact(c.id)}
-                          className="p-1 rounded text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors"
+                          className="p-1 rounded text-ink-faint hover:text-clay hover:bg-clay-wash dark:hover:bg-rose-950/30 transition-colors"
                           title="Hapus kontak"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -548,6 +566,74 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Pagination bar identik dengan wa-panel */}
+        <div className="px-4 py-3 bg-surface-sunken border-t border-line flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-ink-muted">
+          <div className="flex items-center gap-3">
+            {totalFiltered > 0 ? (
+              <span>
+                Menampilkan{' '}
+                <strong className="text-ink font-mono font-semibold">
+                  {(currentPage - 1) * perPage + 1}
+                </strong>{' '}
+                -{' '}
+                <strong className="text-ink font-mono font-semibold">
+                  {Math.min(currentPage * perPage, totalFiltered)}
+                </strong>{' '}
+                dari{' '}
+                <strong className="text-ink font-mono font-semibold">
+                  {totalFiltered}
+                </strong>{' '}
+                kontak
+              </span>
+            ) : (
+              <span>Tidak ada data kontak</span>
+            )}
+
+            {totalFiltered > 10 && (
+              <select
+                value={perPage}
+                onChange={(e) => {
+                  setPerPage(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+                className="h-7 px-2 text-[11px] font-mono rounded bg-surface border border-line text-ink cursor-pointer focus:outline-none focus:border-brand"
+                title="Jumlah baris per halaman"
+              >
+                <option value={10}>10 / hal</option>
+                <option value={20}>20 / hal</option>
+                <option value={50}>50 / hal</option>
+                <option value={100}>100 / hal</option>
+              </select>
+            )}
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              disabled={currentPage <= 1 || loading}
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              className="h-7 px-2.5 rounded bg-surface border border-line text-ink hover:bg-surface-alt transition disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1 font-medium text-xs cursor-pointer select-none"
+              title="Halaman sebelumnya"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+              <span>Prev</span>
+            </button>
+            <span className="px-2 font-mono text-ink-soft text-xs font-semibold">
+              {currentPage} / {totalPages}
+            </span>
+            <button
+              type="button"
+              disabled={currentPage >= totalPages || loading}
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              className="h-7 px-2.5 rounded bg-surface border border-line text-ink hover:bg-surface-alt transition disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1 font-medium text-xs cursor-pointer select-none"
+              title="Halaman berikutnya"
+            >
+              <span>Next</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -561,7 +647,7 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
           <form onSubmit={handleSaveContact} className="space-y-3.5 text-xs py-1">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-[11px] font-medium text-slate-700 dark:text-zinc-300 mb-1">
+                <label className="block text-[11px] font-medium text-ink-soft text-ink-soft mb-1">
                   Nama Lengkap Penerima *
                 </label>
                 <input
@@ -570,12 +656,12 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
                   placeholder="Misal: Budi Santoso"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full h-8 px-2.5 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-200 focus:outline-none focus:border-emerald-500"
+                  className="w-full h-8 px-2.5 rounded-lg bg-shell bg-surface border border-line border-line text-xs text-ink text-ink-soft focus:outline-none focus:border-brand"
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] font-medium text-slate-700 dark:text-zinc-300 mb-1">
+                <label className="block text-[11px] font-medium text-ink-soft text-ink-soft mb-1">
                   Nomor WhatsApp *
                 </label>
                 <input
@@ -587,9 +673,9 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
                   placeholder="628123456789"
                   value={phone}
                   onChange={(e) => setPhone(toPhoneInput(e.target.value))}
-                  className="w-full h-8 px-2.5 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-200 font-mono focus:outline-none focus:border-emerald-500"
+                  className="w-full h-8 px-2.5 rounded-lg bg-shell bg-surface border border-line border-line text-xs text-ink text-ink-soft font-mono focus:outline-none focus:border-brand"
                 />
-                <p className="text-[10px] text-slate-400 dark:text-zinc-500 mt-1">
+                <p className="text-[10px] text-ink-faint text-ink-faint mt-1">
                   Ketik 0851... otomatis jadi 62851...
                 </p>
               </div>
@@ -598,20 +684,20 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
             {/* Galat dari server (nomor duplikat / format tidak sah) tampil di dalam
                 modal supaya isian yang sudah diketik tidak hilang. */}
             {errorMsg && (
-              <p className="text-[11px] text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60 rounded-lg px-2.5 py-2">
+              <p className="text-[11px] text-clay text-clay bg-clay-wash dark:bg-rose-950/30 border border-clay-line dark:border-rose-900/60 rounded-lg px-2.5 py-2">
                 {errorMsg}
               </p>
             )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-[11px] font-medium text-slate-700 dark:text-zinc-300 mb-1">
+                <label className="block text-[11px] font-medium text-ink-soft text-ink-soft mb-1">
                   Segmen Grup
                 </label>
                 <select
                   value={group}
                   onChange={(e) => setGroup(e.target.value)}
-                  className="w-full h-8 px-2 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-200 focus:outline-none focus:border-emerald-500"
+                  className="w-full h-8 px-2 rounded-lg bg-shell bg-surface border border-line border-line text-xs text-ink text-ink-soft focus:outline-none focus:border-brand"
                 >
                   {groups?.map((g) => (
                     <option key={g.id} value={g.name}>{g.name}</option>
@@ -620,7 +706,7 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
               </div>
 
               <div>
-                <label className="block text-[11px] font-medium text-slate-700 dark:text-zinc-300 mb-1">
+                <label className="block text-[11px] font-medium text-ink-soft text-ink-soft mb-1">
                   Tag / Label Ringkas
                 </label>
                 <input
@@ -628,21 +714,21 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
                   placeholder="Misal: VIP, Member, Prioritas"
                   value={tag}
                   onChange={(e) => setTag(e.target.value)}
-                  className="w-full h-8 px-2.5 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-200 focus:outline-none focus:border-emerald-500"
+                  className="w-full h-8 px-2.5 rounded-lg bg-shell bg-surface border border-line border-line text-xs text-ink text-ink-soft focus:outline-none focus:border-brand"
                 />
               </div>
             </div>
 
             {/* Variabel Dinamis Dinamis (Key-Value Builder) */}
-            <div className="pt-2 border-t border-slate-200 dark:border-zinc-800">
+            <div className="pt-2 border-t border-line border-line">
               <div className="flex items-center justify-between mb-2">
                 <div>
-                  <div className="text-[11px] font-semibold text-slate-800 dark:text-zinc-200 flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-emerald-500" />
+                  <div className="text-[11px] font-semibold text-ink text-ink-soft flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-brand" />
                     <span>Variabel Dinamis Pesan</span>
                   </div>
-                  <p className="text-[10px] text-slate-400 dark:text-zinc-500">
-                    Bisa dipanggil di pesan via template: <code className="text-emerald-600 dark:text-emerald-400">{'{{nama_key}}'}</code>
+                  <p className="text-[10px] text-ink-faint text-ink-faint">
+                    Bisa dipanggil di pesan via template: <code className="text-brand-deep">{'{{nama_key}}'}</code>
                   </p>
                 </div>
                 <Button
@@ -665,20 +751,20 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
                       placeholder="Nama variabel (misal: kota, voucher)"
                       value={field.key}
                       onChange={(e) => updateCustomField(idx, 'key', e.target.value)}
-                      className="w-1/2 h-7 px-2 rounded bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-[11px] font-mono text-slate-900 dark:text-zinc-200 focus:outline-none focus:border-emerald-500"
+                      className="w-1/2 h-7 px-2 rounded bg-shell bg-surface border border-line border-line text-[11px] font-mono text-ink text-ink-soft focus:outline-none focus:border-brand"
                     />
                     <input
                       type="text"
                       placeholder="Nilai untuk kontak ini"
                       value={field.value}
                       onChange={(e) => updateCustomField(idx, 'value', e.target.value)}
-                      className="w-1/2 h-7 px-2 rounded bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-[11px] text-slate-900 dark:text-zinc-200 focus:outline-none focus:border-emerald-500"
+                      className="w-1/2 h-7 px-2 rounded bg-shell bg-surface border border-line border-line text-[11px] text-ink text-ink-soft focus:outline-none focus:border-brand"
                     />
                     {customFields.length > 1 && (
                       <button
                         type="button"
                         onClick={() => removeCustomField(idx)}
-                        className="p-1 text-slate-400 hover:text-rose-500 transition-colors"
+                        className="p-1 text-ink-faint hover:text-clay transition-colors"
                       >
                         <X className="w-3.5 h-3.5" />
                       </button>
@@ -715,7 +801,7 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
           <form onSubmit={handleUpdateContact} className="space-y-3.5 text-xs py-1">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-[11px] font-medium text-slate-700 dark:text-zinc-300 mb-1">
+                <label className="block text-[11px] font-medium text-ink-soft text-ink-soft mb-1">
                   Nama Lengkap Penerima *
                 </label>
                 <input
@@ -724,12 +810,12 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
                   placeholder="Misal: Budi Santoso"
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
-                  className="w-full h-8 px-2.5 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-200 focus:outline-none focus:border-emerald-500"
+                  className="w-full h-8 px-2.5 rounded-lg bg-shell bg-surface border border-line border-line text-xs text-ink text-ink-soft focus:outline-none focus:border-brand"
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] font-medium text-slate-700 dark:text-zinc-300 mb-1">
+                <label className="block text-[11px] font-medium text-ink-soft text-ink-soft mb-1">
                   Nomor WhatsApp *
                 </label>
                 <input
@@ -741,29 +827,29 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
                   placeholder="628123456789"
                   value={editPhone}
                   onChange={(e) => setEditPhone(toPhoneInput(e.target.value))}
-                  className="w-full h-8 px-2.5 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-200 font-mono focus:outline-none focus:border-emerald-500"
+                  className="w-full h-8 px-2.5 rounded-lg bg-shell bg-surface border border-line border-line text-xs text-ink text-ink-soft font-mono focus:outline-none focus:border-brand"
                 />
-                <p className="text-[10px] text-slate-400 dark:text-zinc-500 mt-1">
+                <p className="text-[10px] text-ink-faint text-ink-faint mt-1">
                   Ketik 0851... otomatis jadi 62851...
                 </p>
               </div>
             </div>
 
             {editErrorMsg && (
-              <p className="text-[11px] text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60 rounded-lg px-2.5 py-2">
+              <p className="text-[11px] text-clay text-clay bg-clay-wash dark:bg-rose-950/30 border border-clay-line dark:border-rose-900/60 rounded-lg px-2.5 py-2">
                 {editErrorMsg}
               </p>
             )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-[11px] font-medium text-slate-700 dark:text-zinc-300 mb-1">
+                <label className="block text-[11px] font-medium text-ink-soft text-ink-soft mb-1">
                   Segmen Grup
                 </label>
                 <select
                   value={editGroup}
                   onChange={(e) => setEditGroup(e.target.value)}
-                  className="w-full h-8 px-2 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-200 focus:outline-none focus:border-emerald-500"
+                  className="w-full h-8 px-2 rounded-lg bg-shell bg-surface border border-line border-line text-xs text-ink text-ink-soft focus:outline-none focus:border-brand"
                 >
                   {groups?.map((g) => (
                     <option key={g.id} value={g.name}>{g.name}</option>
@@ -772,7 +858,7 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
               </div>
 
               <div>
-                <label className="block text-[11px] font-medium text-slate-700 dark:text-zinc-300 mb-1">
+                <label className="block text-[11px] font-medium text-ink-soft text-ink-soft mb-1">
                   Tag / Label Ringkas
                 </label>
                 <input
@@ -780,21 +866,21 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
                   placeholder="Misal: VIP, Member, Prioritas"
                   value={editTag}
                   onChange={(e) => setEditTag(e.target.value)}
-                  className="w-full h-8 px-2.5 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-200 focus:outline-none focus:border-emerald-500"
+                  className="w-full h-8 px-2.5 rounded-lg bg-shell bg-surface border border-line border-line text-xs text-ink text-ink-soft focus:outline-none focus:border-brand"
                 />
               </div>
             </div>
 
             {/* Variabel Dinamis Kustom JSON */}
-            <div className="pt-2 border-t border-slate-200 dark:border-zinc-800">
+            <div className="pt-2 border-t border-line border-line">
               <div className="flex items-center justify-between mb-2">
                 <div>
-                  <div className="text-[11px] font-semibold text-slate-800 dark:text-zinc-200 flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-emerald-500" />
+                  <div className="text-[11px] font-semibold text-ink text-ink-soft flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-brand" />
                     <span>Variabel Dinamis Pesan (JSON)</span>
                   </div>
-                  <p className="text-[10px] text-slate-400 dark:text-zinc-500">
-                    Bisa dipanggil di pesan via template: <code className="text-emerald-600 dark:text-emerald-400">{'{{nama_key}}'}</code>
+                  <p className="text-[10px] text-ink-faint text-ink-faint">
+                    Bisa dipanggil di pesan via template: <code className="text-brand-deep">{'{{nama_key}}'}</code>
                   </p>
                 </div>
                 <Button
@@ -817,19 +903,19 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
                       placeholder="Nama key (mis: kota)"
                       value={field.key}
                       onChange={(e) => updateEditCustomField(idx, 'key', e.target.value)}
-                      className="w-1/2 h-7 px-2 rounded bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-[11px] font-mono text-slate-900 dark:text-zinc-200 focus:outline-none focus:border-emerald-500"
+                      className="w-1/2 h-7 px-2 rounded bg-shell bg-surface border border-line border-line text-[11px] font-mono text-ink text-ink-soft focus:outline-none focus:border-brand"
                     />
                     <input
                       type="text"
                       placeholder="Nilai untuk kontak ini"
                       value={field.value}
                       onChange={(e) => updateEditCustomField(idx, 'value', e.target.value)}
-                      className="w-1/2 h-7 px-2 rounded bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-[11px] text-slate-900 dark:text-zinc-200 focus:outline-none focus:border-emerald-500"
+                      className="w-1/2 h-7 px-2 rounded bg-shell bg-surface border border-line border-line text-[11px] text-ink text-ink-soft focus:outline-none focus:border-brand"
                     />
                     <button
                       type="button"
                       onClick={() => removeEditCustomField(idx)}
-                      className="p-1 text-slate-400 hover:text-rose-500 transition-colors"
+                      className="p-1 text-ink-faint hover:text-clay transition-colors"
                       title="Hapus baris variabel"
                     >
                       <X className="w-3.5 h-3.5" />
@@ -863,12 +949,12 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
             <DialogTitle>Import Data Kontak CSV</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 text-xs py-2">
-            <div className="p-3 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800">
-              <p className="font-medium text-slate-800 dark:text-zinc-200 mb-1">Format Header Kolom CSV:</p>
-              <code className="text-[11px] text-emerald-600 dark:text-emerald-400 font-mono block">
+            <div className="p-3 rounded-lg bg-shell bg-surface border border-line border-line">
+              <p className="font-medium text-ink text-ink-soft mb-1">Format Header Kolom CSV:</p>
+              <code className="text-[11px] text-brand-deep font-mono block">
                 name,phone,group,kota,voucher,status
               </code>
-              <p className="text-[10px] text-slate-500 dark:text-zinc-400 mt-1">
+              <p className="text-[10px] text-ink-muted text-ink-muted mt-1">
                 Semua kolom di luar <code className="font-mono">name</code>, <code className="font-mono">phone</code>, & <code className="font-mono">group</code> otomatis dijadikan variabel dinamis kustom!
               </p>
             </div>
@@ -888,23 +974,23 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
               type="button"
               onClick={() => csvInputRef.current?.click()}
               disabled={isImporting}
-              className="w-full border-2 border-dashed border-slate-300 dark:border-zinc-800 rounded-xl p-6 text-center hover:border-emerald-500 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-wait"
+              className="w-full border-2 border-dashed border-line-strong border-line rounded-lg p-6 text-center hover:border-brand transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-wait"
             >
-              <UploadCloud className="w-8 h-8 text-slate-400 mx-auto mb-2" />
-              <div className="text-xs font-medium text-slate-700 dark:text-zinc-300">
+              <UploadCloud className="w-8 h-8 text-ink-faint mx-auto mb-2" />
+              <div className="text-xs font-medium text-ink-soft text-ink-soft">
                 {isImporting ? 'Mengimpor kontak...' : 'Pilih berkas CSV kontak'}
               </div>
-              <p className="text-[10px] text-slate-400 mt-1">Maksimal 5.000 baris per unggahan</p>
+              <p className="text-[10px] text-ink-faint mt-1">Maksimal 5.000 baris per unggahan</p>
             </button>
 
             {importSummary && (
-              <p className="text-[11px] rounded-lg px-2.5 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-300">
+              <p className="text-[11px] rounded-lg px-2.5 py-2 bg-shell bg-surface border border-line border-line text-ink-soft text-ink-soft">
                 {importSummary}
               </p>
             )}
 
             {errorMsg && (
-              <p className="text-[11px] text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60 rounded-lg px-2.5 py-2">
+              <p className="text-[11px] text-clay text-clay bg-clay-wash dark:bg-rose-950/30 border border-clay-line dark:border-rose-900/60 rounded-lg px-2.5 py-2">
                 {errorMsg}
               </p>
             )}

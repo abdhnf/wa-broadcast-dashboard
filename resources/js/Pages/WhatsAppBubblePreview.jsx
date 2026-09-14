@@ -1,5 +1,6 @@
 import React from 'react';
 import { CheckCheck, MapPin, FileText, Video, MoreVertical, Search } from 'lucide-react';
+import doodleBg from '../assets/wa-chat-doodle.png';
 
 /**
  * Format markdown khas WhatsApp secara aman:
@@ -97,32 +98,39 @@ export function WhatsAppBubblePreview({
   const timeString = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
   return (
-    <div className="w-full max-w-[360px] mx-auto rounded-2xl overflow-hidden border border-slate-200 dark:border-zinc-800 bg-[#efeae2] dark:bg-[#0b141a] shadow-md text-[13px] flex flex-col font-sans select-none transition-colors">
+    <div className="w-full max-w-[360px] mx-auto rounded-lg overflow-hidden border border-line border-line bg-[#efeae2] dark:bg-[#0b141a]  text-[13px] flex flex-col font-sans select-none transition-colors">
       {/* WhatsApp Chat Header */}
-      <div className="bg-[#f0f2f5] dark:bg-[#202c33] px-3.5 py-2.5 flex items-center justify-between text-slate-800 dark:text-zinc-100 border-b border-slate-200 dark:border-zinc-800/80">
+      <div className="bg-[#f0f2f5] dark:bg-[#202c33] px-3.5 py-2.5 flex items-center justify-between text-ink text-ink border-b border-line border-line">
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-8 h-8 rounded-full bg-[#00a884] flex items-center justify-center text-xs font-bold text-white shrink-0 shadow-xs">
+          <div className="w-8 h-8 rounded-full bg-[#00a884] flex items-center justify-center text-xs font-bold text-white shrink-0 ">
             {initial}
           </div>
           <div className="min-w-0 leading-tight">
-            <div className="text-xs font-semibold truncate text-slate-900 dark:text-zinc-100">
+            <div className="text-xs font-semibold truncate text-ink text-ink">
               {displayName}
             </div>
-            <div className="text-[10px] text-slate-500 dark:text-zinc-400 truncate">
+            <div className="text-[10px] text-ink-muted text-ink-muted truncate">
               {displayPhone ? `+${displayPhone}` : 'online'}
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2.5 text-slate-500 dark:text-zinc-400 shrink-0">
+        <div className="flex items-center gap-2.5 text-ink-muted text-ink-muted shrink-0">
           <Search className="w-3.5 h-3.5 cursor-pointer opacity-75 hover:opacity-100" />
           <MoreVertical className="w-3.5 h-3.5 cursor-pointer opacity-75 hover:opacity-100" />
         </div>
       </div>
 
-      {/* WhatsApp Chat Wallpaper Background */}
-      <div className="relative p-3.5 min-h-[230px] flex flex-col justify-end bg-[#efeae2] dark:bg-[#0b141a] bg-[radial-gradient(#cbd5e1_1px,transparent_1px)] dark:bg-[radial-gradient(#1f2c34_1px,transparent_1px)] [background-size:16px_16px]">
+      {/* WhatsApp Chat Wallpaper Background dengan Doodle Asli WA */}
+      <div
+        className="relative p-3.5 min-h-[230px] flex flex-col justify-end bg-[#efeae2] dark:bg-[#0b141a]"
+        style={{
+          backgroundImage: `url(${doodleBg})`,
+          backgroundRepeat: 'repeat',
+          backgroundSize: '360px auto',
+        }}
+      >
         {/* Outgoing WhatsApp Bubble (Pesan Keluar) */}
-        <div className="relative self-end max-w-[90%] bg-[#d9fdd3] dark:bg-[#005c4b] text-[#111b21] dark:text-[#e9edef] rounded-lg rounded-tr-none p-2.5 shadow-sm border border-emerald-300/30 dark:border-transparent">
+        <div className="relative self-end max-w-[90%] bg-[#d9fdd3]  text-[#111b21]  rounded-lg rounded-tr-none p-2.5  ">
           {/* Gelembung Ekor (Bubble Tail WhatsApp) */}
           <div
             className="absolute top-0 -right-2 w-0 h-0 border-t-[9px] border-t-[#d9fdd3] dark:border-t-[#005c4b] border-r-[9px] border-r-transparent"
@@ -134,17 +142,17 @@ export function WhatsAppBubblePreview({
             <div className="rounded-md overflow-hidden mb-1.5 bg-black/5 dark:bg-black/20 border border-black/10">
               {mediaType === 'video' ? (
                 <div className="w-full h-32 bg-black/80 flex items-center justify-center text-white text-xs gap-1.5">
-                  <Video className="w-5 h-5 text-emerald-400" />
+                  <Video className="w-5 h-5 text-brand-soft" />
                   <span>Video WhatsApp</span>
                 </div>
               ) : mediaType === 'document' ? (
-                <div className="p-2.5 flex items-center gap-2.5 bg-white/60 dark:bg-zinc-900/50">
-                  <FileText className="w-6 h-6 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <div className="p-2.5 flex items-center gap-2.5 bg-white/60">
+                  <FileText className="w-6 h-6 text-brand-deep shrink-0" />
                   <div className="min-w-0 flex-1">
-                    <div className="text-xs font-medium truncate text-slate-800 dark:text-zinc-200">
+                    <div className="text-xs font-medium truncate text-ink text-ink-soft">
                       Berkas Dokumen
                     </div>
-                    <div className="text-[10px] text-slate-500 dark:text-zinc-400">PDF / Dokumen</div>
+                    <div className="text-[10px] text-ink-muted text-ink-muted">PDF / Dokumen</div>
                   </div>
                 </div>
               ) : (
@@ -162,16 +170,16 @@ export function WhatsAppBubblePreview({
 
           {/* Location Card */}
           {location && (location.latitude || location.lat) && (
-            <div className="rounded-md overflow-hidden mb-1.5 bg-white/80 dark:bg-zinc-900/80 border border-slate-200 dark:border-zinc-800 text-xs p-2 space-y-1">
-              <div className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400 font-semibold text-[11px]">
+            <div className="rounded-md overflow-hidden mb-1.5 bg-white/80 bg-surface border border-line border-line text-xs p-2 space-y-1">
+              <div className="flex items-center gap-1.5 text-leaf-deep text-brand-soft font-semibold text-[11px]">
                 <MapPin className="w-3.5 h-3.5" />
                 <span>Lokasi Terbagikan</span>
               </div>
-              <div className="text-[10px] text-slate-600 dark:text-zinc-400 font-mono">
+              <div className="text-[10px] text-ink-soft text-ink-muted font-mono">
                 {location.latitude || location.lat}, {location.longitude || location.lng}
               </div>
               {location.name && (
-                <div className="text-[11px] font-medium text-slate-800 dark:text-zinc-200 truncate">
+                <div className="text-[11px] font-medium text-ink text-ink-soft truncate">
                   {location.name}
                 </div>
               )}
@@ -185,7 +193,7 @@ export function WhatsAppBubblePreview({
               dangerouslySetInnerHTML={{ __html: formatWhatsAppMarkdown(processedText) }}
             />
           ) : (
-            <div className="text-[11px] italic text-slate-500 dark:text-zinc-400 pr-2">
+            <div className="text-[11px] italic text-ink-muted text-ink-muted pr-2">
               (Belum ada isi teks pesan)
             </div>
           )}

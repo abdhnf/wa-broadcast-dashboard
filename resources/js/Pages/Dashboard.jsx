@@ -71,10 +71,10 @@ function statusLabel(status) {
 }
 
 function statusClass(status) {
-  if (SUCCESS_STATUSES.includes(status)) return 'text-emerald-600 dark:text-emerald-400';
+  if (SUCCESS_STATUSES.includes(status)) return 'text-brand-deep';
   if (FAILURE_STATUSES.includes(status)) return 'text-rose-500';
   if (status === 'pacing') return 'text-amber-500';
-  return 'text-slate-500 dark:text-zinc-400';
+  return 'text-ink-muted text-ink-muted';
 }
 
 export function DashboardPage({ onNavigate }) {
@@ -214,13 +214,13 @@ export function DashboardPage({ onNavigate }) {
   return (
     <div className="space-y-5">
       {/* Header + aksi cepat */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-[#0f1117] p-4 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-xs">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-surface  p-4 rounded-lg border border-line border-line ">
         <div>
-          <h1 className="text-base font-bold text-slate-900 dark:text-white">
+          <h1 className="text-base font-bold text-ink dark:text-white">
             Dashboard Broadcast & CRM
           </h1>
-          <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
-            Data live dari WhatsApp API Gateway (Fastify :3100)
+          <p className="text-xs text-ink-muted mt-0.5">
+            Data live dari WhatsApp API Gateway
             {lastSync ? `, sinkron ${formatClock(lastSync.toISOString())} WIB` : ''}
           </p>
         </div>
@@ -233,7 +233,7 @@ export function DashboardPage({ onNavigate }) {
             className="text-xs"
             disabled={loading}
           >
-            <RefreshCw className={`w-3.5 h-3.5 mr-1 text-slate-600 dark:text-zinc-400 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-3.5 h-3.5 mr-1 text-ink-soft text-ink-muted ${loading ? 'animate-spin' : ''}`} />
             <span>Muat Ulang</span>
           </Button>
 
@@ -245,7 +245,7 @@ export function DashboardPage({ onNavigate }) {
       </div>
 
       {error && (
-        <div className="flex items-start gap-2 p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-500/30 text-xs text-rose-700 dark:text-rose-300">
+        <div className="flex items-start gap-2 p-3 rounded-lg bg-clay-wash  border border-clay-line text-xs text-clay-deep">
           <AlertTriangle className="w-4 h-4 shrink-0 mt-px" />
           <span>{error}</span>
         </div>
@@ -253,54 +253,54 @@ export function DashboardPage({ onNavigate }) {
 
       {/* Metrik ringkas */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="bg-white dark:bg-[#0f1117] p-3.5 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-xs">
-          <span className="text-[11px] font-medium text-slate-500 dark:text-zinc-400 flex items-center gap-1.5">
+        <div className="bg-surface  p-3.5 rounded-lg border border-line border-line ">
+          <span className="text-[11px] font-medium text-ink-muted text-ink-muted flex items-center gap-1.5">
             <Radio className="w-3 h-3" /> Antrean Aktif
           </span>
-          <div className="text-xl font-bold text-slate-900 dark:text-white mt-1">
+          <div className="text-xl font-bold text-ink dark:text-white mt-1">
             {formatNumber(derived.queued)}
           </div>
-          <div className="text-[10px] text-slate-400 mt-0.5">
+          <div className="text-[10px] text-ink-faint mt-0.5">
             Menunggu / pacing / sedang dikirim
           </div>
         </div>
 
-        <div className="bg-white dark:bg-[#0f1117] p-3.5 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-xs">
-          <span className="text-[11px] font-medium text-slate-500 dark:text-zinc-400 flex items-center gap-1.5">
+        <div className="bg-surface  p-3.5 rounded-lg border border-line border-line ">
+          <span className="text-[11px] font-medium text-ink-muted text-ink-muted flex items-center gap-1.5">
             <Send className="w-3 h-3" /> Terkirim Hari Ini
           </span>
-          <div className="text-xl font-bold text-slate-900 dark:text-white mt-1">
+          <div className="text-xl font-bold text-ink dark:text-white mt-1">
             {formatNumber(derived.sentToday)}
           </div>
-          <div className="text-[10px] text-slate-400 mt-0.5">
+          <div className="text-[10px] text-ink-faint mt-0.5">
             {derived.failedToday > 0 ? `${formatNumber(derived.failedToday)} gagal/tidak valid` : 'Tidak ada kegagalan'}
           </div>
         </div>
 
-        <div className="bg-white dark:bg-[#0f1117] p-3.5 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-xs">
-          <span className="text-[11px] font-medium text-slate-500 dark:text-zinc-400 flex items-center gap-1.5">
+        <div className="bg-surface  p-3.5 rounded-lg border border-line border-line ">
+          <span className="text-[11px] font-medium text-ink-muted text-ink-muted flex items-center gap-1.5">
             <CircleSlash className="w-3 h-3" /> Tingkat Pengiriman
           </span>
-          <div className="text-xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">
+          <div className="text-xl font-bold text-brand-deep mt-1">
             {derived.successRate === null ? '-' : `${derived.successRate.toFixed(1)}%`}
           </div>
-          <div className="text-[10px] text-slate-400 mt-0.5">
+          <div className="text-[10px] text-ink-faint mt-0.5">
             Dari {formatNumber(derived.sentToday + derived.failedToday)} pesan selesai hari ini
           </div>
         </div>
 
-        <div className="bg-white dark:bg-[#0f1117] p-3.5 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-xs">
-          <span className="text-[11px] font-medium text-slate-500 dark:text-zinc-400 flex items-center gap-1.5">
+        <div className="bg-surface  p-3.5 rounded-lg border border-line border-line ">
+          <span className="text-[11px] font-medium text-ink-muted text-ink-muted flex items-center gap-1.5">
             <Smartphone className="w-3 h-3" /> Sesi WhatsApp Terhubung
           </span>
-          <div className="text-xl font-bold text-slate-900 dark:text-white mt-1 flex items-center justify-between">
+          <div className="text-xl font-bold text-ink dark:text-white mt-1 flex items-center justify-between">
             <span>
               {derived.connectedCount}{' '}
-              <span className="text-xs font-normal text-slate-400">/ {sessions.length} Sesi</span>
+              <span className="text-xs font-normal text-ink-faint">/ {sessions.length} Sesi</span>
             </span>
-            {derived.connectedCount > 0 && <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />}
+            {derived.connectedCount > 0 && <span className="w-2.5 h-2.5 rounded-full bg-brand animate-pulse" />}
           </div>
-          <div className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-0.5">
+          <div className="text-[10px] text-brand-deep mt-0.5">
             {autoRotateEnabled ? 'Auto-rotate Aktif' : 'Pilih Nomor Manual'}
           </div>
         </div>
@@ -308,8 +308,8 @@ export function DashboardPage({ onNavigate }) {
 
       {/* Kuota & pacing */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        <div className="bg-white dark:bg-[#0f1117] p-3.5 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-xs">
-          <div className="flex items-center justify-between text-[11px] font-medium text-slate-500 dark:text-zinc-400">
+        <div className="bg-surface  p-3.5 rounded-lg border border-line border-line ">
+          <div className="flex items-center justify-between text-[11px] font-medium text-ink-muted text-ink-muted">
             <span className="flex items-center gap-1.5">
               <BarChart3 className="w-3 h-3" /> Kuota Pengiriman {usage?.quotaPeriod ? `(${usage.quotaPeriod})` : ''}
             </span>
@@ -317,16 +317,16 @@ export function DashboardPage({ onNavigate }) {
               {isUnlimited ? 'Tanpa batas (admin)' : `${formatNumber(usedInPeriod)} / ${formatNumber(quotaLimit)}`}
             </span>
           </div>
-          <Progress value={isUnlimited ? 6 : quotaPercent} className="h-1.5 mt-2" />
-          <div className="text-[10px] text-slate-400 mt-1">
+          <Progress value={isUnlimited ? 6 : quotaPercent} className="h-2.5 mt-2" />
+          <div className="text-[10px] text-ink-faint mt-1">
             {usage?.quotaResetAt
               ? `Reset ${new Date(usage.quotaResetAt).toLocaleDateString('id-ID', { day: '2-digit', month: 'long' })}`
               : 'Jadwal reset belum tercatat'}
           </div>
         </div>
 
-        <div className="bg-white dark:bg-[#0f1117] p-3.5 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-xs">
-          <div className="flex items-center justify-between text-[11px] font-medium text-slate-500 dark:text-zinc-400">
+        <div className="bg-surface  p-3.5 rounded-lg border border-line border-line ">
+          <div className="flex items-center justify-between text-[11px] font-medium text-ink-muted text-ink-muted">
             <span className="flex items-center gap-1.5">
               <Timer className="w-3 h-3" /> Rata-rata Jeda Anti-Ban (Gaussian Jitter)
             </span>
@@ -334,7 +334,7 @@ export function DashboardPage({ onNavigate }) {
           </div>
           <div className="mt-2 flex items-end gap-1 h-8">
             {derived.hourly.length === 0 && (
-              <span className="text-[10px] text-slate-400">Belum ada aktivitas pengiriman tercatat.</span>
+              <span className="text-[10px] text-ink-faint">Belum ada aktivitas pengiriman tercatat.</span>
             )}
             {derived.hourly.map((h) => {
               const total = h.sent + h.failed;
@@ -342,13 +342,15 @@ export function DashboardPage({ onNavigate }) {
                 <div key={h.label} className="flex-1 flex flex-col items-center gap-1" title={`${h.label}: ${h.sent} terkirim, ${h.failed} gagal`}>
                   <div className="w-full flex flex-col justify-end" style={{ height: '26px' }}>
                     <div
-                      className="w-full bg-emerald-500/80 rounded-t"
+                      className="w-full bg-leaf rounded-t transition-all"
                       style={{ height: `${Math.max(2, (h.sent / derived.maxHourly) * 26)}px` }}
+                      title={`${h.sent} terkirim`}
                     />
                     {h.failed > 0 && (
                       <div
-                        className="w-full bg-rose-500/80"
+                        className="w-full bg-clay transition-all"
                         style={{ height: `${Math.max(2, (h.failed / derived.maxHourly) * 26)}px` }}
+                        title={`${h.failed} gagal`}
                       />
                     )}
                   </div>
@@ -356,41 +358,41 @@ export function DashboardPage({ onNavigate }) {
               );
             })}
           </div>
-          <div className="text-[10px] text-slate-400 mt-1">
+          <div className="text-[10px] text-ink-faint mt-1">
             Distribusi pengiriman per jam dari log pesan terbaru
           </div>
         </div>
       </div>
 
       {/* Tabel sesi WhatsApp */}
-      <div className="bg-white dark:bg-[#0f1117] rounded-xl border border-slate-200 dark:border-zinc-800 overflow-hidden shadow-xs">
-        <div className="p-3.5 border-b border-slate-100 dark:border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="bg-surface  rounded-lg border border-line border-line overflow-hidden ">
+        <div className="p-3.5 border-b border-line border-line flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <div className="flex items-center gap-2">
-              <Smartphone className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-              <h2 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+              <Smartphone className="w-4 h-4 text-brand-deep" />
+              <h2 className="text-xs font-bold text-ink dark:text-white uppercase tracking-wider">
                 Daftar Sesi WhatsApp (WA API Gateway)
               </h2>
               <Badge variant="outline" className="text-[10px]">
                 {derived.connectedCount} Online
               </Badge>
             </div>
-            <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-0.5">
+            <p className="text-[11px] text-ink-muted text-ink-muted mt-0.5">
               Sesi yang terhubung ke akun Anda beserta status anti-ban terakhir
             </p>
           </div>
 
-          <div className="flex items-center gap-3 bg-slate-50 dark:bg-zinc-900 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-zinc-800">
+          <div className="flex items-center gap-3 bg-shell bg-surface px-3 py-1.5 rounded-lg border border-line border-line">
             <div className="flex items-center gap-2">
               <RefreshCw
-                className={`w-3.5 h-3.5 ${autoRotateEnabled ? 'text-emerald-500' : 'text-slate-400'} ${rotateSaving ? 'animate-spin' : ''}`}
+                className={`w-3.5 h-3.5 ${autoRotateEnabled ? 'text-brand' : 'text-ink-faint'} ${rotateSaving ? 'animate-spin' : ''}`}
                 style={{ animationDuration: '6s' }}
               />
               <div>
-                <span className="text-[11px] font-semibold text-slate-800 dark:text-zinc-200 block leading-tight">
+                <span className="text-[11px] font-semibold text-ink text-ink-soft block leading-tight">
                   Auto-Rotate Sesi
                 </span>
-                <span className="text-[9px] text-slate-400 block">
+                <span className="text-[9px] text-ink-faint block">
                   {autoRotateEnabled ? 'Rotasi nomor otomatis saat blast' : 'Gunakan nomor spesifik yang dipilih'}
                 </span>
               </div>
@@ -400,8 +402,8 @@ export function DashboardPage({ onNavigate }) {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-600 dark:text-zinc-300 min-w-[760px]">
-            <thead className="bg-slate-50 dark:bg-zinc-900/60 text-slate-700 dark:text-zinc-400 uppercase text-[10px] tracking-wider font-semibold border-b border-slate-200 dark:border-zinc-800">
+          <table className="w-full text-left text-xs text-ink-soft text-ink-soft min-w-[760px]">
+            <thead className="bg-shell bg-surface text-ink-soft text-ink-muted uppercase text-[10px] tracking-wider font-semibold border-b border-line border-line">
               <tr>
                 <th className="py-2.5 px-4">Nama Sesi / Label</th>
                 <th className="py-2.5 px-4">Nomor WhatsApp</th>
@@ -412,10 +414,10 @@ export function DashboardPage({ onNavigate }) {
                 <th className="py-2.5 px-4 text-right">Peran Pengiriman</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
+            <tbody className="divide-y divide-line">
               {sessions.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="py-6 px-4 text-center text-slate-400 text-[11px]">
+                  <td colSpan={7} className="py-6 px-4 text-center text-ink-faint text-[11px]">
                     {loading ? 'Memuat sesi dari wa-api...' : 'Belum ada sesi WhatsApp pada akun ini.'}
                   </td>
                 </tr>
@@ -424,20 +426,20 @@ export function DashboardPage({ onNavigate }) {
                 const isConn = s.status === 'connected';
                 const risk = s.riskScore || 0;
                 return (
-                  <tr key={s.id} className="hover:bg-slate-50/60 dark:hover:bg-zinc-900/40 transition-colors">
-                    <td className="py-3 px-4 font-semibold text-slate-900 dark:text-zinc-100">
+                  <tr key={s.id} className="hover:bg-surface-alt/60 transition-colors">
+                    <td className="py-3 px-4 font-semibold text-ink text-ink">
                       <div className="flex items-center gap-2">
-                        <Smartphone className="w-3.5 h-3.5 text-slate-400" />
+                        <Smartphone className="w-3.5 h-3.5 text-ink-faint" />
                         <span>{s.name}</span>
                       </div>
-                      <div className="text-[10px] text-slate-400 mt-0.5">{s.id}</div>
+                      <div className="text-[10px] text-ink-faint mt-0.5">{s.id}</div>
                     </td>
-                    <td className="py-3 px-4 font-medium text-emerald-700 dark:text-emerald-400">
+                    <td className="py-3 px-4 font-medium text-brand-deep">
                       +{s.phone}
                     </td>
                     <td className="py-3 px-4">
                       {isConn ? (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-brand-deep">
                           <CheckCircle2 className="w-3.5 h-3.5" />
                           <span>Connected</span>
                         </span>
@@ -448,32 +450,32 @@ export function DashboardPage({ onNavigate }) {
                         </span>
                       )}
                     </td>
-                    <td className="py-3 px-4 text-slate-800 dark:text-zinc-200">
+                    <td className="py-3 px-4 text-ink text-ink-soft">
                       {formatNumber(s.metrics?.totalSent ?? 0)} pesan
-                      <div className="text-[10px] text-slate-400 mt-0.5">
+                      <div className="text-[10px] text-ink-faint mt-0.5">
                         {formatNumber(s.metrics?.totalDelivered ?? 0)} delivered
                       </div>
                     </td>
-                    <td className="py-3 px-4 text-slate-800 dark:text-zinc-200">
+                    <td className="py-3 px-4 text-ink text-ink-soft">
                       {(s.metrics?.avgPacingDelaySec ?? 0).toFixed(1)}s
                     </td>
                     <td className="py-3 px-4">
                       <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                         risk < 30
-                          ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300'
-                          : 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300'
+                          ? 'bg-brand-wash  text-leaf-deep'
+                          : 'bg-honey-wash  text-honey-deep'
                       }`}>
                         {risk} / 100
                       </span>
                     </td>
                     <td className="py-3 px-4 text-right">
                       {autoRotateEnabled ? (
-                        <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
+                        <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-brand-wash  text-brand-deep border border-brand-line ">
                           <RefreshCw className="w-2.5 h-2.5" />
                           <span>Auto-Pool</span>
                         </span>
                       ) : (
-                        <span className="text-[10px] text-slate-400">Manual Pick</span>
+                        <span className="text-[10px] text-ink-faint">Manual Pick</span>
                       )}
                     </td>
                   </tr>
@@ -486,13 +488,13 @@ export function DashboardPage({ onNavigate }) {
 
       {/* Riwayat batch & log pesan terbaru */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
-        <div className="bg-white dark:bg-[#0f1117] rounded-xl border border-slate-200 dark:border-zinc-800 overflow-hidden shadow-xs">
-          <div className="p-3.5 border-b border-slate-100 dark:border-zinc-800 flex items-center justify-between">
+        <div className="bg-surface  rounded-lg border border-line border-line overflow-hidden ">
+          <div className="p-3.5 border-b border-line border-line flex items-center justify-between">
             <div>
-              <h2 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+              <h2 className="text-xs font-bold text-ink dark:text-white uppercase tracking-wider">
                 Batch Broadcast Terbaru
               </h2>
-              <p className="text-[11px] text-slate-500 dark:text-zinc-400">
+              <p className="text-[11px] text-ink-muted text-ink-muted">
                 Dikelompokkan dari batch_id pesan di wa-api
               </p>
             </div>
@@ -503,38 +505,38 @@ export function DashboardPage({ onNavigate }) {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-600 dark:text-zinc-300 min-w-[560px]">
-              <thead className="bg-slate-50 dark:bg-zinc-900/60 text-slate-700 dark:text-zinc-400 uppercase text-[10px] tracking-wider font-semibold border-b border-slate-200 dark:border-zinc-800">
+            <table className="w-full text-left text-xs text-ink-soft text-ink-soft min-w-[560px]">
+              <thead className="bg-shell bg-surface text-ink-soft text-ink-muted uppercase text-[10px] tracking-wider font-semibold border-b border-line border-line">
                 <tr>
                   <th className="py-2.5 px-4">Batch</th>
                   <th className="py-2.5 px-4">Progres</th>
                   <th className="py-2.5 px-4 text-right">Waktu</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
+              <tbody className="divide-y divide-line">
                 {derived.batches.length === 0 && (
                   <tr>
-                    <td colSpan={3} className="py-6 px-4 text-center text-slate-400 text-[11px]">
+                    <td colSpan={3} className="py-6 px-4 text-center text-ink-faint text-[11px]">
                       Belum ada batch blast tercatat.
                     </td>
                   </tr>
                 )}
                 {derived.batches.map((b) => (
-                  <tr key={b.id} className="hover:bg-slate-50/60 dark:hover:bg-zinc-900/40 transition-colors">
-                    <td className="py-3 px-4 font-semibold text-slate-900 dark:text-zinc-100">
+                  <tr key={b.id} className="hover:bg-surface-alt/60 transition-colors">
+                    <td className="py-3 px-4 font-semibold text-ink text-ink">
                       <div>{b.name}</div>
-                      <div className="text-[10px] text-slate-400 mt-0.5">{b.sessionId}</div>
+                      <div className="text-[10px] text-ink-faint mt-0.5">{b.sessionId}</div>
                     </td>
                     <td className="py-3 px-4 w-48">
                       <div className="flex items-center justify-between text-[10px] mb-1">
-                        <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
+                        <span className="text-brand-deep font-semibold">
                           {b.done} / {b.total}
                         </span>
                         {b.failed > 0 && <span className="text-rose-500">{b.failed} gagal</span>}
                       </div>
-                      <Progress value={(b.done / (b.total || 1)) * 100} className="h-1.5" />
+                      <Progress value={(b.done / (b.total || 1)) * 100} className="h-2" />
                     </td>
-                    <td className="py-3 px-4 text-right text-[10px] text-slate-500 dark:text-zinc-400">
+                    <td className="py-3 px-4 text-right text-[10px] text-ink-muted text-ink-muted">
                       {formatClock(b.createdAt)}
                     </td>
                   </tr>
@@ -544,19 +546,19 @@ export function DashboardPage({ onNavigate }) {
           </div>
         </div>
 
-        <div className="bg-white dark:bg-[#0f1117] rounded-xl border border-slate-200 dark:border-zinc-800 overflow-hidden shadow-xs">
-          <div className="p-3.5 border-b border-slate-100 dark:border-zinc-800">
-            <h2 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+        <div className="bg-surface  rounded-lg border border-line border-line overflow-hidden ">
+          <div className="p-3.5 border-b border-line border-line">
+            <h2 className="text-xs font-bold text-ink dark:text-white uppercase tracking-wider">
               Log Pesan Terbaru
             </h2>
-            <p className="text-[11px] text-slate-500 dark:text-zinc-400">
+            <p className="text-[11px] text-ink-muted text-ink-muted">
               Status riil dari antrean wa-api, termasuk jeda pacing yang diterapkan
             </p>
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-600 dark:text-zinc-300 min-w-[560px]">
-              <thead className="bg-slate-50 dark:bg-zinc-900/60 text-slate-700 dark:text-zinc-400 uppercase text-[10px] tracking-wider font-semibold border-b border-slate-200 dark:border-zinc-800">
+            <table className="w-full text-left text-xs text-ink-soft text-ink-soft min-w-[560px]">
+              <thead className="bg-shell bg-surface text-ink-soft text-ink-muted uppercase text-[10px] tracking-wider font-semibold border-b border-line border-line">
                 <tr>
                   <th className="py-2.5 px-4">Tujuan</th>
                   <th className="py-2.5 px-4">Status</th>
@@ -564,29 +566,29 @@ export function DashboardPage({ onNavigate }) {
                   <th className="py-2.5 px-4 text-right">Waktu</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
+              <tbody className="divide-y divide-line">
                 {derived.recent.length === 0 && (
                   <tr>
-                    <td colSpan={4} className="py-6 px-4 text-center text-slate-400 text-[11px]">
+                    <td colSpan={4} className="py-6 px-4 text-center text-ink-faint text-[11px]">
                       {loading ? 'Memuat log pesan...' : 'Belum ada pesan dikirim dari akun ini.'}
                     </td>
                   </tr>
                 )}
                 {derived.recent.map((m) => (
-                  <tr key={m.id} className="hover:bg-slate-50/60 dark:hover:bg-zinc-900/40 transition-colors">
+                  <tr key={m.id} className="hover:bg-surface-alt/60 transition-colors">
                     <td className="py-2.5 px-4">
-                      <div className="text-slate-900 dark:text-zinc-100">+{m.to}</div>
-                      <div className="text-[10px] text-slate-400 truncate max-w-[220px]">
+                      <div className="text-ink text-ink">+{m.to}</div>
+                      <div className="text-[10px] text-ink-faint truncate max-w-[220px]">
                         {m.text || m.caption || m.mode}
                       </div>
                     </td>
                     <td className={`py-2.5 px-4 text-[11px] font-medium ${statusClass(m.status)}`}>
                       {statusLabel(m.status)}
                     </td>
-                    <td className="py-2.5 px-4 text-slate-800 dark:text-zinc-200">
+                    <td className="py-2.5 px-4 text-ink text-ink-soft">
                       {Number(m.jitterDelayMs) > 0 ? `${(Number(m.jitterDelayMs) / 1000).toFixed(1)}s` : '-'}
                     </td>
-                    <td className="py-2.5 px-4 text-right text-[10px] text-slate-500 dark:text-zinc-400">
+                    <td className="py-2.5 px-4 text-right text-[10px] text-ink-muted text-ink-muted">
                       {formatClock(m.timestamp)}
                     </td>
                   </tr>

@@ -191,29 +191,29 @@ export function PlaygroundPage({ sessions, templates, contacts = [] }) {
   return (
     <div className="space-y-4">
       {/* Header Panel */}
-      <div className="bg-white dark:bg-[#0f1117] p-4 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-xs">
+      <div className="bg-surface  p-4 rounded-lg border border-line border-line ">
         <div className="flex items-center gap-2">
-          <Terminal className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-          <h1 className="text-base font-bold text-slate-900 dark:text-white">API Playground & Simulator</h1>
+          <Terminal className="w-4 h-4 text-brand-deep" />
+          <h1 className="text-base font-bold text-ink dark:text-white">API Playground & Simulator</h1>
           <Badge variant="outline" className="font-mono text-[10px]">Fastify Engine 3100</Badge>
         </div>
-        <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
+        <p className="text-xs text-ink-muted text-ink-muted mt-1">
           Uji coba langsung payload pesan sesuai skema Fastify WA API: Teks berformat WhatsApp, Media Gambar/Dokumen (Upload/URL), dan Titik Lokasi GPS.
         </p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         {/* Left Column: Form Simulator */}
-        <div className="lg:col-span-7 bg-white dark:bg-[#0f1117] p-4 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-xs">
+        <div className="lg:col-span-7 bg-surface  p-4 rounded-lg border border-line border-line ">
           <form onSubmit={handleSendTest} className="space-y-3.5 text-xs">
             {/* Quick Template Selector & Reset */}
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-zinc-800/80">
+            <div className="flex items-center justify-between pb-2 border-b border-line border-line">
               <div className="flex items-center gap-2">
-                <span className="text-[11px] text-slate-500 dark:text-zinc-400">Template:</span>
+                <span className="text-[11px] text-ink-muted text-ink-muted">Template:</span>
                 {templates && templates.length > 0 ? (
                   <select
                     onChange={(e) => handleApplyTemplate(e.target.value)}
-                    className="h-7 px-2 rounded bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-[11px] text-slate-700 dark:text-zinc-300 focus:outline-none"
+                    className="h-7 px-2 rounded bg-shell bg-surface border border-line border-line text-[11px] text-ink-soft text-ink-soft focus:outline-none"
                   >
                     <option value="">Pilih template pesan...</option>
                     {templates.map((t) => (
@@ -221,7 +221,7 @@ export function PlaygroundPage({ sessions, templates, contacts = [] }) {
                     ))}
                   </select>
                 ) : (
-                  <span className="text-[10px] text-slate-400">Belum ada template</span>
+                  <span className="text-[10px] text-ink-faint">Belum ada template</span>
                 )}
               </div>
 
@@ -230,7 +230,7 @@ export function PlaygroundPage({ sessions, templates, contacts = [] }) {
                 variant="ghost"
                 size="sm"
                 onClick={handleResetForm}
-                className="h-7 px-2 text-[11px] text-slate-500 hover:text-slate-900 dark:hover:text-zinc-200"
+                className="h-7 px-2 text-[11px] text-ink-muted hover:text-ink dark:hover:text-ink-soft"
                 title="Reset seluruh isian form pesan"
               >
                 <RotateCcw className="w-3 h-3 mr-1" />
@@ -241,13 +241,13 @@ export function PlaygroundPage({ sessions, templates, contacts = [] }) {
             {/* Pilihan Sesi WhatsApp (Sama dengan Playground WA API: Bisa Auto Rotate atau Pilih Nomor Spesifik) */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-[11px] font-medium text-slate-700 dark:text-zinc-300 mb-1">
+                <label className="block text-[11px] font-medium text-ink-soft text-ink-soft mb-1">
                   Pilih Nomor Pengirim (WA API Session)
                 </label>
                 <select
                   value={selectedSessionId}
                   onChange={(e) => setSelectedSessionId(e.target.value)}
-                  className="w-full h-8 px-2.5 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-200 focus:outline-none focus:border-emerald-500"
+                  className="w-full h-8 px-2.5 rounded-lg bg-shell bg-surface border border-line border-line text-xs text-ink text-ink-soft focus:outline-none focus:border-brand"
                 >
                   <option value="auto_rotate">Auto Rotate (Round-Robin Sesi Online)</option>
                   {sessions?.map((s) => (
@@ -259,7 +259,7 @@ export function PlaygroundPage({ sessions, templates, contacts = [] }) {
               </div>
 
               <div>
-                <label className="block text-[11px] font-medium text-slate-700 dark:text-zinc-300 mb-1">
+                <label className="block text-[11px] font-medium text-ink-soft text-ink-soft mb-1">
                   Nomor Tujuan WhatsApp (628xxx) *
                 </label>
                 <ContactSearchInput
@@ -282,7 +282,7 @@ export function PlaygroundPage({ sessions, templates, contacts = [] }) {
 
             {/* Tipe Pesan WA API Selector */}
             <div>
-              <label className="block text-[11px] font-medium text-slate-700 dark:text-zinc-300 mb-1.5">
+              <label className="block text-[11px] font-medium text-ink-soft text-ink-soft mb-1.5">
                 Jenis Pesan (Sesuai Skema WA API)
               </label>
               <div className="grid grid-cols-3 gap-2">
@@ -300,8 +300,8 @@ export function PlaygroundPage({ sessions, templates, contacts = [] }) {
                       onClick={() => setMessageType(item.id)}
                       className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg border text-xs font-medium transition-colors cursor-pointer ${
                         isSelected
-                          ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 font-semibold'
-                          : 'border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-900 text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800'
+                          ? 'border-brand bg-brand-wash text-brand-deep font-semibold'
+                          : 'border-line border-line bg-shell bg-surface text-ink-soft text-ink-muted hover:bg-surface-sunken hover:bg-surface-alt'
                       }`}
                     >
                       <Icon className="w-3.5 h-3.5" />
@@ -314,15 +314,15 @@ export function PlaygroundPage({ sessions, templates, contacts = [] }) {
 
             {/* Field Khusus Media */}
             {messageType === 'media' && (
-              <div className="p-3 rounded-xl bg-slate-50 dark:bg-zinc-900/60 border border-slate-200 dark:border-zinc-800 space-y-2">
+              <div className="p-3 rounded-lg bg-shell bg-surface border border-line border-line space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-medium text-slate-700 dark:text-zinc-300">
+                  <span className="text-[11px] font-medium text-ink-soft text-ink-soft">
                     Unggah Berkas Media ke Storage atau Isi URL
                   </span>
                   <select
                     value={mediaType}
                     onChange={(e) => setMediaType(e.target.value)}
-                    className="h-7 px-2 rounded bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-[11px] text-slate-800 dark:text-zinc-200 focus:outline-none"
+                    className="h-7 px-2 rounded bg-surface bg-surface-alt border border-line border-line text-[11px] text-ink text-ink-soft focus:outline-none"
                   >
                     <option value="image">Gambar (image)</option>
                     <option value="document">Dokumen PDF (document)</option>
@@ -341,8 +341,8 @@ export function PlaygroundPage({ sessions, templates, contacts = [] }) {
 
             {/* Field Khusus Lokasi */}
             {messageType === 'location' && (
-              <div className="p-3 rounded-xl bg-slate-50 dark:bg-zinc-900/60 border border-slate-200 dark:border-zinc-800 space-y-2">
-                <div className="text-[11px] font-medium text-slate-700 dark:text-zinc-300 flex items-center gap-1.5">
+              <div className="p-3 rounded-lg bg-shell bg-surface border border-line border-line space-y-2">
+                <div className="text-[11px] font-medium text-ink-soft text-ink-soft flex items-center gap-1.5">
                   <MapPin className="w-3.5 h-3.5 text-blue-500" />
                   <span>Parameter Koordinat Lokasi WhatsApp</span>
                 </div>
@@ -352,14 +352,14 @@ export function PlaygroundPage({ sessions, templates, contacts = [] }) {
                     placeholder="Nama Tempat / Gedung"
                     value={locName}
                     onChange={(e) => setLocName(e.target.value)}
-                    className="h-8 px-2.5 rounded-lg bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-xs text-slate-900 dark:text-zinc-200 focus:outline-none"
+                    className="h-8 px-2.5 rounded-lg bg-surface bg-surface-alt border border-line border-line text-xs text-ink text-ink-soft focus:outline-none"
                   />
                   <input
                     type="text"
                     placeholder="Alamat Detail"
                     value={locAddress}
                     onChange={(e) => setLocAddress(e.target.value)}
-                    className="h-8 px-2.5 rounded-lg bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-xs text-slate-900 dark:text-zinc-200 focus:outline-none"
+                    className="h-8 px-2.5 rounded-lg bg-surface bg-surface-alt border border-line border-line text-xs text-ink text-ink-soft focus:outline-none"
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-2">
@@ -369,7 +369,7 @@ export function PlaygroundPage({ sessions, templates, contacts = [] }) {
                     placeholder="Latitude (-6.225)"
                     value={locLat}
                     onChange={(e) => setLocLat(e.target.value)}
-                    className="h-8 px-2.5 rounded-lg bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-xs font-mono text-slate-900 dark:text-zinc-200 focus:outline-none"
+                    className="h-8 px-2.5 rounded-lg bg-surface bg-surface-alt border border-line border-line text-xs font-mono text-ink text-ink-soft focus:outline-none"
                   />
                   <input
                     type="number"
@@ -377,7 +377,7 @@ export function PlaygroundPage({ sessions, templates, contacts = [] }) {
                     placeholder="Longitude (106.808)"
                     value={locLng}
                     onChange={(e) => setLocLng(e.target.value)}
-                    className="h-8 px-2.5 rounded-lg bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-xs font-mono text-slate-900 dark:text-zinc-200 focus:outline-none"
+                    className="h-8 px-2.5 rounded-lg bg-surface bg-surface-alt border border-line border-line text-xs font-mono text-ink text-ink-soft focus:outline-none"
                   />
                 </div>
               </div>
@@ -385,7 +385,7 @@ export function PlaygroundPage({ sessions, templates, contacts = [] }) {
 
             {/* WhatsApp Text Editor dengan Formatting & Emoji Toolbar */}
             <div>
-              <label className="block text-[11px] font-medium text-slate-700 dark:text-zinc-300 mb-1">
+              <label className="block text-[11px] font-medium text-ink-soft text-ink-soft mb-1">
                 {messageType === 'media' ? 'Caption Pesan Media' : messageType === 'location' ? 'Catatan Tambahan Lokasi' : 'Isi Teks Pesan WhatsApp *'}
               </label>
 
@@ -403,14 +403,14 @@ export function PlaygroundPage({ sessions, templates, contacts = [] }) {
                 required={messageType === 'text'}
                 value={text}
                 onChange={(e) => setText(e.target.value)}
-                className="w-full p-2.5 rounded-b-lg bg-slate-50 dark:bg-zinc-900 border border-t-0 border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-200 font-sans focus:outline-none focus:border-emerald-500 leading-relaxed"
+                className="w-full p-2.5 rounded-b-lg bg-shell bg-surface border border-t-0 border-line border-line text-xs text-ink text-ink-soft font-sans focus:outline-none focus:border-brand leading-relaxed"
                 placeholder="Tulis pesan dengan format WhatsApp (*tebal*, _miring_, emoji 👋)..."
               />
             </div>
 
             {/* Prioritas Pengiriman (Queue Priority) */}
             <div>
-              <label className="block text-[11px] font-medium text-slate-700 dark:text-zinc-300 mb-1.5">
+              <label className="block text-[11px] font-medium text-ink-soft text-ink-soft mb-1.5">
                 Prioritas Antrean (Priority)
               </label>
               <div className="grid grid-cols-2 gap-2">
@@ -419,16 +419,16 @@ export function PlaygroundPage({ sessions, templates, contacts = [] }) {
                   onClick={() => setPriority('normal')}
                   className={`flex items-start gap-2 p-2 rounded-lg border text-left transition ${
                     priority === 'normal'
-                      ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-500/60 text-emerald-800 dark:text-emerald-300 ring-1 ring-emerald-500/30'
-                      : 'bg-slate-50 dark:bg-zinc-900/60 border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400 hover:border-slate-300 dark:hover:border-zinc-700'
+                      ? 'bg-brand-wash  border-brand text-brand-deep ring-1 ring-brand/30'
+                      : 'bg-shell bg-surface border-line border-line text-ink-soft text-ink-muted hover:border-line-strong hover:border-line-strong'
                   }`}
                 >
-                  <div className={`p-1 rounded shrink-0 ${priority === 'normal' ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400' : 'bg-slate-200 dark:bg-zinc-800 text-slate-500'}`}>
+                  <div className={`p-1 rounded shrink-0 ${priority === 'normal' ? 'bg-brand-wash text-brand-deep' : 'bg-line bg-surface-alt text-ink-muted'}`}>
                     <Clock className="w-3.5 h-3.5" />
                   </div>
                   <div>
                     <div className="text-[11px] font-semibold">Normal</div>
-                    <div className="text-[9px] text-slate-400 dark:text-zinc-400 leading-tight">Antrean santai anti-ban</div>
+                    <div className="text-[9px] text-ink-faint text-ink-muted leading-tight">Antrean santai anti-ban</div>
                   </div>
                 </button>
 
@@ -437,16 +437,16 @@ export function PlaygroundPage({ sessions, templates, contacts = [] }) {
                   onClick={() => setPriority('high')}
                   className={`flex items-start gap-2 p-2 rounded-lg border text-left transition ${
                     priority === 'high'
-                      ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-500/60 text-amber-800 dark:text-amber-300 ring-1 ring-amber-500/30'
-                      : 'bg-slate-50 dark:bg-zinc-900/60 border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400 hover:border-slate-300 dark:hover:border-zinc-700'
+                      ? 'bg-honey-wash dark:bg-amber-950/30 border-amber-500/60 text-amber-800 text-honey ring-1 ring-amber-500/30'
+                      : 'bg-shell bg-surface border-line border-line text-ink-soft text-ink-muted hover:border-line-strong hover:border-line-strong'
                   }`}
                 >
-                  <div className={`p-1 rounded shrink-0 ${priority === 'high' ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400' : 'bg-slate-200 dark:bg-zinc-800 text-slate-500'}`}>
+                  <div className={`p-1 rounded shrink-0 ${priority === 'high' ? 'bg-amber-500/20 text-honey text-honey' : 'bg-line bg-surface-alt text-ink-muted'}`}>
                     <Zap className="w-3.5 h-3.5" />
                   </div>
                   <div>
                     <div className="text-[11px] font-semibold">Prioritas (High)</div>
-                    <div className="text-[9px] text-slate-400 dark:text-zinc-400 leading-tight">Salip antrean utama</div>
+                    <div className="text-[9px] text-ink-faint text-ink-muted leading-tight">Salip antrean utama</div>
                   </div>
                 </button>
               </div>
@@ -467,8 +467,8 @@ export function PlaygroundPage({ sessions, templates, contacts = [] }) {
 
         {/* Right Column: Live Chat Bubble & Response Echo */}
         <div className="lg:col-span-5 space-y-4">
-          <div className="bg-white dark:bg-[#0f1117] p-4 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-xs">
-            <div className="text-[11px] font-semibold text-slate-700 dark:text-zinc-300 mb-2 flex items-center justify-between">
+          <div className="bg-surface  p-4 rounded-lg border border-line border-line ">
+            <div className="text-[11px] font-semibold text-ink-soft text-ink-soft mb-2 flex items-center justify-between">
               <span>Pratinjau Tampilan di WhatsApp</span>
               <Badge variant="secondary" className="text-[10px] font-mono">Live Render</Badge>
             </div>
@@ -484,24 +484,24 @@ export function PlaygroundPage({ sessions, templates, contacts = [] }) {
             />
           </div>
 
-          <div className="bg-white dark:bg-[#0f1117] p-4 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-xs">
-            <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100 dark:border-zinc-800">
-              <span className="text-[11px] font-mono text-slate-500 dark:text-zinc-400 flex items-center gap-1.5">
-                <Code2 className="w-3.5 h-3.5 text-emerald-500" />
+          <div className="bg-surface  p-4 rounded-lg border border-line border-line ">
+            <div className="flex items-center justify-between pb-2 mb-2 border-b border-line border-line">
+              <span className="text-[11px] font-mono text-ink-muted text-ink-muted flex items-center gap-1.5">
+                <Code2 className="w-3.5 h-3.5 text-brand" />
                 <span>Respon JSON Server Gateway</span>
               </span>
               {apiResponse && (
                 <span className={`text-[10px] px-1.5 py-0.5 rounded border ${
                   apiResponse.error
-                    ? 'text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800'
-                    : 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800'
+                    ? 'text-clay text-clay bg-clay-wash  border-clay-line border-clay-line'
+                    : 'text-brand-deep bg-brand-wash  border-brand-line '
                 }`}>
                   HTTP {apiResponse.status || '-'} {apiResponse.error ? 'ERROR' : 'OK'}
                 </span>
               )}
             </div>
 
-            <pre className="p-2.5 rounded-lg bg-slate-900 dark:bg-black text-[11px] font-mono text-emerald-400 overflow-x-auto max-h-56 leading-relaxed">
+            <pre className="p-2.5 rounded-lg bg-ink text-[11px] font-mono text-brand-soft overflow-x-auto max-h-56 leading-relaxed">
               {apiResponse
                 ? JSON.stringify(apiResponse, null, 2)
                 : '// Klik tombol "Kirim Pesan Uji Coba" untuk melihat respon nyata dari Fastify Gateway...'}

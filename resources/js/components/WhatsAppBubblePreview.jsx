@@ -1,5 +1,6 @@
 import React from 'react';
 import { CheckCheck, MapPin, FileText, Video, MoreVertical, Search } from 'lucide-react';
+import doodleBg from '../assets/wa-chat-doodle.png';
 
 /**
  * Format markdown khas WhatsApp secara aman:
@@ -119,8 +120,15 @@ export function WhatsAppBubblePreview({
         </div>
       </div>
 
-      {/* WhatsApp Chat Wallpaper Background */}
-      <div className="relative p-3.5 min-h-[230px] flex flex-col justify-end bg-[#efeae2] dark:bg-[#0b141a] bg-[radial-gradient(#cbd5e1_1px,transparent_1px)] dark:bg-[radial-gradient(#1f2c34_1px,transparent_1px)] [background-size:16px_16px]">
+      {/* WhatsApp Chat Wallpaper Background dengan Doodle Asli WA */}
+      <div
+        className="relative p-3.5 min-h-[230px] flex flex-col justify-end bg-[#efeae2] dark:bg-[#0b141a]"
+        style={{
+          backgroundImage: `url(${doodleBg})`,
+          backgroundRepeat: 'repeat',
+          backgroundSize: '360px auto',
+        }}
+      >
         {/* Outgoing WhatsApp Bubble (Pesan Keluar) */}
         <div className="relative self-end max-w-[90%] bg-[#d9fdd3] dark:bg-[#005c4b] text-[#111b21] dark:text-[#e9edef] rounded-lg rounded-tr-none p-2.5 shadow-sm border border-emerald-300/30 dark:border-transparent">
           {/* Gelembung Ekor (Bubble Tail WhatsApp) */}

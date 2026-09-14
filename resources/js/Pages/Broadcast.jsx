@@ -38,6 +38,7 @@ import {
   DialogTitle,
   DialogFooter
 } from '../components/ui/Dialog';
+import { WhatsAppBubblePreview } from '../components/WhatsAppBubblePreview';
 import {
   clearQueue,
   clearBatch,
@@ -188,6 +189,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
 
   // Form State Setup Campaign
   const [isWizardOpen, setIsWizardOpen] = useState(false);
+  const [wizardStep, setWizardStep] = useState(1); // Step 1: Audiens | Step 2: Pesan & Template | Step 3: Pengirim & Pacing
   const [editingCampaign, setEditingCampaign] = useState(null); // Kampanye yang sedang diedit
   const [campaignName, setCampaignName] = useState('');
   const [selectedGroup, setSelectedGroup] = useState('');
@@ -302,6 +304,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
       )
     );
     setFormError('');
+    setWizardStep(1);
     setIsWizardOpen(true);
   };
 
@@ -1162,14 +1165,14 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
   return (
     <div className="space-y-4">
       {/* Sub-view Tab Selector Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-[#0f1117] p-4 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-xs">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-surface  p-4 rounded-lg border border-line border-line ">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-base font-bold text-slate-900 dark:text-white">
+            <h1 className="text-base font-bold text-ink dark:text-white">
               {subView === 'campaigns' ? 'Blast Engine & Kampanye' : `Antrean Pesan: ${selectedCampaign?.name || 'Semua Kampanye'}`}
             </h1>
             {subView === 'queue' && selectedCampaign?.priority === 'high' && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-500/15 text-honey text-honey border border-honey-line">
                 <Zap className="w-3 h-3" /> Prioritas High
               </span>
             )}
@@ -1187,7 +1190,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
                   }`}
             </Badge>
           </div>
-          <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
+          <p className="text-xs text-ink-muted text-ink-muted mt-0.5">
             {subView === 'campaigns'
               ? 'Kelola kampanye broadcast WhatsApp dengan opsi nomor spesifik atau auto-rotate pool.'
               : 'Tambah nomor target, jalankan blast, lalu pantau status riil dari antrean wa-api.'}
@@ -1213,7 +1216,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
                   disabled={isCancellingQueue}
                   variant="outline"
                   size="sm"
-                  className="text-xs border-rose-500/30 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                  className="text-xs border-clay-line text-clay text-clay hover:bg-clay-wash dark:hover:bg-rose-950/30"
                 >
                   <XCircle className="w-3.5 h-3.5 mr-1" />
                   <span>Batalkan Sisa Antrean</span>
@@ -1225,7 +1228,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
                   disabled={isRetryingAllFailed}
                   variant="outline"
                   size="sm"
-                  className="text-xs border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30"
+                  className="text-xs border-honey-line text-honey text-honey hover:bg-honey-wash dark:hover:bg-amber-950/30"
                 >
                   <RotateCcw className={`w-3.5 h-3.5 mr-1 ${isRetryingAllFailed ? 'animate-spin' : ''}`} />
                   <span>Retry Semua Gagal ({failedItems.length})</span>
@@ -1246,7 +1249,14 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
             <>
               <Button
                 onClick={() => {
+                  setEditingCampaign(null);
                   setCampaignName('');
+                  setSelectedGroup(groups[0]?.name || '');
+                  setSelectedTemplate(templates[0]?.id || '');
+                  setSelectedSessionId('auto_rotate');
+                  setCampaignPriority('normal');
+                  setFormError('');
+                  setWizardStep(1);
                   setIsWizardOpen(true);
                 }}
                 variant="default"
@@ -1263,10 +1273,10 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
 
       {/* TAMPILAN 1: DAFTAR KAMPANYE (SUBVIEW = 'campaigns') */}
       {subView === 'campaigns' && (
-        <div className="bg-white dark:bg-[#0f1117] rounded-xl border border-slate-200 dark:border-zinc-800 overflow-hidden shadow-xs">
+        <div className="bg-surface  rounded-lg border border-line border-line overflow-hidden ">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-600 dark:text-zinc-300 min-w-[750px]">
-              <thead className="bg-slate-50 dark:bg-zinc-900/60 text-slate-700 dark:text-zinc-400 uppercase text-[10px] tracking-wider font-semibold border-b border-slate-200 dark:border-zinc-800">
+            <table className="w-full text-left text-xs text-ink-soft text-ink-soft min-w-[750px]">
+              <thead className="bg-shell bg-surface text-ink-soft text-ink-muted uppercase text-[10px] tracking-wider font-semibold border-b border-line border-line">
                 <tr>
                   <th className="py-2.5 px-4">Nama Kampanye</th>
                   <th className="py-2.5 px-4">Segmen Audiens</th>
@@ -1276,31 +1286,31 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
                   <th className="py-2.5 px-4 text-right">Aksi</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
+              <tbody className="divide-y divide-line">
                 {campaigns.map((camp) => (
-                  <tr key={camp.id} className="hover:bg-slate-50/60 dark:hover:bg-zinc-900/40 transition-colors">
-                    <td className="py-3 px-4 font-semibold text-slate-900 dark:text-zinc-100">
+                  <tr key={camp.id} className="hover:bg-surface-alt/60 transition-colors">
+                    <td className="py-3 px-4 font-semibold text-ink text-ink">
                       <div className="flex items-center gap-1.5">
                         <span>{camp.name}</span>
                         {camp.priority === 'high' && (
-                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-amber-500/15 text-honey text-honey border border-honey-line">
                             <Zap className="w-2.5 h-2.5" /> High
                           </span>
                         )}
                       </div>
-                      <div className="text-[10px] text-slate-400 font-mono mt-0.5">{camp.createdAt}</div>
+                      <div className="text-[10px] text-ink-faint font-mono mt-0.5">{camp.createdAt}</div>
                     </td>
                     <td className="py-3 px-4">
                       <Badge variant="secondary" className="text-[10px]">
                         {camp.groupName}
                       </Badge>
                     </td>
-                    <td className="py-3 px-4 text-slate-800 dark:text-zinc-200 font-medium">
+                    <td className="py-3 px-4 text-ink text-ink-soft font-medium">
                       {camp.templateTitle}
                     </td>
                     <td className="py-3 px-4">
-                      <span className="inline-flex items-center gap-1 font-mono text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">
-                        <Smartphone className="w-3 h-3 text-slate-400" />
+                      <span className="inline-flex items-center gap-1 font-mono text-[11px] text-leaf-deep text-brand-soft font-medium">
+                        <Smartphone className="w-3 h-3 text-ink-faint" />
                         <span>{resolveSessionName(camp.sessionUsed)}</span>
                       </span>
                     </td>
@@ -1312,57 +1322,57 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
                             {/* Baris Atas: Badge Status & Rasio Ringkas */}
                             <div className="flex items-center justify-between gap-2 text-[10px]">
                               {stats.derivedStatus === 'in_progress' ? (
-                                <span className="inline-flex items-center gap-1 font-semibold text-emerald-600 dark:text-emerald-400">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                <span className="inline-flex items-center gap-1 font-semibold text-brand-deep">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-brand animate-pulse" />
                                   <span>Berjalan</span>
                                 </span>
                               ) : stats.derivedStatus === 'paused' ? (
-                                <span className="inline-flex items-center gap-1 font-semibold text-amber-600 dark:text-amber-400">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                                <span className="inline-flex items-center gap-1 font-semibold text-honey text-honey">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-honey" />
                                   <span>Dijeda</span>
                                 </span>
                               ) : stats.derivedStatus === 'completed' ? (
-                                <span className="inline-flex items-center gap-1 font-semibold text-emerald-600 dark:text-emerald-400">
-                                  <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                                <span className="inline-flex items-center gap-1 font-semibold text-brand-deep">
+                                  <CheckCircle2 className="w-3 h-3 text-brand" />
                                   <span>Selesai</span>
                                 </span>
                               ) : stats.derivedStatus === 'failed' ? (
-                                <span className="inline-flex items-center gap-1 font-semibold text-rose-600 dark:text-rose-400">
+                                <span className="inline-flex items-center gap-1 font-semibold text-clay text-clay">
                                   <AlertCircle className="w-3 h-3 text-rose-500" />
                                   <span>Gagal</span>
                                 </span>
                               ) : (
-                                <span className="inline-flex items-center gap-1 font-semibold text-slate-500 dark:text-zinc-400">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-slate-300 dark:bg-zinc-600" />
+                                <span className="inline-flex items-center gap-1 font-semibold text-ink-muted text-ink-muted">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-line-strong" />
                                   <span>Siap Mulai</span>
                                 </span>
                               )}
 
-                              <span className="font-mono text-slate-500 dark:text-zinc-400">
+                              <span className="font-mono text-ink-muted text-ink-muted">
                                 {stats.successCount + stats.failedCount} / {stats.total}
                               </span>
                             </div>
 
                             {/* Baris Tengah: Multi-Segment Stacked Progress Bar */}
-                            <div className="h-2 w-full rounded-full bg-slate-100 dark:bg-zinc-800 overflow-hidden flex">
+                            <div className="h-2.5 w-full rounded-full bg-surface-sunken border border-line-strong/40 overflow-hidden flex">
                               {stats.successPct > 0 && (
                                 <div
                                   style={{ width: `${stats.successPct}%` }}
-                                  className="h-full bg-emerald-500 transition-all duration-300"
+                                  className="h-full bg-leaf transition-all duration-300"
                                   title={`${stats.successCount} Berhasil`}
                                 />
                               )}
                               {stats.failedPct > 0 && (
                                 <div
                                   style={{ width: `${stats.failedPct}%` }}
-                                  className="h-full bg-rose-500 transition-all duration-300"
+                                  className="h-full bg-clay transition-all duration-300"
                                   title={`${stats.failedCount} Gagal`}
                                 />
                               )}
                               {stats.inFlightPct > 0 && (
                                 <div
                                   style={{ width: `${stats.inFlightPct}%` }}
-                                  className="h-full bg-amber-400 animate-pulse transition-all duration-300"
+                                  className="h-full bg-honey animate-pulse transition-all duration-300"
                                   title={`${stats.inFlightCount} Sedang Diproses`}
                                 />
                               )}
@@ -1370,24 +1380,24 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
 
                             {/* Baris Bawah: Breakdown Angka Berhasil & Gagal */}
                             <div className="flex items-center gap-2 text-[10px] flex-wrap font-medium">
-                              <span className="text-emerald-600 dark:text-emerald-400 inline-flex items-center gap-0.5">
+                              <span className="text-leaf-deep inline-flex items-center gap-0.5 font-semibold">
                                 <span>✓</span>
                                 <span>{stats.successCount} berhasil</span>
                               </span>
                               {stats.failedCount > 0 && (
-                                <span className="text-rose-600 dark:text-rose-400 inline-flex items-center gap-0.5">
+                                <span className="text-clay text-clay inline-flex items-center gap-0.5">
                                   <span>✕</span>
                                   <span>{stats.failedCount} gagal</span>
                                 </span>
                               )}
                               {stats.inFlightCount > 0 && (
-                                <span className="text-amber-600 dark:text-amber-400 inline-flex items-center gap-0.5">
+                                <span className="text-honey text-honey inline-flex items-center gap-0.5">
                                   <span>⏳</span>
                                   <span>{stats.inFlightCount} proses</span>
                                 </span>
                               )}
                               {stats.draftCount > 0 && stats.derivedStatus === 'idle' && (
-                                <span className="text-slate-400 dark:text-zinc-500">
+                                <span className="text-ink-faint text-ink-faint">
                                   {stats.draftCount} siap
                                 </span>
                               )}
@@ -1404,10 +1414,10 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
                             variant="ghost"
                             size="sm"
                             onClick={(e) => handleOpenEditCampaign(camp, e)}
-                            className="text-xs h-7 text-slate-500 hover:text-slate-900 dark:hover:text-white"
+                            className="text-xs h-7 text-ink-muted hover:text-ink dark:hover:text-white"
                             title="Edit informasi kampanye"
                           >
-                            <Edit2 className="w-3 h-3 mr-1 text-slate-400" />
+                            <Edit2 className="w-3 h-3 mr-1 text-ink-faint" />
                             <span>Edit</span>
                           </Button>
                         )}
@@ -1418,7 +1428,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
                           onClick={() => handleOpenQueueView(camp)}
                           className="text-xs h-7"
                         >
-                          <ListOrdered className="w-3 h-3 mr-1 text-emerald-600 dark:text-emerald-400" />
+                          <ListOrdered className="w-3 h-3 mr-1 text-brand-deep" />
                           <span>Buka Antrean</span>
                         </Button>
                       </div>
@@ -1436,14 +1446,14 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
         <div className="space-y-3">
           {/* Detail Kampanye & Kontrol Pacing */}
           {selectedCampaign && (
-            <div className="bg-white dark:bg-[#0f1117] p-3 rounded-xl border border-slate-200 dark:border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+            <div className="bg-surface  p-3 rounded-lg border border-line border-line flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className={`w-2 h-2 rounded-full ${sending ? 'bg-amber-500 animate-pulse' : (queuePaused || selectedCampaign.status === 'paused') ? 'bg-amber-500' : selectedCampaign.status === 'in_progress' ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
-                <span className="font-semibold text-slate-900 dark:text-white">{selectedCampaign.name}</span>
+                <span className={`w-2 h-2 rounded-full ${sending ? 'bg-honey animate-pulse' : (queuePaused || selectedCampaign.status === 'paused') ? 'bg-honey' : selectedCampaign.status === 'in_progress' ? 'bg-brand animate-pulse' : 'bg-slate'}`} />
+                <span className="font-semibold text-ink dark:text-white">{selectedCampaign.name}</span>
                 {selectedCampaign.batchId ? (
-                  <span className="text-slate-400 text-[11px]">({selectedCampaign.batchId})</span>
+                  <span className="text-ink-faint text-[11px]">({selectedCampaign.batchId})</span>
                 ) : (
-                  <span className="text-slate-400 text-[11px]">(draft lokal)</span>
+                  <span className="text-ink-faint text-[11px]">(draft lokal)</span>
                 )}
                 <Badge variant={selectedCampaign.status === 'in_progress' ? 'default' : 'secondary'} className="text-[10px]">
                   {sending
@@ -1488,7 +1498,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
                     >
                       {queuePaused || selectedCampaign.status === 'paused' ? (
                         <>
-                          <Play className="w-3 h-3 mr-1 text-emerald-600 dark:text-emerald-400" />
+                          <Play className="w-3 h-3 mr-1 text-brand-deep" />
                           <span>Lanjutkan Antrean</span>
                         </>
                       ) : (
@@ -1503,7 +1513,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
                       variant="outline"
                       size="sm"
                       onClick={handleStopBlast}
-                      className="h-7 text-xs border-rose-500/30 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                      className="h-7 text-xs border-clay-line text-clay text-clay hover:bg-clay-wash dark:hover:bg-rose-950/30"
                       title="Hentikan dan batalkan sisa antrean blast di gateway"
                     >
                       <Square className="w-3 h-3 mr-1" />
@@ -1517,7 +1527,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
                       variant="outline"
                       size="sm"
                       disabled
-                      className="h-7 text-xs border-emerald-500/30 text-emerald-600 dark:text-emerald-400 font-medium cursor-default"
+                      className="h-7 text-xs border-brand-line text-brand-deep font-medium cursor-default"
                     >
                       <CheckCircle2 className="w-3 h-3 mr-1" />
                       <span>Selesai</span>
@@ -1528,7 +1538,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
                         variant="default"
                         size="sm"
                         onClick={handleStartBlast}
-                        className="h-7 text-xs bg-emerald-600 hover:bg-emerald-500 text-white"
+                        className="h-7 text-xs bg-brand hover:bg-brand text-white"
                       >
                         <Play className="w-3 h-3 mr-1" />
                         <span>Kirim Sisa Target</span>
@@ -1542,7 +1552,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
                     size="sm"
                     disabled={sending}
                     onClick={handleStartBlast}
-                    className="h-7 text-xs bg-emerald-600 hover:bg-emerald-500 text-white"
+                    className="h-7 text-xs bg-brand hover:bg-brand text-white"
                   >
                     <Play className="w-3 h-3 mr-1" />
                     <span>{sending ? 'Menyerahkan ke Gateway...' : 'Mulai Blast'}</span>
@@ -1553,18 +1563,18 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
           )}
 
           {queueError && (
-            <div className="p-2.5 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-500/30 text-[11px] text-rose-700 dark:text-rose-300">
+            <div className="p-2.5 rounded-lg bg-clay-wash  border border-clay-line text-[11px] text-clay-deep">
               {queueError}
             </div>
           )}
 
           {/* Filter Toolbar Antrean */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 bg-white dark:bg-[#0f1117] p-3 rounded-xl border border-slate-200 dark:border-zinc-800 text-xs">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 bg-surface  p-3 rounded-lg border border-line border-line text-xs">
             <div className="flex flex-wrap items-center gap-2">
               <select
                 value={queueStatusFilter}
                 onChange={(e) => setQueueStatusFilter(e.target.value)}
-                className="py-1.5 px-3 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs text-slate-800 dark:text-zinc-200 focus:outline-none focus:border-emerald-500"
+                className="py-1.5 px-3 rounded-lg bg-shell bg-surface border border-line border-line text-xs text-ink text-ink-soft focus:outline-none focus:border-brand"
               >
                 <option value="all">Semua Status</option>
                 {QUEUE_STATUS_OPTIONS.map((opt) => (
@@ -1586,32 +1596,32 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
             </div>
 
             <div className="relative min-w-[240px]">
-              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint" />
               <input
                 type="text"
                 placeholder="Cari nama, nomor, atau pesan..."
                 value={queueSearch}
                 onChange={(e) => setQueueSearch(e.target.value)}
-                className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-200 focus:outline-none focus:border-emerald-500"
+                className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-shell bg-surface border border-line border-line text-xs text-ink text-ink-soft focus:outline-none focus:border-brand"
               />
             </div>
           </div>
 
           {/* Tabel Tunggal Terpadu: Target Kampanye & Status Live wa-api */}
-          <div className="bg-white dark:bg-[#0f1117] rounded-xl border border-slate-200 dark:border-zinc-800 overflow-hidden shadow-xs">
-            <div className="p-3.5 border-b border-slate-100 dark:border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="bg-surface  rounded-lg border border-line border-line overflow-hidden ">
+            <div className="p-3.5 border-b border-line border-line flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div>
-                <h2 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                <h2 className="text-xs font-bold text-ink dark:text-white uppercase tracking-wider">
                   Daftar Antrean & Progres Pengiriman
                 </h2>
-                <p className="text-[11px] text-slate-500 dark:text-zinc-400">
+                <p className="text-[11px] text-ink-muted text-ink-muted">
                   {sentCount} terkirim · {activePacingCount > 0 ? `${activePacingCount} jeda pacing · ` : ''}{pendingCount} menunggu
                   {selectedCampaign?.batchId ? ` · Batch: ${selectedCampaign.batchId}` : ''}
                 </p>
               </div>
               <div className="flex items-center gap-2">
                 {loadingQueue && (
-                  <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                  <span className="text-[10px] text-ink-faint flex items-center gap-1">
                     <RefreshCw className="w-3 h-3 animate-spin" /> Sinkron wa-api
                   </span>
                 )}
@@ -1622,8 +1632,8 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs text-slate-600 dark:text-zinc-300 min-w-[760px]">
-                <thead className="bg-slate-50 dark:bg-zinc-900/60 text-slate-700 dark:text-zinc-400 uppercase text-[10px] tracking-wider font-semibold border-b border-slate-200 dark:border-zinc-800">
+              <table className="w-full text-left text-xs text-ink-soft text-ink-soft min-w-[760px]">
+                <thead className="bg-shell bg-surface text-ink-soft text-ink-muted uppercase text-[10px] tracking-wider font-semibold border-b border-line border-line">
                   <tr>
                     <th className="py-2.5 px-4 w-12 text-center">#</th>
                     <th className="py-2.5 px-4">Kontak & Nomor</th>
@@ -1634,10 +1644,10 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
                     <th className="py-2.5 px-4 text-right">Aksi</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
+                <tbody className="divide-y divide-line">
                   {pagedQueue.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-8 text-center text-slate-400 dark:text-zinc-500">
+                      <td colSpan={7} className="py-8 text-center text-ink-faint text-ink-faint">
                         {loadingQueue
                           ? 'Memuat antrean...'
                           : 'Belum ada nomor target pada filter ini. Klik "Tambah Nomor Antrean" atau "Muat Kontak Segmen".'}
@@ -1645,26 +1655,26 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
                     </tr>
                   ) : (
                     pagedQueue.map((item, idx) => (
-                      <tr key={item.id} className="hover:bg-slate-50/60 dark:hover:bg-zinc-900/40 transition-colors">
-                        <td className="py-2.5 px-4 text-center text-[11px] text-slate-400">
+                      <tr key={item.id} className="hover:bg-surface-alt/60 transition-colors">
+                        <td className="py-2.5 px-4 text-center text-[11px] text-ink-faint">
                           {(safeQueuePage - 1) * QUEUE_PAGE_SIZE + idx + 1}
                         </td>
                         <td className="py-2.5 px-4">
-                          <div className="font-semibold text-slate-900 dark:text-zinc-100">{item.name}</div>
-                          <div className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">+{item.phone}</div>
+                          <div className="font-semibold text-ink text-ink">{item.name}</div>
+                          <div className="text-[11px] text-leaf-deep text-brand-soft font-medium">+{item.phone}</div>
                         </td>
                         <td className="py-2.5 px-4">
-                          <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-slate-100 dark:bg-zinc-800/80 border border-slate-200 dark:border-zinc-700/60 text-[11px] font-medium text-slate-700 dark:text-zinc-300">
-                            <Smartphone className="w-3 h-3 text-emerald-500 shrink-0" />
+                          <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-surface-sunken border border-line text-[11px] font-medium text-ink-soft">
+                            <Smartphone className="w-3 h-3 text-brand shrink-0" />
                             <span className="truncate max-w-[120px]" title={item.sessionDisplay}>{item.sessionDisplay}</span>
                           </div>
                         </td>
                         <td className="py-2.5 px-4">
-                          <div className="text-[11px] font-medium text-slate-700 dark:text-zinc-300">
+                          <div className="text-[11px] font-medium text-ink-soft text-ink-soft">
                             {item.campaignName || selectedCampaign?.name || '-'}
                           </div>
                           {item.liveData?.text ? (
-                            <div className="text-[10px] text-slate-400 truncate max-w-[200px]" title={item.liveData.text}>
+                            <div className="text-[10px] text-ink-faint truncate max-w-[200px]" title={item.liveData.text}>
                               {item.liveData.text}
                             </div>
                           ) : null}
@@ -1675,30 +1685,30 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
                               {Object.entries(item.custom).map(([k, v]) => (
                                 <span
                                   key={k}
-                                  className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700/60 text-slate-700 dark:text-zinc-300 font-mono"
+                                  className="text-[10px] px-1.5 py-0.5 rounded bg-surface-sunken bg-surface-alt border border-line border-line text-ink-soft text-ink-soft font-mono"
                                 >
-                                  {k}: <span className="font-semibold text-emerald-600 dark:text-emerald-400">{String(v)}</span>
+                                  {k}: <span className="font-semibold text-brand-deep">{String(v)}</span>
                                 </span>
                               ))}
                             </div>
                           ) : (
-                            <span className="text-[11px] text-slate-400">-</span>
+                            <span className="text-[11px] text-ink-faint">-</span>
                           )}
                         </td>
                         <td className="py-2.5 px-4">
                           {item.status === 'draft' ? (
-                            <span className="inline-flex items-center gap-1 text-[11px] text-slate-600 dark:text-zinc-400 font-medium">
-                              <Clock className="w-3.5 h-3.5 text-slate-400" />
+                            <span className="inline-flex items-center gap-1 text-[11px] text-ink-soft text-ink-muted font-medium">
+                              <Clock className="w-3.5 h-3.5 text-ink-faint" />
                               <span>Siap Dikirim</span>
                             </span>
                           ) : ['sent', 'delivered', 'read'].includes(item.status) ? (
                             <div>
-                              <span className="inline-flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+                              <span className="inline-flex items-center gap-1 text-[11px] text-brand-deep font-medium">
                                 <CheckCircle2 className="w-3.5 h-3.5" />
                                 <span>{item.status === 'read' ? 'Dibaca' : item.status === 'delivered' ? 'Sampai' : 'Terkirim'}</span>
                               </span>
                               {item.liveData?.timestamp && (
-                                <div className="text-[10px] text-slate-400">
+                                <div className="text-[10px] text-ink-faint">
                                   {new Date(item.liveData.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
                                 </div>
                               )}
@@ -1718,7 +1728,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
                           ) : ['failed', 'invalid_number', 'not_registered'].includes(item.status) ? (
                             <div>
                               <span
-                                className="inline-flex items-center gap-1 text-[11px] text-rose-600 dark:text-rose-400 font-medium"
+                                className="inline-flex items-center gap-1 text-[11px] text-clay text-clay font-medium"
                                 title={item.liveData?.errorDetail || item.error || 'Pengiriman gagal'}
                               >
                                 <AlertCircle className="w-3.5 h-3.5" />
@@ -1739,13 +1749,13 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
                             </div>
                           ) : item.status === 'pending' ? (
                             <div>
-                              <span className="inline-flex items-center gap-1 text-[11px] text-amber-600 dark:text-amber-400 font-medium animate-pulse">
+                              <span className="inline-flex items-center gap-1 text-[11px] text-honey text-honey font-medium animate-pulse">
                                 <Clock className="w-3.5 h-3.5" />
                                 <span>Antrean Gateway</span>
                               </span>
                             </div>
                           ) : (
-                            <span className="inline-flex items-center gap-1 text-[11px] text-slate-500 dark:text-zinc-400 font-medium">
+                            <span className="inline-flex items-center gap-1 text-[11px] text-ink-muted text-ink-muted font-medium">
                               <Clock className="w-3.5 h-3.5" />
                               <span>{QUEUE_STATUS_LABEL[item.status] || item.status}</span>
                             </span>
@@ -1758,7 +1768,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
                                 type="button"
                                 disabled={retryingPhones.has(item.phone)}
                                 onClick={() => handleRetryRecipient(item)}
-                                className="inline-flex items-center gap-1 px-2 py-1 rounded bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/20 text-[11px] font-medium transition cursor-pointer disabled:opacity-50"
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded bg-honey-wash hover:bg-amber-500/20 text-honey text-honey border border-honey-line text-[11px] font-medium transition cursor-pointer disabled:opacity-50"
                                 title="Kirim ulang pesan ini"
                               >
                                 <RotateCcw className={`w-3 h-3 ${retryingPhones.has(item.phone) ? 'animate-spin' : ''}`} />
@@ -1770,13 +1780,13 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
                               <button
                                 type="button"
                                 onClick={() => setDeletingRecipient({ id: item.id, phone: item.phone, name: item.name })}
-                                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors cursor-pointer"
+                                className="p-1.5 rounded-lg text-ink-faint hover:text-rose-500 hover:bg-clay-wash dark:hover:bg-rose-950/30 transition-colors cursor-pointer"
                                 title="Hapus nomor dari antrean lokal"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
                             ) : !item.canRetry ? (
-                              <span className="text-[10px] text-slate-400 dark:text-zinc-500 italic">Terkunci</span>
+                              <span className="text-[10px] text-ink-faint text-ink-faint italic">Terkunci</span>
                             ) : null}
                           </div>
                         </td>
@@ -1788,7 +1798,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
             </div>
 
             {filteredUnifiedQueue.length > QUEUE_PAGE_SIZE && (
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-3 py-2.5 border-t border-slate-200 dark:border-zinc-800 text-[11px] text-slate-500 dark:text-zinc-400">
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-3 py-2.5 border-t border-line border-line text-[11px] text-ink-muted text-ink-muted">
                 <span>
                   Menampilkan {(safeQueuePage - 1) * QUEUE_PAGE_SIZE + 1}
                   {' sampai '}
@@ -1808,7 +1818,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
                     <ChevronLeft className="w-3.5 h-3.5 mr-1" />
                     <span>Sebelumnya</span>
                   </Button>
-                  <span className="px-2 font-medium text-slate-700 dark:text-zinc-300">
+                  <span className="px-2 font-medium text-ink-soft text-ink-soft">
                     {safeQueuePage} / {totalQueuePages}
                   </span>
                   <Button
@@ -1829,241 +1839,396 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
         </div>
       )}
 
-      {/* Modal Buat / Edit Kampanye */}
+      {/* Modal Buat / Edit Kampanye: Wizard 3 Langkah Interaktif */}
       <Dialog open={isWizardOpen} onOpenChange={(open) => {
         setIsWizardOpen(open);
-        if (!open) setEditingCampaign(null);
+        if (!open) {
+          setEditingCampaign(null);
+          setWizardStep(1);
+        }
       }}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-xl">
           <DialogHeader>
-            <DialogTitle>{editingCampaign ? 'Edit Informasi Kampanye' : 'Buat Kampanye Blast Baru'}</DialogTitle>
+            <div className="flex items-center justify-between pr-6">
+              <DialogTitle className="text-base font-bold text-ink">
+                {editingCampaign ? 'Edit Informasi Kampanye' : 'Buat Kampanye Blast Baru'}
+              </DialogTitle>
+              <span className="text-[11px] font-mono font-semibold text-brand">
+                Langkah {wizardStep} dari 3
+              </span>
+            </div>
+            {/* Wizard Step Progress Indicator */}
+            <div className="grid grid-cols-3 gap-1.5 pt-2">
+              <div className={`h-1.5 rounded-full transition-colors ${wizardStep >= 1 ? 'bg-brand' : 'bg-line'}`} />
+              <div className={`h-1.5 rounded-full transition-colors ${wizardStep >= 2 ? 'bg-brand' : 'bg-line'}`} />
+              <div className={`h-1.5 rounded-full transition-colors ${wizardStep >= 3 ? 'bg-brand' : 'bg-line'}`} />
+            </div>
+            <div className="grid grid-cols-3 text-[10px] font-medium text-ink-muted pt-0.5">
+              <span className={wizardStep === 1 ? 'text-brand-deep font-bold' : ''}>1. Target Audiens</span>
+              <span className={`text-center ${wizardStep === 2 ? 'text-brand-deep font-bold' : ''}`}>2. Pesan & Template</span>
+              <span className={`text-right ${wizardStep === 3 ? 'text-brand-deep font-bold' : ''}`}>3. Sesi & Pacing</span>
+            </div>
           </DialogHeader>
 
-          <form onSubmit={handleCreateCampaign} className="space-y-3.5 text-xs py-1">
-            <div>
-              <label className="block text-[11px] font-medium text-slate-700 dark:text-zinc-300 mb-1">
-                Nama Kampanye *
-              </label>
-              <input
-                type="text"
-                required
-                placeholder="Misal: Info Pelanggan Loyal September"
-                value={campaignName}
-                onChange={(e) => setCampaignName(e.target.value)}
-                className="w-full h-8 px-2.5 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-200 focus:outline-none focus:border-emerald-500"
-              />
-            </div>
+          <form onSubmit={handleCreateCampaign} className="space-y-4 text-xs py-2">
+            {/* STEP 1: NAMA KAMPANYE & TARGET AUDIENS */}
+            {wizardStep === 1 && (
+              <div className="space-y-3 blast-page-transition">
+                <div>
+                  <label className="block text-[11px] font-medium text-ink mb-1">
+                    Nama Kampanye *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Misal: Promo Akhir Pekan September"
+                    value={campaignName}
+                    onChange={(e) => setCampaignName(e.target.value)}
+                    className="w-full h-9 px-3 rounded-lg bg-surface border border-line text-xs text-ink focus:outline-none focus:border-brand"
+                  />
+                  <p className="text-[10px] text-ink-faint mt-1">
+                    Beri nama yang mudah dikenali dalam riwayat pengiriman.
+                  </p>
+                </div>
 
-            <div>
-              <label className="block text-[11px] font-medium text-slate-700 dark:text-zinc-300 mb-1">
-                Target Segmen Audiens *
-              </label>
-              <select
-                value={selectedGroup}
-                onChange={(e) => setSelectedGroup(e.target.value)}
-                disabled={Boolean(editingCampaign)}
-                className="w-full h-8 px-2.5 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-200 focus:outline-none focus:border-emerald-500 disabled:opacity-50"
-              >
-                <option value="">Pilih segmen audiens...</option>
-                {groups?.map((g) => (
-                  <option key={g.id} value={g.name}>
-                    {g.name} ({g.count} kontak)
-                  </option>
-                ))}
-              </select>
-              {groups?.length === 0 && (
-                <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-1">
-                  Belum ada segmen. Buat segmen dan tambahkan kontak terlebih dahulu di halaman Kontak.
-                </p>
-              )}
-              {editingCampaign && (
-                <p className="text-[10px] text-slate-400 mt-1">
-                  Segmen awal tidak dapat diubah pada mode edit. Tambah atau kurangi nomor langsung di daftar antrean.
-                </p>
-              )}
-            </div>
+                <div>
+                  <label className="block text-[11px] font-medium text-ink mb-1">
+                    Target Segmen Audiens *
+                  </label>
+                  <select
+                    value={selectedGroup}
+                    onChange={(e) => setSelectedGroup(e.target.value)}
+                    disabled={Boolean(editingCampaign)}
+                    className="w-full h-9 px-3 rounded-lg bg-surface border border-line text-xs text-ink focus:outline-none focus:border-brand disabled:opacity-50"
+                  >
+                    <option value="">Pilih segmen audiens...</option>
+                    {groups?.map((g) => (
+                      <option key={g.id} value={g.name}>
+                        {g.name} ({g.count} kontak)
+                      </option>
+                    ))}
+                  </select>
 
-            <div>
-              <label className="block text-[11px] font-medium text-slate-700 dark:text-zinc-300 mb-1">
-                Pilih Template Pesan *
-              </label>
-              <select
-                value={selectedTemplate}
-                onChange={(e) => setSelectedTemplate(e.target.value)}
-                className="w-full h-8 px-2.5 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-200 focus:outline-none focus:border-emerald-500"
-              >
-                <option value="">Pilih template pesan...</option>
-                {templates?.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.title} ({t.messageType || 'text'})
-                  </option>
-                ))}
-              </select>
-              {templates?.length === 0 && (
-                <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-1">
-                  Belum ada template. Buat template pesan terlebih dahulu di halaman Template.
-                </p>
-              )}
-
-              {/* Info Variabel Template yang Terdeteksi */}
-              {selectedTemplate && (() => {
-                const tpl = templates?.find((t) => t.id === selectedTemplate);
-                if (!tpl?.content) return null;
-                const detectedVars = Array.from(tpl.content.matchAll(/\{\{\s*([\w.]+)\s*\}\}/g)).map((m) => m[1]);
-                if (detectedVars.length === 0) return null;
-                const uniqueVars = Array.from(new Set(detectedVars));
-                return (
-                  <div className="mt-2 p-2 rounded bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-[11px]">
-                    <span className="text-slate-500 dark:text-zinc-400">Variabel dalam template: </span>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {uniqueVars.map((v) => (
-                        <span key={v} className="px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 text-[10px] font-mono text-emerald-700 dark:text-emerald-300">
-                          {`{{${v}}}`}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
-
-            {/* Pilihan Sesi WhatsApp Pengirim (Auto-Rotate vs Pilih Nomor Spesifik) */}
-            <div>
-              <label className="block text-[11px] font-medium text-slate-700 dark:text-zinc-300 mb-1">
-                Sesi WhatsApp Pengirim
-              </label>
-              <select
-                value={selectedSessionId}
-                onChange={(e) => setSelectedSessionId(e.target.value)}
-                className="w-full h-8 px-2.5 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-200 focus:outline-none focus:border-emerald-500"
-              >
-                <option value="auto_rotate">Auto Rotate (Rotasi Otomatis Semua Nomor Online)</option>
-                {sessions?.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} (+{s.phone}) - {s.status}
-                  </option>
-                ))}
-              </select>
-
-              {/* Indikator Beban Sesi (Pre-Flight Load Info) */}
-              {(() => {
-                if (selectedSessionId === 'auto_rotate') {
-                  const connected = (sessions || []).filter((s) => s.status === 'connected' || s.status === 'open');
-                  const totalPending = connected.reduce((acc, s) => acc + (s.queue?.pendingCount || 0), 0);
-                  const totalWaitSec = Math.round((totalPending * 3.5) / Math.max(connected.length, 1));
-
-                  if (totalPending > 0) {
+                  {/* Ringkasan Estimasi Jumlah Penerima */}
+                  {selectedGroup && (() => {
+                    const count = groups?.find((g) => g.name === selectedGroup)?.count || 0;
                     return (
-                      <div className="mt-2 p-2 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40 text-[11px] text-amber-800 dark:text-amber-300">
-                        <div className="flex items-center gap-1.5 font-medium">
-                          <AlertCircle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
-                          <span>Pool memiliki {totalPending} antrean aktif (est. {totalWaitSec > 60 ? `~${Math.ceil(totalWaitSec / 60)} menit` : `${totalWaitSec} detik`})</span>
-                        </div>
-                        <p className="text-[10px] text-amber-700/90 dark:text-amber-400/90 mt-0.5 ml-5 leading-relaxed">
-                          Pesan kampanye baru akan didistribusikan merata ke {connected.length} nomor aktif secara bergantian.
-                        </p>
+                      <div className="mt-2 p-2.5 rounded-lg bg-brand-wash border border-brand-line text-[11px] text-brand-deep flex items-center justify-between">
+                        <span>Estimasi target penerima:</span>
+                        <span className="font-mono font-bold text-xs">{count} kontak</span>
+                      </div>
+                    );
+                  })()}
+
+                  {groups?.length === 0 && (
+                    <p className="text-[10px] text-honey mt-1">
+                      Belum ada segmen. Buat segmen dan tambahkan kontak terlebih dahulu di halaman Kontak.
+                    </p>
+                  )}
+                  {editingCampaign && (
+                    <p className="text-[10px] text-ink-faint mt-1">
+                      Segmen awal tidak dapat diubah pada mode edit. Tambah atau kurangi nomor langsung di daftar antrean.
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* STEP 2: TEMPLATE PESAN & LIVE PREVIEW BUBBLE WA */}
+            {wizardStep === 2 && (
+              <div className="space-y-3 blast-page-transition">
+                <div>
+                  <label className="block text-[11px] font-medium text-ink mb-1">
+                    Pilih Template Pesan *
+                  </label>
+                  <select
+                    value={selectedTemplate}
+                    onChange={(e) => setSelectedTemplate(e.target.value)}
+                    className="w-full h-9 px-3 rounded-lg bg-surface border border-line text-xs text-ink focus:outline-none focus:border-brand"
+                  >
+                    <option value="">Pilih template pesan...</option>
+                    {templates?.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.title} ({t.messageType || 'text'})
+                      </option>
+                    ))}
+                  </select>
+                  {templates?.length === 0 && (
+                    <p className="text-[10px] text-honey mt-1">
+                      Belum ada template. Buat template pesan terlebih dahulu di halaman Template.
+                    </p>
+                  )}
+                </div>
+
+                {/* Pratinjau Pesan Khas WhatsApp dengan Doodle */}
+                {(() => {
+                  const tpl = templates?.find((t) => String(t.id) === String(selectedTemplate));
+                  if (!tpl) {
+                    return (
+                      <div className="p-4 rounded-xl bg-surface-sunken border border-dashed border-line text-center text-xs text-ink-muted">
+                        Pilih template pesan di atas untuk melihat pratinjau bubble WhatsApp.
                       </div>
                     );
                   }
                   return (
-                    <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                      <span>Pool siap: {connected.length} nomor online tanpa antrean menumpuk.</span>
-                    </div>
-                  );
-                }
-
-                const sess = sessions?.find((s) => s.id === selectedSessionId);
-                if (!sess) return null;
-                const qPending = sess.queue?.pendingCount || 0;
-                const qSec = sess.queue?.estimatedWaitSeconds || Math.round(qPending * 3.5);
-
-                if (qPending > 0) {
-                  return (
-                    <div className="mt-2 p-2 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40 text-[11px] text-amber-800 dark:text-amber-300">
-                      <div className="flex items-center gap-1.5 font-medium">
-                        <AlertCircle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
-                        <span>Nomor ini sedang memproses {qPending} antrean (est. {qSec > 60 ? `~${Math.ceil(qSec / 60)} menit` : `${qSec} detik`})</span>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-[11px] font-medium text-ink-muted">
+                        <span>Pratinjau Pesan Keluar:</span>
+                        <span className="font-mono text-[10px] text-brand">{tpl.messageType || 'text'}</span>
                       </div>
-                      <p className="text-[10px] text-amber-700/90 dark:text-amber-400/90 mt-0.5 ml-5 leading-relaxed">
-                        Pesan baru akan diproses bergantian secara adil (fair interleaving). Gunakan Auto-Rotate jika ingin membagi beban ke nomor lain.
-                      </p>
+                      <div className="max-w-[340px] mx-auto">
+                        <WhatsAppBubblePreview
+                          content={tpl.content || tpl.body || ''}
+                          mediaUrl={tpl.mediaUrl || null}
+                          mediaType={tpl.mediaType || 'image'}
+                          location={tpl.location || null}
+                          contact={{ name: 'Nama Pelanggan', phone: '628123456789' }}
+                        />
+                      </div>
                     </div>
                   );
-                }
-
-                return (
-                  <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                    <span>Nomor siap digunakan, antrean kosong.</span>
-                  </div>
-                );
-              })()}
-            </div>
-
-            {/* Prioritas Pengiriman (Queue Priority) */}
-            <div>
-              <label className="block text-[11px] font-medium text-slate-700 dark:text-zinc-300 mb-1.5">
-                Prioritas Antrean (Priority)
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setCampaignPriority('normal')}
-                  className={`flex items-start gap-2 p-2 rounded-lg border text-left transition ${
-                    campaignPriority === 'normal'
-                      ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-500/60 text-emerald-800 dark:text-emerald-300 ring-1 ring-emerald-500/30'
-                      : 'bg-slate-50 dark:bg-zinc-900/60 border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400 hover:border-slate-300 dark:hover:border-zinc-700'
-                  }`}
-                >
-                  <div className={`p-1 rounded shrink-0 ${campaignPriority === 'normal' ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400' : 'bg-slate-200 dark:bg-zinc-800 text-slate-500'}`}>
-                    <Clock className="w-3.5 h-3.5" />
-                  </div>
-                  <div>
-                    <div className="text-[11px] font-semibold">Normal</div>
-                    <div className="text-[9px] text-slate-400 dark:text-zinc-400 leading-tight">Antrean santai anti-ban</div>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setCampaignPriority('high')}
-                  className={`flex items-start gap-2 p-2 rounded-lg border text-left transition ${
-                    campaignPriority === 'high'
-                      ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-500/60 text-amber-800 dark:text-amber-300 ring-1 ring-amber-500/30'
-                      : 'bg-slate-50 dark:bg-zinc-900/60 border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400 hover:border-slate-300 dark:hover:border-zinc-700'
-                  }`}
-                >
-                  <div className={`p-1 rounded shrink-0 ${campaignPriority === 'high' ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400' : 'bg-slate-200 dark:bg-zinc-800 text-slate-500'}`}>
-                    <Zap className="w-3.5 h-3.5" />
-                  </div>
-                  <div>
-                    <div className="text-[11px] font-semibold">Prioritas (High)</div>
-                    <div className="text-[9px] text-slate-400 dark:text-zinc-400 leading-tight">Salip antrean utama</div>
-                  </div>
-                </button>
+                })()}
               </div>
-            </div>
+            )}
 
-            <div className="flex items-start gap-2 p-2.5 rounded-lg bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/40 text-[11px] text-emerald-800 dark:text-emerald-300">
-              <Info className="w-3.5 h-3.5 shrink-0 mt-px" />
-              <span>Kampanye baru langsung membuka antrean pesan. Nomor dari segmen yang dipilih sudah dimuat otomatis bila segmennya punya kontak.</span>
-            </div>
+            {/* STEP 3: SESI PENGIRIM, PACING ANTI-BAN & PRIORITAS */}
+            {wizardStep === 3 && (
+              <div className="space-y-3 blast-page-transition">
+                <div>
+                  <label className="block text-[11px] font-medium text-ink mb-1">
+                    Sesi WhatsApp Pengirim
+                  </label>
+                  <select
+                    value={selectedSessionId}
+                    onChange={(e) => setSelectedSessionId(e.target.value)}
+                    className="w-full h-9 px-3 rounded-lg bg-surface border border-line text-xs text-ink focus:outline-none focus:border-brand"
+                  >
+                    <option value="auto_rotate">Auto Rotate (Rotasi Otomatis Semua Nomor Online)</option>
+                    {sessions?.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} (+{s.phone}) - {s.status}
+                      </option>
+                    ))}
+                  </select>
+
+                  {/* Indikator Beban Sesi */}
+                  {(() => {
+                    if (selectedSessionId === 'auto_rotate') {
+                      const connected = (sessions || []).filter((s) => s.status === 'connected' || s.status === 'open');
+                      const totalPending = connected.reduce((acc, s) => acc + (s.queue?.pendingCount || 0), 0);
+                      const totalWaitSec = Math.round((totalPending * 3.5) / Math.max(connected.length, 1));
+
+                      if (totalPending > 0) {
+                        return (
+                          <div className="mt-2 p-2 rounded-lg bg-honey-wash border border-honey-line text-[11px] text-honey-deep">
+                            <div className="flex items-center gap-1.5 font-medium">
+                              <AlertCircle className="w-3.5 h-3.5 text-honey shrink-0" />
+                              <span>Pool memiliki {totalPending} antrean aktif (est. {totalWaitSec > 60 ? `~${Math.ceil(totalWaitSec / 60)} menit` : `${totalWaitSec} detik`})</span>
+                            </div>
+                            <p className="text-[10px] text-honey-deep/90 mt-0.5 ml-5 leading-relaxed">
+                              Pesan kampanye baru akan didistribusikan merata ke {connected.length} nomor aktif.
+                            </p>
+                          </div>
+                        );
+                      }
+                      return (
+                        <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-leaf-deep font-medium">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-leaf shrink-0" />
+                          <span>Pool siap: {connected.length} nomor online tanpa antrean menumpuk.</span>
+                        </div>
+                      );
+                    }
+
+                    const sess = sessions?.find((s) => s.id === selectedSessionId);
+                    if (!sess) return null;
+                    const qPending = sess.queue?.pendingCount || 0;
+                    const qSec = sess.queue?.estimatedWaitSeconds || Math.round(qPending * 3.5);
+
+                    if (qPending > 0) {
+                      return (
+                        <div className="mt-2 p-2 rounded-lg bg-honey-wash border border-honey-line text-[11px] text-honey-deep">
+                          <div className="flex items-center gap-1.5 font-medium">
+                            <AlertCircle className="w-3.5 h-3.5 text-honey shrink-0" />
+                            <span>Nomor ini sedang memproses {qPending} antrean (est. {qSec > 60 ? `~${Math.ceil(qSec / 60)} menit` : `${qSec} detik`})</span>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-leaf-deep font-medium">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-leaf shrink-0" />
+                        <span>Nomor siap digunakan, antrean kosong.</span>
+                      </div>
+                    );
+                  })()}
+                </div>
+
+                {/* Prioritas Antrean */}
+                <div>
+                  <label className="block text-[11px] font-medium text-ink mb-1.5">
+                    Prioritas Antrean (Priority)
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setCampaignPriority('normal')}
+                      className={`flex items-start gap-2 p-2 rounded-lg border text-left transition ${
+                        campaignPriority === 'normal'
+                          ? 'bg-brand-wash border-brand text-brand-deep ring-1 ring-brand/30'
+                          : 'bg-surface border-line text-ink-muted hover:border-line-strong'
+                      }`}
+                    >
+                      <div className={`p-1 rounded shrink-0 ${campaignPriority === 'normal' ? 'bg-brand-wash text-brand-deep' : 'bg-surface-alt text-ink-muted'}`}>
+                        <Clock className="w-3.5 h-3.5" />
+                      </div>
+                      <div>
+                        <div className="text-[11px] font-semibold">Normal</div>
+                        <div className="text-[9px] text-ink-faint leading-tight">Antrean santai anti-ban</div>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setCampaignPriority('high')}
+                      className={`flex items-start gap-2 p-2 rounded-lg border text-left transition ${
+                        campaignPriority === 'high'
+                          ? 'bg-honey-wash border-honey text-honey-deep ring-1 ring-honey/30'
+                          : 'bg-surface border-line text-ink-muted hover:border-line-strong'
+                      }`}
+                    >
+                      <div className={`p-1 rounded shrink-0 ${campaignPriority === 'high' ? 'bg-honey-wash text-honey' : 'bg-surface-alt text-ink-muted'}`}>
+                        <Zap className="w-3.5 h-3.5" />
+                      </div>
+                      <div>
+                        <div className="text-[11px] font-semibold">Prioritas (High)</div>
+                        <div className="text-[9px] text-ink-faint leading-tight">Salip antrean utama</div>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Ringkasan Konfirmasi Pre-Flight & Estimasi Selesai */}
+                {(() => {
+                  const targetCount = groupMembers(selectedGroup)?.length || 0;
+                  const connected = (sessions || []).filter((s) => s.status === 'connected' || s.status === 'open');
+                  const activeSessionsCount = selectedSessionId === 'auto_rotate' 
+                    ? Math.max(connected.length, 1) 
+                    : 1;
+                  // Estimasi jeda rata-rata per pesan: 4 - 8 detik (anti-ban default ~5.5 detik per pesan per nomor)
+                  const avgDelaySec = 5.5;
+                  const estTotalSeconds = Math.round((targetCount * avgDelaySec) / activeSessionsCount);
+                  const estMinutes = Math.ceil(estTotalSeconds / 60);
+
+                  const tpl = templates?.find((t) => t.id === selectedTemplate);
+
+                  return (
+                    <div className="rounded-xl bg-surface-sunken border border-line p-3 space-y-2">
+                      <div className="text-[11px] font-bold text-ink flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-brand shrink-0" />
+                        <span>Ringkasan & Konfirmasi Pre-Flight:</span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 text-[11px]">
+                        <div className="p-2 rounded-lg bg-surface border border-line">
+                          <span className="text-ink-muted block text-[10px]">Target Audiens</span>
+                          <span className="font-semibold text-ink">{selectedGroup || '-'}</span>
+                          <span className="text-brand font-mono font-bold block text-xs mt-0.5">
+                            {targetCount} kontak
+                          </span>
+                        </div>
+
+                        <div className="p-2 rounded-lg bg-surface border border-line">
+                          <span className="text-ink-muted block text-[10px]">Estimasi Durasi</span>
+                          <span className="font-semibold text-ink">
+                            {targetCount === 0 ? '0 menit' : estMinutes > 60 ? `~${(estMinutes / 60).toFixed(1)} jam` : `~${estMinutes} menit`}
+                          </span>
+                          <span className="text-ink-faint text-[10px] block mt-0.5">
+                            ({activeSessionsCount} sesi pengirim)
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="text-[10px] text-ink-muted flex items-start gap-1.5 pt-1">
+                        <Info className="w-3.5 h-3.5 text-brand shrink-0 mt-px" />
+                        <span>
+                          Template <strong>"{tpl?.title || '-'}"</strong> akan dimuat ke antrean dalam status <strong>Draft</strong>. Pesan baru akan dikirim bertahap setelah tombol Mulai Blast ditekan.
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
 
             {formError && (
-              <div className="flex items-start gap-2 p-2.5 rounded-lg bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60 text-[11px] text-rose-700 dark:text-rose-300">
+              <div className="flex items-start gap-2 p-2.5 rounded-lg bg-clay-wash border border-clay-line text-[11px] text-clay-deep">
                 <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-px" />
                 <span>{formError}</span>
               </div>
             )}
 
-            <DialogFooter>
-              <Button type="button" variant="outline" size="sm" onClick={() => setIsWizardOpen(false)} disabled={creating}>
-                Batal
-              </Button>
-              <Button type="submit" variant="default" size="sm" disabled={creating}>
-                {creating ? 'Menyimpan...' : editingCampaign ? 'Simpan Perubahan' : 'Buat & Buka Antrean'}
-              </Button>
+            {/* Navigasi Wizard Footer */}
+            <DialogFooter className="flex items-center justify-between sm:justify-between w-full pt-2 border-t border-line">
+              <div>
+                {wizardStep > 1 ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setFormError('');
+                      setWizardStep((s) => Math.max(1, s - 1));
+                    }}
+                    disabled={creating}
+                  >
+                    Kembali
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsWizardOpen(false)}
+                    disabled={creating}
+                  >
+                    Batal
+                  </Button>
+                )}
+              </div>
+
+              <div>
+                {wizardStep < 3 ? (
+                  <Button
+                    type="button"
+                    variant="default"
+                    size="sm"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setFormError('');
+                      if (wizardStep === 1) {
+                        if (!campaignName.trim()) {
+                          setFormError('Nama kampanye wajib diisi.');
+                          return;
+                        }
+                      } else if (wizardStep === 2) {
+                        if (!selectedTemplate) {
+                          setFormError('Pilih template pesan terlebih dahulu.');
+                          return;
+                        }
+                      }
+                      setWizardStep((s) => Math.min(3, s + 1));
+                    }}
+                  >
+                    Lanjut ke Langkah {wizardStep + 1}
+                  </Button>
+                ) : (
+                  <Button type="submit" variant="default" size="sm" disabled={creating}>
+                    {creating ? 'Menyimpan...' : editingCampaign ? 'Simpan Perubahan' : 'Buat & Buka Antrean'}
+                  </Button>
+                )}
+              </div>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -2077,13 +2242,13 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
           </DialogHeader>
           <form onSubmit={handleAddRecipient} className="space-y-3 text-xs py-1">
             <div>
-              <label className="block text-[11px] font-medium text-slate-700 dark:text-zinc-300 mb-1">
+              <label className="block text-[11px] font-medium text-ink-soft text-ink-soft mb-1">
                 Target Kampanye *
               </label>
               <select
                 value={targetCampaignId || selectedCampaign?.id || (campaigns.length > 0 ? campaigns[0].id : '')}
                 onChange={(e) => setTargetCampaignId(e.target.value)}
-                className="w-full h-8 px-2.5 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-200 focus:outline-none focus:border-emerald-500"
+                className="w-full h-8 px-2.5 rounded-lg bg-shell bg-surface border border-line border-line text-xs text-ink text-ink-soft focus:outline-none focus:border-brand"
               >
                 {campaigns.map((c) => (
                   <option key={c.id} value={c.id}>
@@ -2093,7 +2258,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
               </select>
             </div>
             <div>
-              <label className="block text-[11px] font-medium text-slate-700 dark:text-zinc-300 mb-1">
+              <label className="block text-[11px] font-medium text-ink-soft text-ink-soft mb-1">
                 Nomor WhatsApp *
               </label>
               <ContactSearchInput
@@ -2111,7 +2276,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
               />
             </div>
             <div>
-              <label className="block text-[11px] font-medium text-slate-700 dark:text-zinc-300 mb-1">
+              <label className="block text-[11px] font-medium text-ink-soft text-ink-soft mb-1">
                 Nama Penerima
               </label>
               <input
@@ -2119,17 +2284,17 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
                 placeholder="Misal: Hendra Pratama"
                 value={newRecipientName}
                 onChange={(e) => setNewRecipientName(e.target.value)}
-                className="w-full h-8 px-2.5 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-200 focus:outline-none focus:border-emerald-500"
+                className="w-full h-8 px-2.5 rounded-lg bg-shell bg-surface border border-line border-line text-xs text-ink text-ink-soft focus:outline-none focus:border-brand"
               />
             </div>
 
             {/* Preview Variabel Custom yang Melekat pada Penerima Ini */}
             {newRecipientCustom && Object.keys(newRecipientCustom).length > 0 && (
-              <div className="p-2 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-[11px]">
-                <span className="text-slate-500 dark:text-zinc-400 font-medium">Variabel kontak terhubung:</span>
+              <div className="p-2 rounded-lg bg-shell bg-surface border border-line border-line text-[11px]">
+                <span className="text-ink-muted text-ink-muted font-medium">Variabel kontak terhubung:</span>
                 <div className="flex flex-wrap gap-1 mt-1">
                   {Object.entries(newRecipientCustom).map(([k, v]) => (
-                    <span key={k} className="px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-[10px] font-mono text-emerald-700 dark:text-emerald-300">
+                    <span key={k} className="px-1.5 py-0.5 rounded bg-brand-wash  border border-brand-line  text-[10px] font-mono text-leaf-deep">
                       {`{{${k}}}`}: <strong className="font-semibold">{String(v)}</strong>
                     </span>
                   ))}
@@ -2138,7 +2303,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
             )}
 
             {formError && (
-              <div className="flex items-start gap-2 p-2.5 rounded-lg bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60 text-[11px] text-rose-700 dark:text-rose-300">
+              <div className="flex items-start gap-2 p-2.5 rounded-lg bg-clay-wash dark:bg-rose-950/30 border border-clay-line dark:border-rose-900/60 text-[11px] text-clay-deep">
                 <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-px" />
                 <span>{formError}</span>
               </div>
@@ -2162,10 +2327,10 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
           <DialogHeader>
             <DialogTitle>Hapus Nomor dari Antrean?</DialogTitle>
           </DialogHeader>
-          <div className="py-2 text-xs text-slate-600 dark:text-zinc-400">
+          <div className="py-2 text-xs text-ink-soft text-ink-muted">
             Apakah Anda yakin ingin menghapus{' '}
-            <strong className="text-slate-900 dark:text-zinc-100">{deletingRecipient?.name || 'nomor ini'}</strong>{' '}
-            (<span className="font-mono text-emerald-600 dark:text-emerald-400">+{deletingRecipient?.phone}</span>) dari antrean kampanye ini?
+            <strong className="text-ink text-ink">{deletingRecipient?.name || 'nomor ini'}</strong>{' '}
+            (<span className="font-mono text-brand-deep">+{deletingRecipient?.phone}</span>) dari antrean kampanye ini?
           </div>
           <DialogFooter className="gap-2">
             <Button
@@ -2182,7 +2347,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
               variant="destructive"
               size="sm"
               onClick={() => deletingRecipient && handleRemoveRecipient(deletingRecipient)}
-              className="text-xs bg-rose-600 hover:bg-rose-700 text-white"
+              className="text-xs bg-clay hover:bg-rose-700 text-white"
             >
               Hapus Nomor
             </Button>
@@ -2194,17 +2359,17 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
       <Dialog open={isCancelConfirmOpen} onOpenChange={setIsCancelConfirmOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-sm text-rose-600 dark:text-rose-400">
+            <DialogTitle className="flex items-center gap-2 text-sm text-clay text-clay">
               <AlertCircle className="w-4 h-4" />
               <span>Batalkan Sisa Antrean Kampanye</span>
             </DialogTitle>
           </DialogHeader>
-          <div className="py-2 text-xs text-slate-600 dark:text-zinc-300 space-y-2">
+          <div className="py-2 text-xs text-ink-soft text-ink-soft space-y-2">
             <p>
               Apakah Anda yakin ingin membatalkan sisa antrean untuk kampanye{' '}
-              <strong className="text-slate-900 dark:text-zinc-100">{selectedCampaign?.name}</strong>?
+              <strong className="text-ink text-ink">{selectedCampaign?.name}</strong>?
             </p>
-            <p className="text-[11px] text-slate-500 dark:text-zinc-400">
+            <p className="text-[11px] text-ink-muted text-ink-muted">
               Pesan yang belum terkirim di wa-api akan dibatalkan, dan kuota nomor pengirim akan langsung dibebaskan untuk kampanye lainnya.
             </p>
           </div>
@@ -2224,7 +2389,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
               size="sm"
               onClick={handleConfirmCancelQueue}
               disabled={isCancellingQueue}
-              className="text-xs bg-rose-600 hover:bg-rose-700 text-white"
+              className="text-xs bg-clay hover:bg-rose-700 text-white"
             >
               {isCancellingQueue ? 'Membatalkan...' : 'Ya, Batalkan Sekarang'}
             </Button>

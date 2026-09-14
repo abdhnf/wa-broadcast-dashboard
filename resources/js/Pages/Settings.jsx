@@ -144,16 +144,16 @@ export function SettingsPage({ user, sessions = [] }) {
   };
 
   const fieldClass =
-    'w-full h-8 px-3 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-zinc-200 font-mono focus:outline-none focus:border-emerald-500 disabled:opacity-60';
+    'w-full h-8 px-3 rounded-lg bg-shell bg-surface border border-line border-line text-xs text-ink text-ink-soft font-mono focus:outline-none focus:border-brand disabled:opacity-60';
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-zinc-800">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-line border-line">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">
+          <h1 className="text-xl font-bold tracking-tight text-ink dark:text-white">
             Konfigurasi Gateway & Autentikasi
           </h1>
-          <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
+          <p className="text-xs text-ink-muted text-ink-muted mt-0.5">
             {isAdmin
               ? 'Pengaturan tersimpan di wa-api dan berlaku untuk seluruh klien, termasuk panel dan dashboard ini.'
               : 'Akun ini bukan admin, jadi pengaturan hanya bisa dilihat, bukan diubah.'}
@@ -161,7 +161,7 @@ export function SettingsPage({ user, sessions = [] }) {
         </div>
         <div className="flex items-center gap-2">
           <Button onClick={handleTestConnection} variant="outline" size="sm">
-            <Server className="w-3.5 h-3.5 mr-1 text-emerald-600 dark:text-emerald-400" />
+            <Server className="w-3.5 h-3.5 mr-1 text-brand-deep" />
             <span>Test Koneksi</span>
           </Button>
           {isAdmin && (
@@ -174,10 +174,10 @@ export function SettingsPage({ user, sessions = [] }) {
 
       {feedback && (
         <div
-          className={`p-3 rounded-xl border flex items-start gap-2.5 text-xs ${
+          className={`p-3 rounded-lg border flex items-start gap-2.5 text-xs ${
             feedback.tone === 'success'
-              ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500/30 text-emerald-800 dark:text-emerald-300'
-              : 'bg-rose-50 dark:bg-rose-950/40 border-rose-500/30 text-rose-700 dark:text-rose-300'
+              ? 'bg-brand-wash  border-brand-line text-brand-deep'
+              : 'bg-clay-wash  border-clay-line text-clay-deep'
           }`}
         >
           {feedback.tone === 'success' ? (
@@ -190,7 +190,7 @@ export function SettingsPage({ user, sessions = [] }) {
       )}
 
       {!isAdmin && !loading && (
-        <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-500/30 flex items-start gap-2.5 text-xs text-amber-800 dark:text-amber-300">
+        <div className="p-3 rounded-lg bg-honey-wash dark:bg-amber-950/30 border border-honey-line flex items-start gap-2.5 text-xs text-amber-800 text-honey">
           <Shield className="w-4 h-4 shrink-0 mt-px" />
           <span>Pengaturan autentikasi hanya dapat diubah oleh admin wa-api lewat panel.</span>
         </div>
@@ -198,28 +198,28 @@ export function SettingsPage({ user, sessions = [] }) {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Kolom Kiri: Koneksi ke wa-api */}
-        <div className="border border-slate-200 dark:border-zinc-800 rounded-xl p-5 bg-white dark:bg-zinc-950 space-y-4">
+        <div className="border border-line border-line rounded-lg p-5 bg-surface bg-surface space-y-4">
           <div>
-            <h2 className="text-sm font-bold text-slate-900 dark:text-white">Koneksi Server WA API</h2>
-            <p className="text-xs text-slate-500 dark:text-zinc-400">
+            <h2 className="text-sm font-bold text-ink dark:text-white">Koneksi Server WA API</h2>
+            <p className="text-xs text-ink-muted text-ink-muted">
               Endpoint backend Fastify yang mengelola Baileys dan antrean
             </p>
           </div>
 
           <div className="space-y-3.5">
             <div>
-              <label className="text-[11px] font-medium text-slate-600 dark:text-zinc-400 block mb-1">
+              <label className="text-[11px] font-medium text-ink-soft text-ink-muted block mb-1">
                 URL Endpoint Aktif
               </label>
               <input type="text" value={apiConfig?.base || ''} readOnly className={fieldClass} />
-              <p className="text-[10px] text-slate-400 dark:text-zinc-500 mt-1">
+              <p className="text-[10px] text-ink-faint text-ink-faint mt-1">
                 URL diatur lewat <code className="font-mono">VITE_WA_API_BASE</code> saat build, atau otomatis mengikuti host
                 halaman ini. Diubah lewat pengaturan di bawah, bukan dari kolom ini.
               </p>
             </div>
 
             <div>
-              <label className="text-[11px] font-medium text-slate-600 dark:text-zinc-400 block mb-1">
+              <label className="text-[11px] font-medium text-ink-soft text-ink-muted block mb-1">
                 API Key Gateway Aktif
               </label>
               <div className="relative">
@@ -232,18 +232,18 @@ export function SettingsPage({ user, sessions = [] }) {
                 <button
                   type="button"
                   onClick={() => setShowApiKey(!showApiKey)}
-                  className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 cursor-pointer"
+                  className="absolute right-2.5 top-2 text-ink-faint hover:text-ink-soft dark:hover:text-ink-soft cursor-pointer"
                 >
                   {showApiKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                 </button>
               </div>
-              <p className="text-[10px] text-slate-400 dark:text-zinc-500 mt-1">
+              <p className="text-[10px] text-ink-faint text-ink-faint mt-1">
                 Disinkronkan otomatis saat login lewat link peluncuran + PIN.
               </p>
             </div>
 
-            <div className="p-3 bg-slate-50 dark:bg-zinc-900/60 rounded-xl border border-slate-200 dark:border-zinc-800 text-[11px] text-slate-600 dark:text-zinc-400 space-y-1">
-              <span className="font-semibold text-slate-900 dark:text-zinc-200 block">Sesi WhatsApp Terhubung</span>
+            <div className="p-3 bg-shell bg-surface rounded-lg border border-line border-line text-[11px] text-ink-soft text-ink-muted space-y-1">
+              <span className="font-semibold text-ink text-ink-soft block">Sesi WhatsApp Terhubung</span>
               <p>
                 {sessions.length > 0
                   ? `${sessions.length} sesi terdaftar di akun ini.`
@@ -252,7 +252,7 @@ export function SettingsPage({ user, sessions = [] }) {
             </div>
 
             <div>
-              <label className="text-[11px] font-medium text-slate-600 dark:text-zinc-400 block mb-1">
+              <label className="text-[11px] font-medium text-ink-soft text-ink-muted block mb-1">
                 URL Dashboard Blast
               </label>
               <input
@@ -263,7 +263,7 @@ export function SettingsPage({ user, sessions = [] }) {
                 placeholder="http://host:8085"
                 className={fieldClass}
               />
-              <p className="text-[10px] text-slate-400 dark:text-zinc-500 mt-1">
+              <p className="text-[10px] text-ink-faint text-ink-faint mt-1">
                 Dipakai saat wa-api membuat link peluncuran ke dashboard ini.
               </p>
             </div>
@@ -271,11 +271,11 @@ export function SettingsPage({ user, sessions = [] }) {
         </div>
 
         {/* Kolom Kanan: Pengaturan autentikasi (tersimpan di wa-api) */}
-        <div className="border border-slate-200 dark:border-zinc-800 rounded-xl p-5 bg-white dark:bg-zinc-950 space-y-4">
+        <div className="border border-line border-line rounded-lg p-5 bg-surface bg-surface space-y-4">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <h2 className="text-sm font-bold text-slate-900 dark:text-white">Pilihan Autentikasi</h2>
-              <p className="text-xs text-slate-500 dark:text-zinc-400">
+              <h2 className="text-sm font-bold text-ink dark:text-white">Pilihan Autentikasi</h2>
+              <p className="text-xs text-ink-muted text-ink-muted">
                 Berlaku di wa-api, bukan hanya di dashboard ini
               </p>
             </div>
@@ -285,10 +285,10 @@ export function SettingsPage({ user, sessions = [] }) {
           </div>
 
           <div className="space-y-4">
-            <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800">
+            <div className="flex items-center justify-between p-3 rounded-lg bg-shell bg-surface border border-line border-line">
               <div className="space-y-0.5">
-                <span className="text-xs font-semibold text-slate-900 dark:text-white block">Izinkan Registrasi Publik</span>
-                <p className="text-[11px] text-slate-500 dark:text-zinc-400">
+                <span className="text-xs font-semibold text-ink dark:text-white block">Izinkan Registrasi Publik</span>
+                <p className="text-[11px] text-ink-muted text-ink-muted">
                   Berlaku untuk form registrasi email/password di panel wa-api.
                 </p>
               </div>
@@ -299,13 +299,13 @@ export function SettingsPage({ user, sessions = [] }) {
               />
             </div>
 
-            <div className="p-3 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 space-y-3">
+            <div className="p-3 rounded-lg bg-shell bg-surface border border-line border-line space-y-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <span className="text-xs font-semibold text-slate-900 dark:text-white block">
+                  <span className="text-xs font-semibold text-ink dark:text-white block">
                     Google OAuth 2.0 Single Sign-On
                   </span>
-                  <p className="text-[11px] text-slate-500 dark:text-zinc-400">User Google baru otomatis dibuatkan akun.</p>
+                  <p className="text-[11px] text-ink-muted text-ink-muted">User Google baru otomatis dibuatkan akun.</p>
                 </div>
                 <Switch
                   checked={form.googleAuthEnabled}
@@ -315,9 +315,9 @@ export function SettingsPage({ user, sessions = [] }) {
               </div>
 
               {form.googleAuthEnabled && (
-                <div className="space-y-3 pt-2 border-t border-slate-200 dark:border-zinc-800">
+                <div className="space-y-3 pt-2 border-t border-line border-line">
                   <div>
-                    <label className="text-[11px] font-medium text-slate-600 dark:text-zinc-400 block mb-1">
+                    <label className="text-[11px] font-medium text-ink-soft text-ink-muted block mb-1">
                       Google Client ID
                     </label>
                     <input
@@ -331,7 +331,7 @@ export function SettingsPage({ user, sessions = [] }) {
                   </div>
 
                   <div>
-                    <label className="text-[11px] font-medium text-slate-600 dark:text-zinc-400 block mb-1">
+                    <label className="text-[11px] font-medium text-ink-soft text-ink-muted block mb-1">
                       Google Client Secret
                     </label>
                     <input
@@ -346,13 +346,13 @@ export function SettingsPage({ user, sessions = [] }) {
                       }
                       className={fieldClass}
                     />
-                    <p className="text-[10px] text-slate-400 dark:text-zinc-500 mt-1">
+                    <p className="text-[10px] text-ink-faint text-ink-faint mt-1">
                       Nilai lama tidak pernah dikirim ke browser, jadi kolom ini selalu kosong saat dibuka.
                     </p>
                   </div>
 
                   <div>
-                    <label className="text-[11px] font-medium text-slate-600 dark:text-zinc-400 block mb-1">
+                    <label className="text-[11px] font-medium text-ink-soft text-ink-muted block mb-1">
                       Domain Google yang Diizinkan
                     </label>
                     <input
@@ -366,24 +366,24 @@ export function SettingsPage({ user, sessions = [] }) {
                   </div>
 
                   {origin && (
-                    <div className="p-3 bg-white dark:bg-zinc-950 rounded-lg border border-slate-200 dark:border-zinc-800 space-y-2 text-[11px]">
-                      <span className="text-[10px] font-mono uppercase text-slate-500 font-bold block">
+                    <div className="p-3 bg-surface bg-surface rounded-lg border border-line border-line space-y-2 text-[11px]">
+                      <span className="text-[10px] font-mono uppercase text-ink-muted font-bold block">
                         Nilai untuk Google Cloud Console
                       </span>
 
                       <div>
-                        <span className="text-slate-500 dark:text-zinc-400 text-[10px] block">
+                        <span className="text-ink-muted text-ink-muted text-[10px] block">
                           Authorized JavaScript origins:
                         </span>
-                        <div className="flex items-center justify-between bg-slate-50 dark:bg-zinc-900 px-2.5 py-1 rounded border border-slate-200 dark:border-zinc-800 font-mono text-[10px] text-slate-800 dark:text-zinc-300 mt-0.5">
+                        <div className="flex items-center justify-between bg-shell bg-surface px-2.5 py-1 rounded border border-line border-line font-mono text-[10px] text-ink text-ink-soft mt-0.5">
                           <span className="truncate">{origin}</span>
                           <button
                             type="button"
                             onClick={() => copyToClipboard(origin, 'origin')}
-                            className="text-slate-400 hover:text-slate-700 dark:hover:text-zinc-100 ml-2 shrink-0"
+                            className="text-ink-faint hover:text-ink-soft dark:hover:text-ink ml-2 shrink-0"
                           >
                             {copiedField === 'origin' ? (
-                              <Check className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                              <Check className="w-3 h-3 text-brand-deep" />
                             ) : (
                               <Copy className="w-3 h-3" />
                             )}
@@ -392,18 +392,18 @@ export function SettingsPage({ user, sessions = [] }) {
                       </div>
 
                       <div>
-                        <span className="text-slate-500 dark:text-zinc-400 text-[10px] block">
+                        <span className="text-ink-muted text-ink-muted text-[10px] block">
                           Authorized redirect URIs:
                         </span>
-                        <div className="flex items-center justify-between bg-slate-50 dark:bg-zinc-900 px-2.5 py-1 rounded border border-slate-200 dark:border-zinc-800 font-mono text-[10px] text-slate-800 dark:text-zinc-300 mt-0.5">
+                        <div className="flex items-center justify-between bg-shell bg-surface px-2.5 py-1 rounded border border-line border-line font-mono text-[10px] text-ink text-ink-soft mt-0.5">
                           <span className="truncate">{`${origin}/auth/google/callback`}</span>
                           <button
                             type="button"
                             onClick={() => copyToClipboard(`${origin}/auth/google/callback`, 'callback')}
-                            className="text-slate-400 hover:text-slate-700 dark:hover:text-zinc-100 ml-2 shrink-0"
+                            className="text-ink-faint hover:text-ink-soft dark:hover:text-ink ml-2 shrink-0"
                           >
                             {copiedField === 'callback' ? (
-                              <Check className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                              <Check className="w-3 h-3 text-brand-deep" />
                             ) : (
                               <Copy className="w-3 h-3" />
                             )}
@@ -415,7 +415,7 @@ export function SettingsPage({ user, sessions = [] }) {
                 </div>
               )}
 
-              <div className="flex items-start gap-2 pt-1 text-[11px] text-slate-500 dark:text-zinc-400">
+              <div className="flex items-start gap-2 pt-1 text-[11px] text-ink-muted text-ink-muted">
                 <Info className="w-3.5 h-3.5 shrink-0 mt-px" />
                 <span>Callback Google pada dashboard ini belum punya rute; alur SSO dijalankan dari panel wa-api.</span>
               </div>
@@ -426,7 +426,7 @@ export function SettingsPage({ user, sessions = [] }) {
 
       {isAdmin && (
         <div className="flex items-center justify-between gap-3 pt-1">
-          <div className="flex items-center gap-2 text-[11px] text-slate-500 dark:text-zinc-400">
+          <div className="flex items-center gap-2 text-[11px] text-ink-muted text-ink-muted">
             <Key className="w-3.5 h-3.5" />
             <span>Perubahan disimpan ke wa-api dan langsung dipakai panel serta dashboard.</span>
           </div>

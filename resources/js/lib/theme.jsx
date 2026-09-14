@@ -2,11 +2,12 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 
 const ThemeContext = createContext({
   theme: 'system',
-  resolvedTheme: 'dark',
+  resolvedTheme: 'light',
   setTheme: () => null,
 });
 
 export function ThemeProvider({ children }) {
+  // Default mutlak: 'system'. Hanya pakai nilai localStorage jika user pernah eksplisit memilih.
   const [theme, setThemeState] = useState(() => {
     try {
       return localStorage.getItem('wa_theme') || 'system';
@@ -15,7 +16,7 @@ export function ThemeProvider({ children }) {
     }
   });
 
-  const [resolvedTheme, setResolvedTheme] = useState('dark');
+  const [resolvedTheme, setResolvedTheme] = useState('light');
 
   useEffect(() => {
     const root = document.documentElement;
@@ -52,7 +53,11 @@ export function ThemeProvider({ children }) {
 
   const setTheme = (newTheme) => {
     try {
-      localStorage.setItem('wa_theme', newTheme);
+      if (newTheme === 'system') {
+        localStorage.removeItem('wa_theme');
+      } else {
+        localStorage.setItem('wa_theme', newTheme);
+      }
     } catch {}
     setThemeState(newTheme);
   };

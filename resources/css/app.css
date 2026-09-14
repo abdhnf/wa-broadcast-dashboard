@@ -10,6 +10,126 @@
 @theme {
   --font-sans: 'Figtree', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  /* Sunset Broadcast — satu ekosistem dengan wa-panel (ground sama),
+     brand amber sebagai pembeda produk marketing. */
+  --color-shell: #fbf8ef;
+  --color-surface: #ffffff;
+  --color-surface-alt: #f4efdf;
+  --color-surface-sunken: #f8f5ea;
+  --color-line: #e4dcc4;
+  --color-line-strong: #cfc4a3;
+
+  --color-ink: #23301f;
+  --color-ink-soft: #3d4a35;
+  --color-ink-muted: #5c6752;
+  --color-ink-faint: #5f6a56;
+
+  --color-brand: #c2610c;
+  --color-brand-strong: #9a4c08;
+  --color-brand-deep: #5f2f04;
+  --color-brand-soft: #e07f2a;
+  --color-brand-wash: #fdf0e0;
+  --color-brand-line: #f0cfa4;
+
+  --color-wa: #1f7a4d;
+  --color-wa-wash: #e3f2e8;
+  --color-wa-line: #a9d7bd;
+  --color-wa-deep: #0f4529;
+
+  --color-leaf: #2e7d32;
+  --color-leaf-deep: #1c5220;
+  --color-leaf-wash: #e6f3e6;
+  --color-leaf-line: #aed5b0;
+
+  --color-sea: #1c6b8a;
+  --color-sea-deep: #14506a;
+  --color-sea-wash: #e2eff5;
+  --color-sea-line: #a8cede;
+
+  --color-honey: #a16207;
+  --color-honey-deep: #7a4a05;
+  --color-honey-wash: #fbf1d8;
+  --color-honey-line: #e6cf94;
+
+  --color-clay: #b23a2e;
+  --color-clay-deep: #7c241c;
+  --color-clay-wash: #fbe5e3;
+  --color-clay-line: #eab8b2;
+
+  --color-slate: #55636f;
+  --color-slate-deep: #38444e;
+  --color-slate-wash: #eef2f5;
+  --color-slate-line: #c9d3da;
+}
+
+/* Dark mode: override seluruh token Sunset Broadcast agar semua komponen
+   yang memakai bg-surface/text-ink/dst ikut gelap tanpa perlu dark: per-kelas. */
+.dark {
+  --color-shell: #17150f;
+  --color-surface: #211d13;
+  --color-surface-alt: #2a2517;
+  --color-surface-sunken: #1c1910;
+  --color-line: #3a3423;
+  --color-line-strong: #54492e;
+
+  --color-ink: #ece7d8;
+  --color-ink-soft: #cfc8b4;
+  --color-ink-muted: #a39a82;
+  --color-ink-faint: #857c66;
+
+  --color-brand: #e07f2a;
+  --color-brand-strong: #f09a4e;
+  --color-brand-deep: #f5c898;
+  --color-brand-soft: #c2610c;
+  --color-brand-wash: #33230f;
+  --color-brand-line: #6b431a;
+
+  --color-wa: #4caf7d;
+  --color-wa-wash: #122b1e;
+  --color-wa-line: #2c5b43;
+  --color-wa-deep: #a9d7bd;
+
+  --color-leaf: #5cb060;
+  --color-leaf-deep: #aed5b0;
+  --color-leaf-wash: #14291a;
+  --color-leaf-line: #2e5233;
+
+  --color-sea: #4d9cbd;
+  --color-sea-deep: #a8cede;
+  --color-sea-wash: #12242c;
+  --color-sea-line: #28485a;
+
+  --color-honey: #d9a13b;
+  --color-honey-deep: #e6cf94;
+  --color-honey-wash: #2c2208;
+  --color-honey-line: #5c4a17;
+
+  --color-clay: #e06a5c;
+  --color-clay-deep: #eab8b2;
+  --color-clay-wash: #2e1410;
+  --color-clay-line: #642a20;
+
+  --color-slate: #9aa8b4;
+  --color-slate-deep: #c9d3da;
+  --color-slate-wash: #1e2429;
+  --color-slate-line: #3c4a55;
+}
+
+html, body, #app {
+  overflow-x: clip;
+}
+
+body {
+  background-color: var(--color-shell);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+/* Dark mode overrides untuk token shell (jika ThemeToggle aktif) */
+.dark body {
+  background-color: #17150f;
+  color: #ece7d8;
 }
 
 /* Custom Scrollbar */
@@ -26,4 +146,180 @@
 }
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(150, 150, 150, 0.4);
+}
+
+/* ---------------------------------------------------------------------------
+   Komponen bersama: kontrol, badge soft, nav, transisi halaman.
+   --------------------------------------------------------------------------- */
+
+.blast-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  height: 2.25rem;
+  padding: 0 0.65rem;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+.blast-control:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.blast-control-primary {
+  background-color: var(--color-brand);
+  color: #ffffff;
+  border: 1px solid var(--color-brand-strong);
+}
+.blast-control-primary:hover:not(:disabled) {
+  background-color: var(--color-brand-strong);
+}
+.blast-control-secondary {
+  background-color: var(--color-surface);
+  color: var(--color-ink-soft);
+  border: 1px solid var(--color-line);
+}
+.blast-control-secondary:hover:not(:disabled) {
+  background-color: var(--color-surface-alt);
+}
+
+/* Badge register SOFT: wash bg + deep text + line border. Tidak pernah fill jenuh. */
+.blast-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.625rem;
+  font-weight: 600;
+  line-height: 1.4;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.blast-badge-brand   { background: var(--color-brand-wash); color: var(--color-brand-deep); border-color: var(--color-brand-line); }
+.blast-badge-leaf    { background: var(--color-leaf-wash);  color: var(--color-leaf-deep);  border-color: var(--color-leaf-line); }
+.blast-badge-sea     { background: var(--color-sea-wash);   color: var(--color-sea-deep);   border-color: var(--color-sea-line); }
+.blast-badge-honey   { background: var(--color-honey-wash); color: var(--color-honey-deep); border-color: var(--color-honey-line); }
+.blast-badge-clay    { background: var(--color-clay-wash);  color: var(--color-clay-deep);  border-color: var(--color-clay-line); }
+.blast-badge-slate   { background: var(--color-slate-wash); color: var(--color-slate-deep); border-color: var(--color-slate-line); }
+.blast-badge-wa      { background: var(--color-wa-wash);    color: var(--color-wa-deep);    border-color: var(--color-wa-line); }
+
+/* Item navigasi sidebar & drawer */
+.blast-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: 100%;
+  padding: 0.5rem 0.65rem;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-ink-muted);
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 150ms ease, color 150ms ease;
+  border: 1px solid transparent;
+}
+.blast-nav-item:hover {
+  background-color: var(--color-surface-alt);
+  color: var(--color-ink);
+}
+.blast-nav-item[aria-current="page"] {
+  background-color: var(--color-brand-wash);
+  color: var(--color-brand-deep);
+  border-color: var(--color-brand-line);
+  font-weight: 600;
+}
+
+.blast-nav-group-label {
+  font-size: 0.625rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-ink-faint);
+}
+
+.blast-card {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 8px;
+}
+.blast-card-header-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-ink-muted);
+}
+
+/* Bottom navigation mobile: target sentuh >= 48px */
+.blast-bottomnav {
+  background-color: var(--color-surface);
+  border-top: 1px solid var(--color-line);
+}
+.blast-bottomnav button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  min-width: 56px;
+  gap: 0.15rem;
+  border-radius: 6px;
+  font-size: 0.625rem;
+  font-weight: 600;
+  color: var(--color-ink-muted);
+  cursor: pointer;
+}
+.blast-bottomnav button[aria-current="page"] {
+  color: var(--color-brand-deep);
+  background-color: var(--color-brand-wash);
+}
+
+/* Transisi halaman & bottom sheet */
+@keyframes blastFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.blast-page-transition {
+  animation: blastFadeIn 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  will-change: opacity, transform;
+}
+
+@keyframes blastSlideUp {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+.blast-drawer-bottom {
+  animation: blastSlideUp 0.24s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes blastBackdropFade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.blast-backdrop-fade {
+  animation: blastBackdropFade 0.2s ease-out forwards;
+}
+
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Hormati preferensi gerak minimum pengguna */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }
