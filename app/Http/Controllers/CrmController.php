@@ -233,6 +233,81 @@ class CrmController extends Controller
         ], 201);
     }
 
+    public function batchStoreContacts(Request $request)
+    {
+        if (! $user = $this->authorize($request)) {
+            return $this->unauthorized();
+        }
+
+        $validator = Validator::make($request->all(), [
+            'contacts' => ['required', 'array', 'max:5000'],
+            'contacts.*.name' => ['required', 'string', 'max:150'],
+            'contacts.*.phone' => ['required', 'string', 'max:30'],
+            'contacts.*.group' => ['nullable', 'string', 'max:150'],
+            'contacts.*.tag' => ['nullable', 'string', 'max:60'],
+            'contacts.*.custom' => ['nullable', 'array'],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['error' => $validator->errors()->first()], 422);
+        }
+
+        $items = $request->input('contacts', []);
+        $userId = $user['id'];
+
+        $existingPhones = WaContact::where('user_id', $userId)
+            ->pluck('phone')
+            ->flip()
+            ->all();
+
+        $inserted = [];
+        $skipped = 0;
+        $seenInBatch = [];
+
+        foreach ($items as $item) {
+            $name = trim($item['name'] ?? '');
+            $rawPhone = trim($item['phone'] ?? '');
+            $group = ! empty($item['group']) ? trim($item['group']) : null;
+            $custom = is_array($item['custom'] ?? null) ? $item['custom'] : [];
+
+            $phone = $this->normalizePhone($rawPhone);
+            if (! preg_match('/^62\d{8,13}$/', $phone) || empty($name)) {
+                $skipped++;
+                continue;
+            }
+
+            if (isset($existingPhones[$phone]) || isset($seenInBatch[$phone])) {
+                $skipped++;
+                continue;
+            }
+
+            $seenInBatch[$phone] = true;
+
+            $contact = WaContact::create([
+                'user_id' => $userId,
+                'name' => $name,
+                'phone' => $phone,
+                'group_name' => $group,
+                'custom' => $custom,
+            ]);
+
+            $inserted[] = [
+                'id' => (string) $contact->id,
+                'name' => $contact->name,
+                'phone' => $contact->phone,
+                'group' => $contact->group_name ?? '',
+                'custom' => $contact->custom ?? new \stdClass,
+            ];
+        }
+
+        return response()->json([
+            'success' => true,
+            'insertedCount' => count($inserted),
+            'skippedCount' => $skipped,
+            'contacts' => $inserted,
+        ]);
+    }
+
     public function updateContact(Request $request, string $id)
     {
         if (! $user = $this->authorize($request)) {

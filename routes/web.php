@@ -32,6 +32,7 @@ Route::prefix('api/crm')->group(function () {
 
     Route::get('/contacts', [CrmController::class, 'contacts']);
     Route::post('/contacts', [CrmController::class, 'storeContact']);
+    Route::post('/contacts/batch', [CrmController::class, 'batchStoreContacts']);
     Route::patch('/contacts/{id}', [CrmController::class, 'updateContact']);
     Route::delete('/contacts/{id}', [CrmController::class, 'destroyContact']);
 

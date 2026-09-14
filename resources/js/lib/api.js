@@ -221,6 +221,10 @@ export function createContact(contact) {
   return crmFetch('/contacts', { method: 'POST', body: contact }).then((res) => res?.contact);
 }
 
+export function importContactsBatch(contactsList) {
+  return crmFetch('/contacts/batch', { method: 'POST', body: { contacts: contactsList } });
+}
+
 export function updateContact(id, contact) {
   return crmFetch(`/contacts/${encodeURIComponent(id)}`, { method: 'PATCH', body: contact }).then((res) => res?.contact);
 }

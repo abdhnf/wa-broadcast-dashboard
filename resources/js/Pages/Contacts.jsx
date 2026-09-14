@@ -11,12 +11,16 @@ import {
   Phone,
   FileSpreadsheet,
   CheckCircle2,
+  AlertCircle,
   Sparkles,
   Tag,
   X,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Eye,
+  FileDown
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import {
@@ -26,8 +30,8 @@ import {
   DialogTitle,
   DialogFooter
 } from '../components/ui/Dialog';
-import { createContact, deleteContact, fetchContacts, updateContact } from '../lib/api';
-import { PHONE_ERROR_MESSAGE, isValidPhone, toPhoneInput } from '../lib/phone';
+import { createContact, importContactsBatch, deleteContact, fetchContacts, updateContact } from '../lib/api';
+import { PHONE_ERROR_MESSAGE, isValidPhone, normalizePhone, toPhoneInput } from '../lib/phone';
 
 export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, onContactsChanged }) {
   const [contacts, setContacts] = useState([]);
@@ -45,7 +49,10 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
   const [currentPage, setCurrentPage] = useState(1);
   const [perPage, setPerPage] = useState(20);
   const [importSummary, setImportSummary] = useState('');
-  const csvInputRef = useRef(null);
+  const [importError, setImportError] = useState('');
+  const [previewData, setPreviewData] = useState(null);
+  const [previewFileName, setPreviewFileName] = useState('');
+  const fileInputRef = useRef(null);
 
   // Form State Tambah Kontak
   const [name, setName] = useState('');
@@ -289,92 +296,154 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
   };
 
   /**
-   * Import kontak dari berkas CSV yang dipilih pengguna.
-   *
-   * Berkas dibaca di browser lalu tiap baris dikirim ke endpoint kontak yang
-   * sama dengan form manual, sehingga normalisasi nomor dan penolakan duplikat
-   * tetap satu aturan. Baris yang gagal dilewati dan dihitung, bukan dibuatkan
-   * seluruh proses jadi gagal.
+   * Parser CSV dan XLSX fleksibel dengan deteksi otomatis header,
+   * normalisasi nomor WhatsApp, dan ekstraksi variabel dinamis kustom.
    */
-  const handleImportCsv = async (e) => {
+  const handleFileSelect = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setErrorMsg('');
+    setImportError('');
     setImportSummary('');
-    setIsImporting(true);
+    setPreviewData(null);
+    setPreviewFileName(file.name);
 
     try {
-      const text = await file.text();
-      const rows = parseCsv(text);
-      if (rows.length < 2) {
-        throw new Error('Berkas CSV kosong atau hanya berisi baris header.');
+      let rows = [];
+
+      if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+        const buffer = await file.arrayBuffer();
+        const workbook = XLSX.read(buffer, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+      } else {
+        const text = await file.text();
+        rows = parseCsv(text);
       }
 
-      const header = rows[0].map((h) => String(h).trim().toLowerCase());
-      const idx = (col) => header.indexOf(col);
-
-      if (idx('name') === -1 || idx('phone') === -1) {
-        throw new Error('Header CSV wajib memuat kolom name dan phone.');
+      if (!rows || rows.length < 2) {
+        throw new Error('Berkas kosong atau tidak memuat baris data yang cukup.');
       }
 
-      const dataRows = rows.slice(1, 5001);
-      const known = header.filter((h) => ['name', 'phone', 'group'].includes(h));
+      // Deteksi baris header (lewati jika baris 1 adalah banner/petunjuk)
+      let headerRowIndex = 0;
+      for (let r = 0; r < Math.min(rows.length, 5); r++) {
+        const rowStr = rows[r].map((cell) => String(cell).trim().toLowerCase());
+        if (rowStr.includes('name') && rowStr.includes('phone')) {
+          headerRowIndex = r;
+          break;
+        }
+      }
 
-      let inserted = 0;
-      let skipped = 0;
-      const created = [];
+      const rawHeaders = rows[headerRowIndex].map((h) => String(h).trim());
+      const lowerHeaders = rawHeaders.map((h) => h.toLowerCase());
+      const nameIdx = lowerHeaders.indexOf('name');
+      const phoneIdx = lowerHeaders.indexOf('phone');
+      const groupIdx = lowerHeaders.indexOf('group');
 
-      for (const cols of dataRows) {
-        const rawName = String(cols[idx('name')] ?? '').trim();
-        const rawPhone = String(cols[idx('phone')] ?? '').trim();
+      if (nameIdx === -1 || phoneIdx === -1) {
+        throw new Error('Header berkas wajib memiliki kolom "name" dan "phone". Silakan unduh template resmi.');
+      }
+
+      // Identifikasi kolom variabel dinamis kustom (semua di luar name, phone, group)
+      const customKeys = rawHeaders.filter((col, idx) => {
+        const low = col.toLowerCase();
+        return col !== '' && low !== 'name' && low !== 'phone' && low !== 'group';
+      });
+
+      const parsedItems = [];
+      let validCount = 0;
+      let invalidCount = 0;
+
+      for (let r = headerRowIndex + 1; r < rows.length; r++) {
+        const row = rows[r];
+        if (!row || !row.some((c) => String(c).trim() !== '')) continue;
+
+        const rawName = String(row[nameIdx] ?? '').trim();
+        const rawPhone = String(row[phoneIdx] ?? '').trim();
+        const rawGroup = groupIdx !== -1 ? String(row[groupIdx] ?? '').trim() : '';
 
         if (!rawName || !isValidPhone(rawPhone)) {
-          skipped += 1;
+          invalidCount++;
           continue;
         }
 
-        // Semua kolom di luar name/phone/group disimpan sebagai variabel kustom.
-        const custom = {};
-        header.forEach((col, i) => {
-          if (!col || known.includes(col)) return;
-          const value = String(cols[i] ?? '').trim();
-          if (value) custom[col] = value;
+        const customObj = {};
+        rawHeaders.forEach((colName, colIdx) => {
+          const low = colName.toLowerCase();
+          if (low === 'name' || low === 'phone' || low === 'group' || !colName) return;
+          const val = String(row[colIdx] ?? '').trim();
+          if (val) customObj[colName] = val;
         });
 
-        const groupIdx = idx('group');
-        const groupName = groupIdx === -1 ? '' : String(cols[groupIdx] ?? '').trim();
-
-        try {
-          const saved = await createContact({
-            name: rawName,
-            phone: normalizePhone(rawPhone),
-            group: groupName || groups?.[0]?.name || '',
-            custom,
-          });
-          if (saved) {
-            created.push(saved);
-            inserted += 1;
-          }
-        } catch {
-          // Umumnya nomor duplikat: lewati tanpa menghentikan sisa berkas.
-          skipped += 1;
-        }
+        parsedItems.push({
+          name: rawName,
+          phone: rawPhone,
+          normalizedPhone: normalizePhone(rawPhone),
+          group: rawGroup || groups?.[0]?.name || 'Imported',
+          custom: customObj,
+        });
+        validCount++;
       }
 
-      if (created.length > 0) {
-        setContacts((prev) => [...created, ...prev]);
-        void onGroupsRefresh?.();
-        void onContactsChange?.();
-        void onContactsChanged?.();
+      if (parsedItems.length === 0) {
+        throw new Error('Tidak ada baris data kontak yang valid untuk diimpor.');
       }
-      setImportSummary(`${inserted} kontak ditambahkan, ${skipped} baris dilewati (nomor tidak valid atau sudah ada).`);
-      if (inserted > 0) setIsImportModalOpen(false);
+
+      setPreviewData({
+        fileName: file.name,
+        headers: rawHeaders,
+        customKeys,
+        items: parsedItems,
+        validCount,
+        invalidCount,
+      });
+
     } catch (err) {
-      setErrorMsg(err?.message || 'Gagal membaca berkas CSV.');
+      setImportError(err?.message || 'Gagal membaca atau memproses berkas template.');
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  /**
+   * Eksekusi batch import setelah pengguna meninjau pratinjau data.
+   */
+  const handleExecuteImport = async () => {
+    if (!previewData || !previewData.items || previewData.items.length === 0) return;
+
+    setIsImporting(true);
+    setImportError('');
+    setImportSummary('');
+
+    try {
+      const payloadContacts = previewData.items.map((item) => ({
+        name: item.name,
+        phone: item.normalizedPhone,
+        group: item.group,
+        custom: item.custom,
+      }));
+
+      const res = await importContactsBatch(payloadContacts);
+      if (res && res.success) {
+        setImportSummary(
+          `Berhasil mengimpor ${res.insertedCount} kontak baru (${res.skippedCount} dilewati karena nomor tidak valid atau duplikat).`
+        );
+        if (Array.isArray(res.contacts) && res.contacts.length > 0) {
+          setContacts((prev) => [...res.contacts, ...prev]);
+          void onGroupsRefresh?.();
+          void onContactsChange?.();
+          void onContactsChanged?.();
+        }
+        setPreviewData(null);
+      } else {
+        throw new Error(res?.error || 'Gagal menyimpan kontak batch ke database.');
+      }
+    } catch (err) {
+      setImportError(err?.message || 'Terjadi kesalahan saat memproses data import.');
     } finally {
       setIsImporting(false);
-      if (csvInputRef.current) csvInputRef.current.value = '';
     }
   };
 
@@ -418,7 +487,7 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
             className="text-xs"
           >
             <FileSpreadsheet className="w-3.5 h-3.5 mr-1 text-brand-deep" />
-            <span>Import CSV</span>
+            <span>Import Kontak (Excel / CSV)</span>
           </Button>
 
           <Button
@@ -942,63 +1011,201 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
         </DialogContent>
       </Dialog>
 
-      {/* Modal Import CSV */}
-      <Dialog open={isImportModalOpen} onOpenChange={setIsImportModalOpen}>
-        <DialogContent className="sm:max-w-md">
+      {/* Modal Import Excel / CSV */}
+      <Dialog open={isImportModalOpen} onOpenChange={(open) => {
+        setIsImportModalOpen(open);
+        if (!open) {
+          setPreviewData(null);
+          setImportError('');
+          setImportSummary('');
+        }
+      }}>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Import Data Kontak CSV</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <FileSpreadsheet className="w-5 h-5 text-brand" />
+              <span>Import Data Kontak (Excel / CSV)</span>
+            </DialogTitle>
           </DialogHeader>
-          <div className="space-y-3 text-xs py-2">
-            <div className="p-3 rounded-lg bg-shell bg-surface border border-line border-line">
-              <p className="font-medium text-ink text-ink-soft mb-1">Format Header Kolom CSV:</p>
-              <code className="text-[11px] text-brand-deep font-mono block">
-                name,phone,group,kota,voucher,status
-              </code>
-              <p className="text-[10px] text-ink-muted text-ink-muted mt-1">
-                Semua kolom di luar <code className="font-mono">name</code>, <code className="font-mono">phone</code>, & <code className="font-mono">group</code> otomatis dijadikan variabel dinamis kustom!
-              </p>
+
+          <div className="space-y-4 text-xs py-2">
+            {/* Banner Unduh Template Resmi */}
+            <div className="p-3.5 rounded-lg bg-brand-wash border border-brand-line flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="space-y-0.5">
+                <span className="font-bold text-brand-deep flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-brand" />
+                  <span>Template Excel Resmi Kontak WA Blast</span>
+                </span>
+                <p className="text-[11px] text-brand-deep/80 leading-relaxed">
+                  Gunakan template Excel resmi dengan kolom terformat rapi, lembar panduan variabel, dan contoh data siap pakai.
+                </p>
+              </div>
+              <a
+                href="/template-kontak-blast.xlsx"
+                download="template-kontak-blast.xlsx"
+                className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md bg-brand hover:bg-brand-strong text-white font-semibold text-xs transition shadow-xs shrink-0 cursor-pointer"
+              >
+                <FileDown className="w-3.5 h-3.5" />
+                <span>Unduh Template .xlsx</span>
+              </a>
             </div>
 
-            {/* Berkas CSV dibaca di browser (tanpa unggah ke server) lalu tiap
-                barisnya disimpan lewat endpoint kontak yang sama dengan form
-                manual, supaya aturan normalisasi & deteksi duplikat tetap satu. */}
+            {/* Input Berkas */}
             <input
               type="file"
-              ref={csvInputRef}
-              onChange={handleImportCsv}
-              accept=".csv,text/csv"
+              ref={fileInputRef}
+              onChange={handleFileSelect}
+              accept=".xlsx,.xls,.csv"
               className="hidden"
             />
 
-            <button
-              type="button"
-              onClick={() => csvInputRef.current?.click()}
-              disabled={isImporting}
-              className="w-full border-2 border-dashed border-line-strong border-line rounded-lg p-6 text-center hover:border-brand transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-wait"
-            >
-              <UploadCloud className="w-8 h-8 text-ink-faint mx-auto mb-2" />
-              <div className="text-xs font-medium text-ink-soft text-ink-soft">
-                {isImporting ? 'Mengimpor kontak...' : 'Pilih berkas CSV kontak'}
-              </div>
-              <p className="text-[10px] text-ink-faint mt-1">Maksimal 5.000 baris per unggahan</p>
-            </button>
-
-            {importSummary && (
-              <p className="text-[11px] rounded-lg px-2.5 py-2 bg-shell bg-surface border border-line border-line text-ink-soft text-ink-soft">
-                {importSummary}
-              </p>
+            {!previewData && (
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isImporting}
+                className="w-full border-2 border-dashed border-line-strong rounded-lg p-7 text-center hover:border-brand hover:bg-surface-sunken/40 transition-all cursor-pointer disabled:opacity-60 disabled:cursor-wait"
+              >
+                <UploadCloud className="w-9 h-9 text-brand mx-auto mb-2" />
+                <div className="text-xs font-semibold text-ink">
+                  {isImporting ? 'Memproses berkas...' : 'Pilih Berkas Excel (.xlsx, .xls) atau CSV'}
+                </div>
+                <p className="text-[11px] text-ink-faint mt-1">
+                  Mendukung hingga 5.000 kontak dan otomatis mendeteksi kolom variabel kustom dinamis
+                </p>
+              </button>
             )}
 
-            {errorMsg && (
-              <p className="text-[11px] text-clay text-clay bg-clay-wash dark:bg-rose-950/30 border border-clay-line dark:border-rose-900/60 rounded-lg px-2.5 py-2">
-                {errorMsg}
-              </p>
+            {/* PREVIEW KONTEN SEBELUM IMPORT */}
+            {previewData && (
+              <div className="space-y-3 border border-line rounded-lg p-3.5 bg-surface-sunken">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-line">
+                  <div>
+                    <span className="font-bold text-ink flex items-center gap-1.5">
+                      <Eye className="w-4 h-4 text-brand" />
+                      <span>Pratinjau Data: <code className="font-mono text-brand-deep">{previewData.fileName}</code></span>
+                    </span>
+                    <p className="text-[11px] text-ink-muted mt-0.5">
+                      Ditemukan <strong>{previewData.validCount} baris valid</strong> siap diimpor
+                      {previewData.invalidCount > 0 && ` (${previewData.invalidCount} baris dilewati)`}.
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="text-xs h-7 self-start sm:self-auto"
+                  >
+                    Ganti File
+                  </Button>
+                </div>
+
+                {/* Variabel Kustom Terdeteksi */}
+                {previewData.customKeys.length > 0 && (
+                  <div className="p-2.5 rounded-md bg-amber-500/10 border border-amber-500/20 text-xs">
+                    <span className="font-semibold text-amber-700 dark:text-amber-300 block mb-1">
+                      ✨ {previewData.customKeys.length} Variabel Kustom Terdeteksi:
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {previewData.customKeys.map((key) => (
+                        <span key={key} className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-800 dark:text-amber-200 font-mono text-[11px]">
+                          {`{{${key}}}`}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Tabel Cuplikan 5 Baris Pertama */}
+                <div className="border border-line rounded-md overflow-x-auto bg-surface">
+                  <table className="w-full text-[11px] text-left">
+                    <thead className="bg-surface-alt border-b border-line text-ink font-semibold">
+                      <tr>
+                        <th className="px-2.5 py-1.5">#</th>
+                        <th className="px-2.5 py-1.5">Nama</th>
+                        <th className="px-2.5 py-1.5">Nomor (Normalisasi)</th>
+                        <th className="px-2.5 py-1.5">Grup</th>
+                        {previewData.customKeys.map((k) => (
+                          <th key={k} className="px-2.5 py-1.5 text-amber-600 dark:text-amber-400 font-mono">
+                            {`{{${k}}}`}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-line text-ink">
+                      {previewData.items.slice(0, 5).map((item, idx) => (
+                        <tr key={idx} className="hover:bg-surface-alt/50">
+                          <td className="px-2.5 py-1.5 text-ink-faint font-mono">{idx + 1}</td>
+                          <td className="px-2.5 py-1.5 font-medium">{item.name}</td>
+                          <td className="px-2.5 py-1.5 font-mono text-brand-deep">{item.normalizedPhone}</td>
+                          <td className="px-2.5 py-1.5 text-ink-muted">{item.group}</td>
+                          {previewData.customKeys.map((k) => (
+                            <td key={k} className="px-2.5 py-1.5 text-ink-muted">
+                              {item.custom[k] || '-'}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {previewData.items.length > 5 && (
+                  <p className="text-[10px] text-ink-faint text-center">
+                    Menampilkan 5 dari {previewData.items.length} kontak yang akan diimpor.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Notifikasi Ringkasan / Galat */}
+            {importSummary && (
+              <div className="p-3 rounded-lg bg-leaf-wash border border-leaf-line text-leaf-deep flex items-start gap-2">
+                <CheckCircle2 className="w-4 h-4 text-leaf shrink-0 mt-0.5" />
+                <span className="text-xs">{importSummary}</span>
+              </div>
+            )}
+
+            {importError && (
+              <div className="p-3 rounded-lg bg-clay-wash border border-clay-line text-clay-deep flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-clay shrink-0 mt-0.5" />
+                <span className="text-xs">{importError}</span>
+              </div>
             )}
           </div>
-          <DialogFooter>
-            <Button variant="outline" size="sm" onClick={() => setIsImportModalOpen(false)}>
+
+          <DialogFooter className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-t border-line pt-3">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setIsImportModalOpen(false);
+                setPreviewData(null);
+              }}
+            >
               Tutup
             </Button>
+
+            {previewData && (
+              <Button
+                variant="default"
+                size="sm"
+                onClick={handleExecuteImport}
+                disabled={isImporting}
+                className="gap-1.5 bg-brand hover:bg-brand-strong text-white cursor-pointer"
+              >
+                {isImporting ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Menyimpan ke Database...</span>
+                  </>
+                ) : (
+                  <>
+                    <UploadCloud className="w-3.5 h-3.5" />
+                    <span>Konfirmasi &amp; Import {previewData.validCount} Kontak</span>
+                  </>
+                )}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
