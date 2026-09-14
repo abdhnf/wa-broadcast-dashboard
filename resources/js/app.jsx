@@ -68,6 +68,10 @@ export function StandaloneApp() {
     clearApiConfig();
     if (typeof window !== 'undefined') {
       localStorage.removeItem(STORAGE_USER);
+      // Jika saat ini di root '/', arahkan ke /auth/launch agar form input token/PIN tampil
+      if (window.location.pathname === '/') {
+        window.history.replaceState({}, '', '/auth/launch');
+      }
     }
   };
 

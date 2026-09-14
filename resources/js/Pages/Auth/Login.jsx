@@ -60,11 +60,8 @@ export function LoginPage({ onLogin }) {
         return;
       }
 
-      // Bersihkan URL query parameter agar rapi
-      if (typeof window !== 'undefined' && window.history?.replaceState) {
-        const cleanUrl = window.location.protocol + '//' + window.location.host + window.location.pathname;
-        window.history.replaceState({ path: cleanUrl }, '', cleanUrl);
-      }
+      // Pertahankan URL di address bar (termasuk ?token=...) agar user bisa langsung bookmark
+      // Tidak menghapus query parameter token saat login sukses
 
       // Login berhasil, berikan data profil & API Key ke state global app
       saveApiConfig({ url: apiUrl, apiKey: data.user.apiKey });
@@ -124,10 +121,10 @@ export function LoginPage({ onLogin }) {
                 </label>
                 <input
                   type="text"
-                  placeholder="blst_xxxxxxxxxxxxxxxx"
+                  placeholder="Masukkan token akses blast (misal: 32 karakter hex)"
                   value={token}
                   onChange={(e) => setToken(e.target.value)}
-                  className="w-full h-9 px-3 rounded-lg border border-line border-line bg-surface bg-surface text-xs font-mono text-ink dark:text-white placeholder:text-ink-faint focus:outline-hidden focus:border-brand"
+                  className="w-full h-9 px-3 rounded-lg border border-line bg-surface text-xs font-mono text-ink placeholder:text-ink-faint focus:outline-hidden focus:border-brand"
                   required
                 />
               </div>
