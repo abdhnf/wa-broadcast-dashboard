@@ -28,6 +28,7 @@ Route::get('/auth/launch', function () {
 Route::prefix('api/crm')->group(function () {
     Route::get('/groups', [CrmController::class, 'groups']);
     Route::post('/groups', [CrmController::class, 'storeGroup']);
+    Route::get('/groups/{id}/contacts', [CrmController::class, 'groupContacts']);
     Route::delete('/groups/{id}', [CrmController::class, 'destroyGroup']);
 
     Route::get('/contacts', [CrmController::class, 'contacts']);

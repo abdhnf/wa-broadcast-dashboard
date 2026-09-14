@@ -163,7 +163,7 @@ function getCampaignStats(camp) {
   };
 }
 
-export function BroadcastPage({ groups, templates, sessions, contacts = [], onSessionsRefresh, campaigns: initialCampaigns, onCampaignCreate, onCampaignUpdate, onCampaignDelete }) {
+export function BroadcastPage({ groups, templates, sessions, contacts = [], launchGroup, onLaunchConsumed, onSessionsRefresh, campaigns: initialCampaigns, onCampaignCreate, onCampaignUpdate, onCampaignDelete }) {
   // Daftar kampanye berasal dari tabel `wa_campaigns` (MySQL, lewat app.jsx),
   // bukan lagi array di dalam memori komponen. Jadi kampanye yang dibuat di sini
   // tetap ada setelah halaman di-refresh atau dibuka dari perangkat lain.
@@ -233,6 +233,19 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], onSe
     (groupName) => (contacts || []).filter((c) => c.group === groupName || c.group_name === groupName),
     [contacts],
   );
+
+  useEffect(() => {
+    if (!launchGroup) return;
+    setEditingCampaign(null);
+    setCampaignName(`Blast ${launchGroup}`);
+    setSelectedGroup(launchGroup);
+    setSelectedTemplate('');
+    setCampaignPriority('normal');
+    setWizardStep(1);
+    setFormError('');
+    setIsWizardOpen(true);
+    onLaunchConsumed?.();
+  }, [launchGroup, onLaunchConsumed]);
 
   useEffect(() => {
     if (selectedCampaign) {

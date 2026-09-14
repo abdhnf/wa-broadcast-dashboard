@@ -7,6 +7,7 @@ use App\Models\WaContact;
 use App\Models\WaGroup;
 use App\Models\WaTemplate;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 
 /**
@@ -91,6 +92,16 @@ class CrmController extends Controller
             return $this->unauthorized();
         }
 
+        // Backfill segmen yang sudah pernah masuk lewat import lama. Setelah ini,
+        // setiap nilai group_name selalu punya entri nyata di wa_groups.
+        $this->syncGroupsForNames(
+            $user['id'],
+            WaContact::where('user_id', $user['id'])
+                ->whereNotNull('group_name')
+                ->pluck('group_name')
+                ->all(),
+        );
+
         $groups = WaGroup::where('user_id', $user['id'])->orderBy('name')->get();
 
         // Jumlah anggota dihitung sekali untuk semua grup, bukan satu query per baris.
@@ -146,6 +157,33 @@ class CrmController extends Controller
         ], 201);
     }
 
+    public function groupContacts(Request $request, string $id)
+    {
+        if (! $user = $this->authorize($request)) {
+            return $this->unauthorized();
+        }
+
+        $group = WaGroup::where('user_id', $user['id'])->find($id);
+        if (! $group) {
+            return response()->json(['error' => 'Segmen tidak ditemukan.'], 404);
+        }
+
+        $contacts = WaContact::where('user_id', $user['id'])
+            ->where('group_name', $group->name)
+            ->orderBy('name')
+            ->get()
+            ->map(fn (WaContact $c) => $this->contactPayload($c))
+            ->values();
+
+        return response()->json([
+            'group' => [
+                'id' => (string) $group->id,
+                'name' => $group->name,
+            ],
+            'contacts' => $contacts,
+        ]);
+    }
+
     public function destroyGroup(Request $request, string $id)
     {
         if (! $user = $this->authorize($request)) {
@@ -157,9 +195,43 @@ class CrmController extends Controller
             return response()->json(['error' => 'Grup tidak ditemukan.'], 404);
         }
 
-        $group->delete();
+        DB::transaction(function () use ($group, $user) {
+            // Jangan sisakan kontak berlabel grup yang sudah dihapus, karena
+            // backfill grup akan membuatnya lagi pada pemuatan berikutnya.
+            WaContact::where('user_id', $user['id'])
+                ->where('group_name', $group->name)
+                ->update(['group_name' => null]);
+            $group->delete();
+        });
 
         return response()->json(['success' => true]);
+    }
+
+    private function contactPayload(WaContact $contact): array
+    {
+        return [
+            'id' => (string) $contact->id,
+            'name' => $contact->name,
+            'phone' => $contact->phone,
+            'group' => $contact->group_name ?? '',
+            'tag' => $contact->tag ?? '',
+            'custom' => $contact->custom ?? new \stdClass,
+        ];
+    }
+
+    private function syncGroupsForNames(string $userId, array $names): void
+    {
+        foreach (array_unique($names) as $name) {
+            $name = trim((string) $name);
+            if ($name === '') {
+                continue;
+            }
+
+            WaGroup::firstOrCreate(
+                ['user_id' => $userId, 'name' => $name],
+                ['description' => 'Dibuat otomatis dari import kontak']
+            );
+        }
     }
 
     // ---------------------------------------------------------------- Contacts
@@ -254,6 +326,10 @@ class CrmController extends Controller
 
         $items = $request->input('contacts', []);
         $userId = $user['id'];
+        $importedGroupNames = collect($items)
+            ->map(fn ($item) => trim((string) ($item['group'] ?? '')))
+            ->filter()
+            ->all();
 
         $existingPhones = WaContact::where('user_id', $userId)
             ->pluck('phone')
@@ -264,41 +340,41 @@ class CrmController extends Controller
         $skipped = 0;
         $seenInBatch = [];
 
-        foreach ($items as $item) {
-            $name = trim($item['name'] ?? '');
-            $rawPhone = trim($item['phone'] ?? '');
-            $group = ! empty($item['group']) ? trim($item['group']) : null;
-            $custom = is_array($item['custom'] ?? null) ? $item['custom'] : [];
+        DB::transaction(function () use ($userId, $importedGroupNames, $items, $existingPhones, &$inserted, &$skipped, &$seenInBatch) {
+            // Segmen dari kolom `group` wajib materialize ke tabel wa_groups,
+            // termasuk saat semua baris kontak ternyata duplikat.
+            $this->syncGroupsForNames($userId, $importedGroupNames);
 
-            $phone = $this->normalizePhone($rawPhone);
-            if (! preg_match('/^62\d{8,13}$/', $phone) || empty($name)) {
-                $skipped++;
-                continue;
+            foreach ($items as $item) {
+                $name = trim($item['name'] ?? '');
+                $rawPhone = trim($item['phone'] ?? '');
+                $group = ! empty($item['group']) ? trim($item['group']) : null;
+                $custom = is_array($item['custom'] ?? null) ? $item['custom'] : [];
+
+                $phone = $this->normalizePhone($rawPhone);
+                if (! preg_match('/^62\d{8,13}$/', $phone) || empty($name)) {
+                    $skipped++;
+                    continue;
+                }
+
+                if (isset($existingPhones[$phone]) || isset($seenInBatch[$phone])) {
+                    $skipped++;
+                    continue;
+                }
+
+                $seenInBatch[$phone] = true;
+
+                $contact = WaContact::create([
+                    'user_id' => $userId,
+                    'name' => $name,
+                    'phone' => $phone,
+                    'group_name' => $group,
+                    'custom' => $custom,
+                ]);
+
+                $inserted[] = $this->contactPayload($contact);
             }
-
-            if (isset($existingPhones[$phone]) || isset($seenInBatch[$phone])) {
-                $skipped++;
-                continue;
-            }
-
-            $seenInBatch[$phone] = true;
-
-            $contact = WaContact::create([
-                'user_id' => $userId,
-                'name' => $name,
-                'phone' => $phone,
-                'group_name' => $group,
-                'custom' => $custom,
-            ]);
-
-            $inserted[] = [
-                'id' => (string) $contact->id,
-                'name' => $contact->name,
-                'phone' => $contact->phone,
-                'group' => $contact->group_name ?? '',
-                'custom' => $contact->custom ?? new \stdClass,
-            ];
-        }
+        });
 
         return response()->json([
             'success' => true,

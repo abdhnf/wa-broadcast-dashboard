@@ -245,6 +245,10 @@ export function deleteGroup(id) {
   return crmFetch(`/groups/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
+export function fetchGroupContacts(id, { signal } = {}) {
+  return crmFetch(`/groups/${encodeURIComponent(id)}/contacts`, { signal }).then((res) => res?.contacts ?? []);
+}
+
 export function fetchTemplates({ signal } = {}) {
   return crmFetch('/templates', { signal }).then((res) => res?.templates ?? []);
 }

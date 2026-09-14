@@ -32,6 +32,7 @@ import {
  */
 export function StandaloneApp() {
   const [currentTab, setCurrentTab] = useState('dashboard');
+  const [blastLaunchGroup, setBlastLaunchGroup] = useState('');
   const [user, setUser] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem(STORAGE_USER);
@@ -211,7 +212,16 @@ export function StandaloneApp() {
           />
         )}
         {currentTab === 'groups' && (
-          <GroupsPage onNavigate={setCurrentTab} onGroupsChange={refreshGroups} />
+          <GroupsPage
+            contacts={contacts}
+            onNavigate={setCurrentTab}
+            onGroupsChange={refreshGroups}
+            onContactsChange={refreshContacts}
+            onStartBroadcast={(groupName) => {
+              setBlastLaunchGroup(groupName);
+              setCurrentTab('broadcast');
+            }}
+          />
         )}
         {currentTab === 'templates' && (
           <TemplatesPage contacts={contacts} onTemplatesChange={refreshTemplates} />
@@ -223,6 +233,8 @@ export function StandaloneApp() {
             sessions={sessions}
             campaigns={campaigns}
             contacts={contacts}
+            launchGroup={blastLaunchGroup}
+            onLaunchConsumed={() => setBlastLaunchGroup('')}
             onSessionsRefresh={refreshSessions}
             onCampaignCreate={handleCampaignCreate}
             onCampaignUpdate={handleCampaignUpdate}
