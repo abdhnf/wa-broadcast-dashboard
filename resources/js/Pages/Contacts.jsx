@@ -162,10 +162,12 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
     return matchesSearch && matchesGroup && matchesTag;
   });
 
-  // Reset page saat filter/search berubah
+  // Reset page saat filter/search berubah.
+  // Catatan: selectedIds sengaja TIDAK di-reset di sini agar pengguna bisa
+  // mencari kontak secara bertahap (search A -> centang -> search B -> centang)
+  // tanpa kehilangan kontak yang sudah dipilih sebelumnya.
   useEffect(() => {
     setCurrentPage(1);
-    setSelectedIds([]);
   }, [searchQuery, selectedGroup, selectedTagFilter]);
 
   const totalFiltered = filteredContacts.length;
@@ -266,7 +268,10 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
   };
 
   const handleSelectAllFiltered = () => {
-    setSelectedIds(filteredContacts.map((c) => c.id));
+    // Akumulasi kontak hasil filter ke dalam seleksi yang sudah ada (tanpa duplikasi)
+    setSelectedIds((prev) =>
+      Array.from(new Set([...prev, ...filteredContacts.map((c) => c.id)]))
+    );
   };
 
   const handleClearSelection = () => {
@@ -728,15 +733,20 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
       {/* Floating / Sticky Bulk Action Bar */}
       {selectedIds.length > 0 && (
         <div className="bg-brand-wash border border-brand-line p-2.5 px-4 rounded-lg flex flex-col sm:flex-row items-center justify-between gap-2.5 text-xs text-brand-deep">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="font-semibold font-mono">{selectedIds.length} kontak dipilih</span>
-            {selectedIds.length < filteredContacts.length && (
+            {searchQuery && (
+              <span className="text-[10px] bg-brand/10 border border-brand/20 px-1.5 py-0.5 rounded text-brand-deep">
+                Lintas Pencarian
+              </span>
+            )}
+            {filteredContacts.length > 0 && filteredContacts.some((c) => !selectedIds.includes(c.id)) && (
               <button
                 type="button"
                 onClick={handleSelectAllFiltered}
                 className="underline hover:opacity-80 text-[11px]"
               >
-                Pilih seluruh {filteredContacts.length} kontak hasil filter
+                + Tambah {filteredContacts.filter((c) => !selectedIds.includes(c.id)).length} kontak hasil pencarian ini
               </button>
             )}
           </div>
