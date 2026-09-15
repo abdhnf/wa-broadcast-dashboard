@@ -278,6 +278,12 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
     setSelectedIds([]);
   };
 
+  const selectedContacts = contacts.filter((c) => selectedIds.includes(c.id));
+
+  const handleUnselectContact = (id) => {
+    setSelectedIds((prev) => prev.filter((item) => item !== id));
+  };
+
   // Bulk Edit Custom Fields Handlers
   const addBulkCustomField = () => {
     setBulkCustomFields([...bulkCustomFields, { key: '', value: '' }]);
@@ -1014,7 +1020,7 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
 
       {/* Modal Bulk Edit Kontak Terpilih */}
       <Dialog open={isBulkEditModalOpen} onOpenChange={setIsBulkEditModalOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="sm:max-w-lg max-w-lg">
           <DialogHeader>
             <DialogTitle className="text-sm font-semibold text-ink flex items-center gap-2">
               <SlidersHorizontal className="w-4 h-4 text-brand-deep" />
@@ -1022,7 +1028,56 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
             </DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-4 py-2 text-xs">
+          <div className="space-y-3.5 py-1 text-xs">
+            {/* Pratinjau Daftar Kontak yang Sedang Dipilih */}
+            <div className="rounded-lg border border-line bg-surface-alt/50 p-2.5">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[11px] font-semibold text-ink flex items-center gap-1.5">
+                  <Users className="w-3.5 h-3.5 text-brand" />
+                  <span>Daftar Kontak Target ({selectedContacts.length})</span>
+                </span>
+                {selectedContacts.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={handleClearSelection}
+                    className="text-[10px] text-ink-faint hover:text-clay transition-colors"
+                  >
+                    Batal Pilih Semua
+                  </button>
+                )}
+              </div>
+
+              {selectedContacts.length === 0 ? (
+                <p className="text-[11px] text-ink-faint italic py-1">
+                  Belum ada kontak yang dipilih.
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto pr-1">
+                  {selectedContacts.map((c) => (
+                    <span
+                      key={c.id}
+                      className="inline-flex items-center gap-1 rounded-md border border-line bg-surface px-2 py-0.5 text-[11px] text-ink shadow-xs"
+                    >
+                      <span className="font-medium text-ink truncate max-w-[120px]" title={c.name}>
+                        {c.name}
+                      </span>
+                      <span className="text-[10px] font-mono text-ink-faint">
+                        ({c.phone ? c.phone.slice(-4) : '-'})
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleUnselectContact(c.id)}
+                        className="rounded p-0.5 text-ink-faint hover:bg-clay-wash hover:text-clay transition-colors"
+                        title={`Keluarkan ${c.name} dari editan ini`}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {/* Bagian 1: Segmen Grup */}
             <div className="space-y-1.5 p-3 rounded-lg border border-line bg-surface-alt/40">
               <label className="block text-[11px] font-semibold text-ink">
@@ -1158,8 +1213,8 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
               variant="default"
               size="sm"
               onClick={handleExecuteBulkUpdate}
-              disabled={isBulkUpdating}
-              className="gap-1.5 bg-brand hover:bg-brand-strong text-white"
+              disabled={isBulkUpdating || selectedIds.length === 0}
+              className="gap-1.5 bg-brand hover:bg-brand-strong text-white disabled:opacity-50"
             >
               {isBulkUpdating ? (
                 <>
