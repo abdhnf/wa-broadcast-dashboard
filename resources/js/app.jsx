@@ -133,7 +133,10 @@ export function StandaloneApp() {
   const handleCampaignCreate = useCallback(async (payload) => {
     const created = await createCampaign({
       name: payload.name,
+      batchId: payload.batchId,
       groupName: payload.groupName,
+      targetType: payload.targetType,
+      targetTags: payload.targetTags,
       templateId: payload.templateId,
       templateTitle: payload.templateTitle,
       sessionUsed: payload.sessionUsed,
@@ -172,6 +175,14 @@ export function StandaloneApp() {
     const timer = setInterval(() => void refreshSessions(), 30000);
     return () => clearInterval(timer);
   }, [user, refreshSessions, refreshGroups, refreshTemplates, refreshCampaigns, refreshContacts]);
+
+  // SPA freshness: re-fetch kontak setiap pindah tab agar tag/segmen yang
+  // diubah di satu halaman langsung terlihat konsisten di halaman lain
+  // (Blast Engine, Segmen, Playground memakai data kontak global).
+  useEffect(() => {
+    if (!user) return;
+    void refreshContacts();
+  }, [currentTab, user, refreshContacts]);
 
   if (!user) {
     return (

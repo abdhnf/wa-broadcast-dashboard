@@ -192,7 +192,10 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
   const [wizardStep, setWizardStep] = useState(1); // Step 1: Audiens | Step 2: Pesan & Template | Step 3: Pengirim & Pacing
   const [editingCampaign, setEditingCampaign] = useState(null); // Kampanye yang sedang diedit
   const [campaignName, setCampaignName] = useState('');
+  const [targetType, setTargetType] = useState('group'); // 'group' | 'tag'
   const [selectedGroup, setSelectedGroup] = useState('');
+  const [selectedTags, setSelectedTags] = useState([]); // array tag terpilih
+  const [tagMatchMode, setTagMatchMode] = useState('or'); // 'or' | 'and'
   const [selectedTemplate, setSelectedTemplate] = useState('');
   const [selectedSessionId, setSelectedSessionId] = useState('auto_rotate'); // Default: Auto Rotate
   const [campaignPriority, setCampaignPriority] = useState('normal'); // 'normal' | 'high'
@@ -233,6 +236,42 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
     (groupName) => (contacts || []).filter((c) => c.group === groupName || c.group_name === groupName),
     [contacts],
   );
+
+  // Kumpulan seluruh tag unik dari kontak untuk pilihan audiens
+  const availableTags = useMemo(() => {
+    const set = new Set();
+    (contacts || []).forEach((c) => {
+      if (c.tag) {
+        c.tag.split(',').forEach((t) => {
+          const trimmed = t.trim();
+          if (trimmed) set.add(trimmed);
+        });
+      }
+    });
+    return Array.from(set).sort();
+  }, [contacts]);
+
+  // Anggota target dinamis: berdasarkan group atau tag (or / and)
+  const resolvedTargetMembers = useMemo(() => {
+    if (targetType === 'group') {
+      if (!selectedGroup) return [];
+      return groupMembers(selectedGroup);
+    }
+
+    if (selectedTags.length === 0) return [];
+
+    return (contacts || []).filter((c) => {
+      const cTags = c.tag
+        ? c.tag.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean)
+        : [];
+      if (cTags.length === 0) return false;
+
+      if (tagMatchMode === 'and') {
+        return selectedTags.every((st) => cTags.includes(st.toLowerCase()));
+      }
+      return selectedTags.some((st) => cTags.includes(st.toLowerCase()));
+    });
+  }, [targetType, selectedGroup, selectedTags, tagMatchMode, contacts, groupMembers]);
 
   useEffect(() => {
     if (!launchGroup) return;
@@ -333,8 +372,12 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
       setFormError('Pilih template pesan terlebih dahulu.');
       return;
     }
-    if (!selectedGroup) {
+    if (targetType === 'group' && !selectedGroup) {
       setFormError('Pilih target segmen audiens terlebih dahulu.');
+      return;
+    }
+    if (targetType === 'tag' && selectedTags.length === 0) {
+      setFormError('Pilih minimal satu tag target audiens terlebih dahulu.');
       return;
     }
 
@@ -353,7 +396,9 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
         // Mode Update Kampanye
         const updatedFields = {
           name: campaignName.trim(),
-          groupName: selectedGroup,
+          groupName: targetType === 'group' ? selectedGroup : `Tag: ${selectedTags.join(', ')}`,
+          targetType,
+          targetTags: targetType === 'tag' ? selectedTags.join(', ') : null,
           templateId: tpl.id,
           templateTitle: tpl.title,
           sessionUsed: sessionLabel,
@@ -367,12 +412,13 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
         setCampaignName('');
         setSelectedTemplate('');
         setSelectedGroup('');
+        setSelectedTags([]);
         setCampaignPriority('normal');
         setIsWizardOpen(false);
       } else {
         // Mode Buat Kampanye Baru - gunakan batchId unik agar terisolasi dari kampanye lain
         const newBatchId = `cmp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-        const seed = groupMembers(selectedGroup).map((c, i) => ({
+        const seed = resolvedTargetMembers.map((c, i) => ({
           id: `q_${Date.now()}_${i}`,
           campaignId: newBatchId,
           phone: normalizePhone(c.phone),
@@ -383,10 +429,14 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
           session: sessionLabel,
         }));
 
+        const displayGroup = targetType === 'group' ? selectedGroup : `Tag: ${selectedTags.join(', ')}`;
+
         const created = await onCampaignCreate?.({
           name: campaignName.trim(),
           batchId: newBatchId,
-          groupName: selectedGroup,
+          groupName: displayGroup,
+          targetType,
+          targetTags: targetType === 'tag' ? selectedTags.join(', ') : null,
           templateId: tpl.id,
           templateTitle: tpl.title,
           sessionUsed: sessionLabel,
@@ -405,6 +455,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
         setCampaignName('');
         setSelectedTemplate('');
         setSelectedGroup('');
+        setSelectedTags([]);
         setCampaignPriority('normal');
         setIsWizardOpen(false);
         setSelectedCampaign(created);
@@ -1886,9 +1937,9 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
           </DialogHeader>
 
           <form onSubmit={handleCreateCampaign} className="space-y-4 text-xs py-2">
-            {/* STEP 1: NAMA KAMPANYE & TARGET AUDIENS */}
+            {/* STEP 1: NAMA KAMPANYE & TARGET AUDIENS (GRUP ATAU TAG) */}
             {wizardStep === 1 && (
-              <div className="space-y-3 blast-page-transition">
+              <div className="space-y-4 blast-page-transition">
                 <div>
                   <label className="block text-[11px] font-medium text-ink mb-1">
                     Nama Kampanye *
@@ -1906,43 +1957,140 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
                   </p>
                 </div>
 
+                {/* Target Type Selector: Tab Segmen Grup vs Multi-Tag */}
                 <div>
-                  <label className="block text-[11px] font-medium text-ink mb-1">
-                    Target Segmen Audiens *
+                  <label className="block text-[11px] font-medium text-ink mb-1.5">
+                    Target Audiens Berdasarkan *
                   </label>
-                  <select
-                    value={selectedGroup}
-                    onChange={(e) => setSelectedGroup(e.target.value)}
-                    disabled={Boolean(editingCampaign)}
-                    className="w-full h-9 px-3 rounded-lg bg-surface border border-line text-xs text-ink focus:outline-none focus:border-brand disabled:opacity-50"
-                  >
-                    <option value="">Pilih segmen audiens...</option>
-                    {groups?.map((g) => (
-                      <option key={g.id} value={g.name}>
-                        {g.name} ({g.count} kontak)
-                      </option>
-                    ))}
-                  </select>
+                  <div className="grid grid-cols-2 gap-2 mb-3">
+                    <button
+                      type="button"
+                      disabled={Boolean(editingCampaign)}
+                      onClick={() => setTargetType('group')}
+                      className={`p-2.5 rounded-lg border text-left transition-all ${
+                        targetType === 'group'
+                          ? 'border-brand bg-brand-wash text-brand-deep font-semibold'
+                          : 'border-line bg-surface-alt text-ink-muted hover:text-ink'
+                      }`}
+                    >
+                      <div className="text-xs font-semibold">Segmen Grup</div>
+                      <div className="text-[10px] opacity-80">Kirim ke semua kontak dalam segmen</div>
+                    </button>
+                    <button
+                      type="button"
+                      disabled={Boolean(editingCampaign)}
+                      onClick={() => setTargetType('tag')}
+                      className={`p-2.5 rounded-lg border text-left transition-all ${
+                        targetType === 'tag'
+                          ? 'border-brand bg-brand-wash text-brand-deep font-semibold'
+                          : 'border-line bg-surface-alt text-ink-muted hover:text-ink'
+                      }`}
+                    >
+                      <div className="text-xs font-semibold">Tag / Label (Multi-Tag)</div>
+                      <div className="text-[10px] opacity-80">Filter fleksibel berdasarkan tag kontak</div>
+                    </button>
+                  </div>
+
+                  {/* Mode Pilihan Grup */}
+                  {targetType === 'group' ? (
+                    <div className="space-y-2">
+                      <select
+                        value={selectedGroup}
+                        onChange={(e) => setSelectedGroup(e.target.value)}
+                        disabled={Boolean(editingCampaign)}
+                        className="w-full h-9 px-3 rounded-lg bg-surface border border-line text-xs text-ink focus:outline-none focus:border-brand disabled:opacity-50"
+                      >
+                        <option value="">Pilih segmen audiens...</option>
+                        {groups?.map((g) => (
+                          <option key={g.id} value={g.name}>
+                            {g.name} ({g.count} kontak)
+                          </option>
+                        ))}
+                      </select>
+
+                      {groups?.length === 0 && (
+                        <p className="text-[10px] text-honey mt-1">
+                          Belum ada segmen. Buat segmen dan tambahkan kontak terlebih dahulu di halaman Kontak.
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    /* Mode Pilihan Multi-Tag */
+                    <div className="space-y-3 p-3 rounded-lg border border-line bg-surface-alt/40">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-medium text-ink">Pilih Tag Target:</span>
+                        {/* Match Mode Switch: OR vs AND */}
+                        <div className="flex items-center gap-1 bg-surface p-0.5 rounded border border-line text-[10px]">
+                          <button
+                            type="button"
+                            onClick={() => setTagMatchMode('or')}
+                            className={`px-2 py-0.5 rounded font-mono transition-colors ${
+                              tagMatchMode === 'or'
+                                ? 'bg-brand text-white font-semibold'
+                                : 'text-ink-muted hover:text-ink'
+                            }`}
+                            title="Kontak yang memiliki salah satu tag terpilih akan menerima pesan"
+                          >
+                            Salah Satu (OR)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setTagMatchMode('and')}
+                            className={`px-2 py-0.5 rounded font-mono transition-colors ${
+                              tagMatchMode === 'and'
+                                ? 'bg-brand text-white font-semibold'
+                                : 'text-ink-muted hover:text-ink'
+                            }`}
+                            title="Hanya kontak yang memiliki semua tag terpilih yang akan menerima pesan"
+                          >
+                            Semua Tag (AND)
+                          </button>
+                        </div>
+                      </div>
+
+                      {availableTags.length === 0 ? (
+                        <p className="text-[10px] text-honey italic">
+                          Belum ada tag yang terdaftar pada kontak. Berikan tag pada kontak di halaman Kontak terlebih dahulu.
+                        </p>
+                      ) : (
+                        <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto">
+                          {availableTags.map((t) => {
+                            const isSelected = selectedTags.includes(t);
+                            return (
+                              <button
+                                key={t}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedTags((prev) =>
+                                    isSelected ? prev.filter((item) => item !== t) : [...prev, t]
+                                  );
+                                }}
+                                className={`px-2 py-1 rounded text-xs font-mono border transition-all ${
+                                  isSelected
+                                    ? 'bg-brand text-white border-brand shadow-sm font-semibold'
+                                    : 'bg-surface text-ink-muted border-line hover:border-brand/40 hover:text-ink'
+                                }`}
+                              >
+                                {t}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Ringkasan Estimasi Jumlah Penerima */}
-                  {selectedGroup && (() => {
-                    const count = groups?.find((g) => g.name === selectedGroup)?.count || 0;
-                    return (
-                      <div className="mt-2 p-2.5 rounded-lg bg-brand-wash border border-brand-line text-[11px] text-brand-deep flex items-center justify-between">
-                        <span>Estimasi target penerima:</span>
-                        <span className="font-mono font-bold text-xs">{count} kontak</span>
-                      </div>
-                    );
-                  })()}
-
-                  {groups?.length === 0 && (
-                    <p className="text-[10px] text-honey mt-1">
-                      Belum ada segmen. Buat segmen dan tambahkan kontak terlebih dahulu di halaman Kontak.
-                    </p>
+                  {resolvedTargetMembers.length > 0 && (
+                    <div className="mt-2.5 p-2.5 rounded-lg bg-brand-wash border border-brand-line text-[11px] text-brand-deep flex items-center justify-between">
+                      <span>Estimasi target penerima:</span>
+                      <span className="font-mono font-bold text-xs">{resolvedTargetMembers.length} kontak</span>
+                    </div>
                   )}
+
                   {editingCampaign && (
                     <p className="text-[10px] text-ink-faint mt-1">
-                      Segmen awal tidak dapat diubah pada mode edit. Tambah atau kurangi nomor langsung di daftar antrean.
+                      Target audiens awal tidak dapat diubah pada mode edit. Tambah atau kurangi nomor langsung di daftar antrean.
                     </p>
                   )}
                 </div>
@@ -2139,7 +2287,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
 
                 {/* Ringkasan Konfirmasi Pre-Flight & Estimasi Selesai */}
                 {(() => {
-                  const targetCount = groupMembers(selectedGroup)?.length || 0;
+                  const targetCount = resolvedTargetMembers.length;
                   const connected = (sessions || []).filter((s) => s.status === 'connected' || s.status === 'open');
                   const activeSessionsCount = selectedSessionId === 'auto_rotate' 
                     ? Math.max(connected.length, 1) 
@@ -2150,6 +2298,9 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
                   const estMinutes = Math.ceil(estTotalSeconds / 60);
 
                   const tpl = templates?.find((t) => t.id === selectedTemplate);
+                  const targetLabel = targetType === 'group'
+                    ? (selectedGroup || '-')
+                    : `Tag: ${selectedTags.join(', ') || '-'}`;
 
                   return (
                     <div className="rounded-xl bg-surface-sunken border border-line p-3 space-y-2">
@@ -2161,7 +2312,9 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
                       <div className="grid grid-cols-2 gap-2 text-[11px]">
                         <div className="p-2 rounded-lg bg-surface border border-line">
                           <span className="text-ink-muted block text-[10px]">Target Audiens</span>
-                          <span className="font-semibold text-ink">{selectedGroup || '-'}</span>
+                          <span className="font-semibold text-ink truncate block" title={targetLabel}>
+                            {targetLabel}
+                          </span>
                           <span className="text-brand font-mono font-bold block text-xs mt-0.5">
                             {targetCount} kontak
                           </span>

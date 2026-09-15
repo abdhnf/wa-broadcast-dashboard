@@ -349,6 +349,7 @@ class CrmController extends Controller
                 $name = trim($item['name'] ?? '');
                 $rawPhone = trim($item['phone'] ?? '');
                 $group = ! empty($item['group']) ? trim($item['group']) : null;
+                $tag = ! empty($item['tag']) ? trim($item['tag']) : null;
                 $custom = is_array($item['custom'] ?? null) ? $item['custom'] : [];
 
                 $phone = $this->normalizePhone($rawPhone);
@@ -369,6 +370,7 @@ class CrmController extends Controller
                     'name' => $name,
                     'phone' => $phone,
                     'group_name' => $group,
+                    'tag' => $tag,
                     'custom' => $custom,
                 ]);
 
@@ -520,6 +522,117 @@ class CrmController extends Controller
         return response()->json(['success' => true]);
     }
 
+    public function bulkUpdateContacts(Request $request)
+    {
+        if (! $user = $this->authorize($request)) {
+            return $this->unauthorized();
+        }
+
+        $data = Validator::make($request->all(), [
+            'contactIds' => ['required', 'array', 'min:1', 'max:5000'],
+            'contactIds.*' => ['required'],
+            'group' => ['nullable', 'string', 'max:150'],
+            'groupMode' => ['nullable', 'in:keep,set,clear'],
+            'tagMode' => ['nullable', 'in:keep,append,replace,remove'],
+            'tags' => ['nullable', 'array'],
+            'tags.*' => ['string', 'max:60'],
+            'custom' => ['nullable', 'array'],
+            'customMode' => ['nullable', 'in:merge,replace,clear'],
+        ])->validate();
+
+        $userId = $user['id'];
+        $ids = $data['contactIds'];
+        $groupMode = $data['groupMode'] ?? 'keep';
+        $tagMode = $data['tagMode'] ?? 'keep';
+        $customMode = $data['customMode'] ?? 'merge';
+
+        if ($groupMode === 'set' && ! empty($data['group'])) {
+            $this->syncGroupsForNames($userId, [$data['group']]);
+        }
+
+        $updatedCount = 0;
+
+        DB::transaction(function () use ($userId, $ids, $data, $groupMode, $tagMode, $customMode, &$updatedCount) {
+            $contacts = WaContact::where('user_id', $userId)->whereIn('id', $ids)->get();
+
+            foreach ($contacts as $contact) {
+                $dirty = false;
+
+                // 1. Kelola Segmen / Grup
+                if ($groupMode === 'set') {
+                    $newGroup = trim($data['group'] ?? '');
+                    $contact->group_name = $newGroup !== '' ? $newGroup : null;
+                    $dirty = true;
+                } elseif ($groupMode === 'clear') {
+                    $contact->group_name = null;
+                    $dirty = true;
+                }
+
+                // 2. Kelola Tag (Multi-Tag didukung via comma-separated string)
+                if ($tagMode !== 'keep') {
+                    $currentTags = array_filter(array_map('trim', explode(',', $contact->tag ?? '')));
+                    $inputTags = array_filter(array_map('trim', $data['tags'] ?? []));
+
+                    if ($tagMode === 'replace') {
+                        $currentTags = array_values(array_unique($inputTags));
+                    } elseif ($tagMode === 'append') {
+                        $currentTags = array_values(array_unique(array_merge($currentTags, $inputTags)));
+                    } elseif ($tagMode === 'remove') {
+                        $toRemove = array_flip($inputTags);
+                        $currentTags = array_values(array_filter($currentTags, fn ($t) => ! isset($toRemove[$t])));
+                    }
+
+                    $contact->tag = ! empty($currentTags) ? implode(', ', $currentTags) : null;
+                    $dirty = true;
+                }
+
+                // 3. Kelola Variabel Kustom
+                if ($customMode === 'clear') {
+                    $contact->custom = [];
+                    $dirty = true;
+                } elseif ($customMode === 'replace') {
+                    $contact->custom = is_array($data['custom'] ?? null) ? $data['custom'] : [];
+                    $dirty = true;
+                } elseif ($customMode === 'merge' && ! empty($data['custom']) && is_array($data['custom'])) {
+                    $existing = is_array($contact->custom) ? $contact->custom : [];
+                    $contact->custom = array_merge($existing, $data['custom']);
+                    $dirty = true;
+                }
+
+                if ($dirty) {
+                    $contact->save();
+                    $updatedCount++;
+                }
+            }
+        });
+
+        return response()->json([
+            'success' => true,
+            'updatedCount' => $updatedCount,
+        ]);
+    }
+
+    public function bulkDeleteContacts(Request $request)
+    {
+        if (! $user = $this->authorize($request)) {
+            return $this->unauthorized();
+        }
+
+        $data = Validator::make($request->all(), [
+            'contactIds' => ['required', 'array', 'min:1', 'max:5000'],
+            'contactIds.*' => ['required'],
+        ])->validate();
+
+        $deletedCount = WaContact::where('user_id', $user['id'])
+            ->whereIn('id', $data['contactIds'])
+            ->delete();
+
+        return response()->json([
+            'success' => true,
+            'deletedCount' => $deletedCount,
+        ]);
+    }
+
     // --------------------------------------------------------------- Templates
 
     public function templates(Request $request)
@@ -662,6 +775,8 @@ class CrmController extends Controller
             'name' => $c->name,
             'batchId' => $c->batch_id,
             'groupName' => $c->group_name,
+            'targetType' => $c->target_type ?? 'group',
+            'targetTags' => $c->target_tags ?? [],
             'templateId' => $c->template_id,
             'templateTitle' => $c->template_title,
             'totalRecipients' => $c->total_recipients,
@@ -719,6 +834,9 @@ class CrmController extends Controller
             'name' => ['required', 'string', 'max:180', 'regex:/\S/'],
             'batchId' => ['nullable', 'string', 'max:60'],
             'groupName' => ['nullable', 'string', 'max:150'],
+            'targetType' => ['nullable', 'string', 'in:group,tag,all'],
+            'targetTags' => ['nullable', 'array'],
+            'targetTags.*' => ['string', 'max:60'],
             'templateId' => ['nullable', 'string', 'max:64'],
             'templateTitle' => ['nullable', 'string', 'max:180'],
             'totalRecipients' => ['nullable', 'integer', 'min:0', 'max:100000'],
@@ -735,6 +853,8 @@ class CrmController extends Controller
             'name' => trim($data['name']),
             'batch_id' => $data['batchId'] ?? null,
             'group_name' => $data['groupName'] ?? null,
+            'target_type' => $data['targetType'] ?? 'group',
+            'target_tags' => $data['targetTags'] ?? [],
             'template_id' => $data['templateId'] ?? null,
             'template_title' => $data['templateTitle'] ?? null,
             'total_recipients' => $data['totalRecipients'] ?? 0,
@@ -762,6 +882,9 @@ class CrmController extends Controller
             'status' => ['sometimes', 'in:idle,in_progress,paused,completed,failed'],
             'batchId' => ['sometimes', 'nullable', 'string', 'max:60'],
             'groupName' => ['sometimes', 'nullable', 'string', 'max:150'],
+            'targetType' => ['sometimes', 'nullable', 'string', 'in:group,tag,all'],
+            'targetTags' => ['sometimes', 'nullable', 'array'],
+            'targetTags.*' => ['string', 'max:60'],
             'templateId' => ['sometimes', 'nullable', 'string', 'max:64'],
             'templateTitle' => ['sometimes', 'nullable', 'string', 'max:180'],
             'totalRecipients' => ['sometimes', 'integer', 'min:0', 'max:100000'],
@@ -785,6 +908,8 @@ class CrmController extends Controller
             'name' => 'name',
             'batchId' => 'batch_id',
             'groupName' => 'group_name',
+            'targetType' => 'target_type',
+            'targetTags' => 'target_tags',
             'templateId' => 'template_id',
             'templateTitle' => 'template_title',
             'totalRecipients' => 'total_recipients',

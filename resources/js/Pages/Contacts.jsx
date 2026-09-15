@@ -19,11 +19,16 @@ import {
   ChevronRight,
   Eye,
   FileDown,
-  RefreshCw
+  RefreshCw,
+  CheckSquare,
+  Square,
+  MinusSquare,
+  SlidersHorizontal,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
+import { TagInput } from '../components/ui/TagInput';
 import {
   Dialog,
   DialogContent,
@@ -31,7 +36,15 @@ import {
   DialogTitle,
   DialogFooter
 } from '../components/ui/Dialog';
-import { createContact, importContactsBatch, deleteContact, fetchContacts, updateContact } from '../lib/api';
+import {
+  createContact,
+  importContactsBatch,
+  deleteContact,
+  fetchContacts,
+  updateContact,
+  bulkUpdateContacts,
+  bulkDeleteContacts,
+} from '../lib/api';
 import { PHONE_ERROR_MESSAGE, isValidPhone, normalizePhone, toPhoneInput } from '../lib/phone';
 
 export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, onContactsChanged }) {
@@ -40,11 +53,23 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
   const [errorMsg, setErrorMsg] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedGroup, setSelectedGroup] = useState('all');
+  const [selectedTagFilter, setSelectedTagFilter] = useState('all');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingContact, setEditingContact] = useState(null);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+
+  // Bulk Selection & Bulk Edit State
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [isBulkEditModalOpen, setIsBulkEditModalOpen] = useState(false);
+  const [isBulkUpdating, setIsBulkUpdating] = useState(false);
+  const [bulkGroupMode, setBulkGroupMode] = useState('keep'); // 'keep' | 'set' | 'clear'
+  const [bulkGroup, setBulkGroup] = useState('');
+  const [bulkTagMode, setBulkTagMode] = useState('keep'); // 'keep' | 'append' | 'replace' | 'remove'
+  const [bulkTags, setBulkTags] = useState([]); // array chip tag dari TagInput
+  const [bulkCustomMode, setBulkCustomMode] = useState('merge'); // 'merge' | 'replace' | 'clear'
+  const [bulkCustomFields, setBulkCustomFields] = useState([{ key: '', value: '' }]);
 
   // Pagination state (pola wa-panel)
   const [currentPage, setCurrentPage] = useState(1);
@@ -59,7 +84,7 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [group, setGroup] = useState('');
-  const [tag, setTag] = useState('Member');
+  const [tagList, setTagList] = useState(['Member']); // array chip tag dari TagInput
   // Variabel dinamis kustom (key-value array)
   const [customFields, setCustomFields] = useState([]);
 
@@ -67,7 +92,7 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
   const [editName, setEditName] = useState('');
   const [editPhone, setEditPhone] = useState('');
   const [editGroup, setEditGroup] = useState('');
-  const [editTag, setEditTag] = useState('');
+  const [editTagList, setEditTagList] = useState([]); // array chip tag dari TagInput
   const [editCustomFields, setEditCustomFields] = useState([]);
   const [editErrorMsg, setEditErrorMsg] = useState('');
 
@@ -109,21 +134,39 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
     setCustomFields(updated);
   };
 
+  // Ekstraksi seluruh tag unik dari data kontak untuk filter dan sugesti
+  const allUniqueTags = Array.from(
+    new Set(
+      contacts
+        .flatMap((c) => (c.tag ? c.tag.split(',').map((t) => t.trim()) : []))
+        .filter(Boolean)
+    )
+  ).sort();
+
   const filteredContacts = contacts.filter((c) => {
     const matchesSearch =
       c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       c.phone.includes(searchQuery) ||
+      (c.tag && c.tag.toLowerCase().includes(searchQuery.toLowerCase())) ||
       Object.values(c.custom || {}).some((v) =>
         String(v).toLowerCase().includes(searchQuery.toLowerCase())
       );
     const matchesGroup = selectedGroup === 'all' || c.group === selectedGroup;
-    return matchesSearch && matchesGroup;
+    const contactTags = c.tag ? c.tag.split(',').map((t) => t.trim()) : [];
+    const matchesTag =
+      selectedTagFilter === 'all' ||
+      (selectedTagFilter === '__untagged__'
+        ? contactTags.length === 0
+        : contactTags.includes(selectedTagFilter));
+
+    return matchesSearch && matchesGroup && matchesTag;
   });
 
   // Reset page saat filter/search berubah
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, selectedGroup]);
+    setSelectedIds([]);
+  }, [searchQuery, selectedGroup, selectedTagFilter]);
 
   const totalFiltered = filteredContacts.length;
   const totalPages = Math.max(1, Math.ceil(totalFiltered / perPage));
@@ -153,7 +196,13 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
 
     setErrorMsg('');
     try {
-      const saved = await createContact({ name, phone, group, tag, custom: customObj });
+      const saved = await createContact({
+        name,
+        phone,
+        group,
+        tag: tagList.join(','),
+        custom: customObj,
+      });
       if (saved) setContacts((prev) => [saved, ...prev]);
       // Jumlah anggota segmen berubah; segarkan daftar grup di akar aplikasi.
       void onGroupsRefresh?.();
@@ -178,7 +227,11 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
     setEditName(contact.name || '');
     setEditPhone(contact.phone || '');
     setEditGroup(contact.group || (groups[0]?.name || ''));
-    setEditTag(contact.tag || '');
+    setEditTagList(
+      contact.tag
+        ? contact.tag.split(',').map((t) => t.trim()).filter(Boolean)
+        : []
+    );
     setEditErrorMsg('');
 
     // Konversi object custom ke array key-value untuk form editor
@@ -188,6 +241,121 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
     }));
     setEditCustomFields(fields.length > 0 ? fields : [{ key: '', value: '' }]);
     setIsEditModalOpen(true);
+  };
+
+  // Bulk Selection Handlers
+  const pageContactIds = paginatedContacts.map((c) => c.id);
+  const isAllPageSelected =
+    pageContactIds.length > 0 &&
+    pageContactIds.every((id) => selectedIds.includes(id));
+  const isSomePageSelected =
+    pageContactIds.some((id) => selectedIds.includes(id)) && !isAllPageSelected;
+
+  const handleToggleSelectAllPage = () => {
+    if (isAllPageSelected) {
+      setSelectedIds((prev) => prev.filter((id) => !pageContactIds.includes(id)));
+    } else {
+      setSelectedIds((prev) => Array.from(new Set([...prev, ...pageContactIds])));
+    }
+  };
+
+  const handleToggleSelectRow = (id) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleSelectAllFiltered = () => {
+    setSelectedIds(filteredContacts.map((c) => c.id));
+  };
+
+  const handleClearSelection = () => {
+    setSelectedIds([]);
+  };
+
+  // Bulk Edit Custom Fields Handlers
+  const addBulkCustomField = () => {
+    setBulkCustomFields([...bulkCustomFields, { key: '', value: '' }]);
+  };
+
+  const removeBulkCustomField = (index) => {
+    setBulkCustomFields(bulkCustomFields.filter((_, i) => i !== index));
+  };
+
+  const updateBulkCustomField = (index, field, value) => {
+    const updated = [...bulkCustomFields];
+    updated[index][field] = value;
+    setBulkCustomFields(updated);
+  };
+
+  const handleExecuteBulkUpdate = async () => {
+    if (selectedIds.length === 0) return;
+    setIsBulkUpdating(true);
+    setErrorMsg('');
+
+    try {
+      const customObj = {};
+      if (bulkCustomMode !== 'clear') {
+        bulkCustomFields.forEach((item) => {
+          if (item.key.trim()) {
+            customObj[item.key.trim()] = item.value;
+          }
+        });
+      }
+
+      const res = await bulkUpdateContacts({
+        contactIds: selectedIds,
+        group: bulkGroup,
+        groupMode: bulkGroupMode,
+        tagMode: bulkTagMode,
+        tags: bulkTags,
+        custom: customObj,
+        customMode: bulkCustomMode,
+      });
+
+      if (res && res.success) {
+        // Refresh contacts dari server agar data konsisten
+        await loadContacts();
+        void onGroupsRefresh?.();
+        void onContactsChange?.();
+        void onContactsChanged?.();
+        setIsBulkEditModalOpen(false);
+        setSelectedIds([]);
+      } else {
+        throw new Error(res?.error || 'Gagal menyimpan perubahan massal.');
+      }
+    } catch (err) {
+      setErrorMsg(err?.message || 'Terjadi kesalahan saat mengeksekusi edit massal.');
+    } finally {
+      setIsBulkUpdating(false);
+    }
+  };
+
+  const handleExecuteBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    const count = selectedIds.length;
+    if (!window.confirm(`Yakin ingin menghapus ${count} kontak terpilih secara permanen?`)) {
+      return;
+    }
+
+    setLoading(true);
+    setErrorMsg('');
+    try {
+      const res = await bulkDeleteContacts(selectedIds);
+      if (res && res.success) {
+        setContacts((prev) => prev.filter((c) => !selectedIds.includes(c.id)));
+        setSelectedIds([]);
+        void onGroupsRefresh?.();
+        void onContactsChange?.();
+        void onContactsChanged?.();
+      } else {
+        throw new Error(res?.error || 'Gagal menghapus kontak terpilih.');
+      }
+    } catch (err) {
+      setErrorMsg(err?.message || 'Terjadi kesalahan saat menghapus kontak terpilih.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const addEditCustomField = () => {
@@ -227,7 +395,7 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
         name: editName,
         phone: editPhone,
         group: editGroup,
-        tag: editTag,
+        tag: editTagList.join(','),
         custom: customObj,
       });
 
@@ -237,8 +405,11 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
         );
       }
 
+      // Segarkan grup DAN kontak global: tag yang diubah di modal edit harus
+      // langsung terlihat di halaman Blast Engine & Segmen (SPA freshness).
       void onGroupsRefresh?.();
       void onContactsChange?.();
+      void onContactsChanged?.();
       setIsEditModalOpen(false);
       setEditingContact(null);
     } catch (err) {
@@ -342,15 +513,16 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
       const nameIdx = lowerHeaders.indexOf('name');
       const phoneIdx = lowerHeaders.indexOf('phone');
       const groupIdx = lowerHeaders.indexOf('group');
+      const tagIdx = lowerHeaders.findIndex((h) => h === 'tag' || h === 'tags');
 
       if (nameIdx === -1 || phoneIdx === -1) {
         throw new Error('Header berkas wajib memiliki kolom "name" dan "phone". Silakan unduh template resmi.');
       }
 
-      // Identifikasi kolom variabel dinamis kustom (semua di luar name, phone, group)
+      // Identifikasi kolom variabel dinamis kustom (semua di luar name, phone, group, tag/tags)
       const customKeys = rawHeaders.filter((col, idx) => {
         const low = col.toLowerCase();
-        return col !== '' && low !== 'name' && low !== 'phone' && low !== 'group';
+        return col !== '' && low !== 'name' && low !== 'phone' && low !== 'group' && low !== 'tag' && low !== 'tags';
       });
 
       const parsedItems = [];
@@ -364,6 +536,7 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
         const rawName = String(row[nameIdx] ?? '').trim();
         const rawPhone = String(row[phoneIdx] ?? '').trim();
         const rawGroup = groupIdx !== -1 ? String(row[groupIdx] ?? '').trim() : '';
+        const rawTag = tagIdx !== -1 ? String(row[tagIdx] ?? '').trim() : '';
 
         if (!rawName || !isValidPhone(rawPhone)) {
           invalidCount++;
@@ -373,7 +546,7 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
         const customObj = {};
         rawHeaders.forEach((colName, colIdx) => {
           const low = colName.toLowerCase();
-          if (low === 'name' || low === 'phone' || low === 'group' || !colName) return;
+          if (low === 'name' || low === 'phone' || low === 'group' || low === 'tag' || low === 'tags' || !colName) return;
           const val = String(row[colIdx] ?? '').trim();
           if (val) customObj[colName] = val;
         });
@@ -383,6 +556,7 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
           phone: rawPhone,
           normalizedPhone: normalizePhone(rawPhone),
           group: rawGroup || groups?.[0]?.name || 'Imported',
+          tag: rawTag,
           custom: customObj,
         });
         validCount++;
@@ -423,6 +597,7 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
         name: item.name,
         phone: item.normalizedPhone,
         group: item.group,
+        tag: item.tag || null,
         custom: item.custom,
       }));
 
@@ -504,32 +679,99 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
       </div>
 
       {/* Filter & Live Search Toolbar */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 bg-surface  p-3 rounded-lg border border-line border-line text-xs">
+      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5 bg-surface p-3 rounded-lg border border-line text-xs">
         <div className="relative flex-1">
           <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint" />
           <input
             type="text"
-            placeholder="Cari nama, nomor WhatsApp (628xxx), atau variabel kustom..."
+            placeholder="Cari nama, nomor WhatsApp (628xxx), tag, atau variabel kustom..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-shell bg-surface border border-line border-line text-xs text-ink text-ink-soft focus:outline-none focus:border-brand transition-colors"
+            className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-shell bg-surface border border-line text-xs text-ink focus:outline-none focus:border-brand transition-colors"
           />
         </div>
 
-        <div className="flex items-center gap-2">
-          <Filter className="w-3.5 h-3.5 text-ink-faint shrink-0" />
-          <select
-            value={selectedGroup}
-            onChange={(e) => setSelectedGroup(e.target.value)}
-            className="py-1.5 px-3 rounded-lg bg-shell bg-surface border border-line border-line text-xs text-ink text-ink-soft focus:outline-none focus:border-brand"
-          >
-            <option value="all">Semua Segmen ({contacts.length})</option>
-            {groups?.map((g) => (
-              <option key={g.id} value={g.name}>{g.name} ({g.count})</option>
-            ))}
-          </select>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Filter Segmen Grup */}
+          <div className="flex items-center gap-1.5">
+            <Filter className="w-3.5 h-3.5 text-ink-faint shrink-0" />
+            <select
+              value={selectedGroup}
+              onChange={(e) => setSelectedGroup(e.target.value)}
+              className="py-1.5 px-2.5 rounded-lg bg-shell bg-surface border border-line text-xs text-ink focus:outline-none focus:border-brand"
+            >
+              <option value="all">Semua Segmen ({contacts.length})</option>
+              {groups?.map((g) => (
+                <option key={g.id} value={g.name}>{g.name} ({g.count})</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Filter Berdasarkan Tag */}
+          <div className="flex items-center gap-1.5">
+            <Tag className="w-3.5 h-3.5 text-ink-faint shrink-0" />
+            <select
+              value={selectedTagFilter}
+              onChange={(e) => setSelectedTagFilter(e.target.value)}
+              className="py-1.5 px-2.5 rounded-lg bg-shell bg-surface border border-line text-xs text-ink focus:outline-none focus:border-brand"
+            >
+              <option value="all">Semua Tag ({allUniqueTags.length})</option>
+              <option value="__untagged__">Tanpa Tag</option>
+              {allUniqueTags.map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
+
+      {/* Floating / Sticky Bulk Action Bar */}
+      {selectedIds.length > 0 && (
+        <div className="bg-brand-wash border border-brand-line p-2.5 px-4 rounded-lg flex flex-col sm:flex-row items-center justify-between gap-2.5 text-xs text-brand-deep">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold font-mono">{selectedIds.length} kontak dipilih</span>
+            {selectedIds.length < filteredContacts.length && (
+              <button
+                type="button"
+                onClick={handleSelectAllFiltered}
+                className="underline hover:opacity-80 text-[11px]"
+              >
+                Pilih seluruh {filteredContacts.length} kontak hasil filter
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="default"
+              size="sm"
+              onClick={() => setIsBulkEditModalOpen(true)}
+              className="h-7 text-xs"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5 mr-1" />
+              <span>Edit Massal ({selectedIds.length})</span>
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleExecuteBulkDelete}
+              className="h-7 text-xs text-clay border-clay-line hover:bg-clay-wash"
+            >
+              <Trash2 className="w-3.5 h-3.5 mr-1" />
+              <span>Hapus Terpilih</span>
+            </Button>
+            <button
+              type="button"
+              onClick={handleClearSelection}
+              className="p-1 rounded text-ink-muted hover:text-ink transition-colors"
+              title="Batalkan seleksi"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Pesan galat tingkat halaman: kegagalan muat atau hapus data. */}
       {errorMsg && (
@@ -540,14 +782,31 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
       )}
 
       {/* Modern High-Density Table with Responsive Horizontal Scroll */}
-      <div className="bg-surface  rounded-lg border border-line border-line overflow-hidden ">
+      <div className="bg-surface rounded-lg border border-line overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-ink-soft text-ink-soft min-w-[750px]">
-            <thead className="bg-shell bg-surface text-ink-soft text-ink-muted uppercase text-[10px] tracking-wider font-semibold border-b border-line border-line">
+          <table className="w-full text-left text-xs text-ink-soft min-w-[850px]">
+            <thead className="bg-shell bg-surface text-ink-muted uppercase text-[10px] tracking-wider font-semibold border-b border-line">
               <tr>
-                <th className="py-2.5 px-4 w-10 text-center">#</th>
+                <th className="py-2.5 px-3 w-10 text-center">
+                  <button
+                    type="button"
+                    onClick={handleToggleSelectAllPage}
+                    className="p-1 rounded text-ink-muted hover:text-ink transition-colors flex items-center justify-center mx-auto"
+                    title={isAllPageSelected ? 'Batal pilih semua di halaman ini' : 'Pilih semua di halaman ini'}
+                  >
+                    {isAllPageSelected ? (
+                      <CheckSquare className="w-4 h-4 text-brand-deep" />
+                    ) : isSomePageSelected ? (
+                      <MinusSquare className="w-4 h-4 text-brand-deep" />
+                    ) : (
+                      <Square className="w-4 h-4 text-ink-faint" />
+                    )}
+                  </button>
+                </th>
+                <th className="py-2.5 px-3 w-10 text-center font-mono">#</th>
                 <th className="py-2.5 px-4">Nama Penerima</th>
                 <th className="py-2.5 px-4">Nomor WhatsApp</th>
+                <th className="py-2.5 px-4">Tag / Label</th>
                 <th className="py-2.5 px-4">Segmen Grup</th>
                 <th className="py-2.5 px-4">Variabel Dinamis Kustom</th>
                 <th className="py-2.5 px-4 text-right">Aksi</th>
@@ -556,83 +815,119 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
             <tbody className="divide-y divide-line font-normal">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-ink-faint text-ink-faint">
+                  <td colSpan={8} className="py-8 text-center text-ink-faint">
                     Memuat kontak dari database…
                   </td>
                 </tr>
               ) : paginatedContacts.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-ink-faint text-ink-faint">
+                  <td colSpan={8} className="py-8 text-center text-ink-faint">
                     {contacts.length === 0
                       ? 'Belum ada kontak. Tambahkan kontak pertama Anda.'
                       : 'Tidak ada kontak yang cocok dengan filter.'}
                   </td>
                 </tr>
               ) : (
-                paginatedContacts.map((c, idx) => (
-                  <tr key={c.id} className="hover:bg-surface-alt/60 transition-colors">
-                    <td className="py-2.5 px-4 text-center font-mono text-[11px] text-ink-faint">
-                      {(currentPage - 1) * perPage + idx + 1}
-                    </td>
-                    <td className="py-2.5 px-4 font-medium text-ink text-ink">
-                      <div className="flex items-center gap-2">
+                paginatedContacts.map((c, idx) => {
+                  const isSelected = selectedIds.includes(c.id);
+                  const contactTags = c.tag
+                    ? c.tag.split(',').map((t) => t.trim()).filter(Boolean)
+                    : [];
+
+                  return (
+                    <tr
+                      key={c.id}
+                      className={`transition-colors ${
+                        isSelected ? 'bg-brand-wash/50' : 'hover:bg-surface-alt/60'
+                      }`}
+                    >
+                      <td className="py-2.5 px-3 text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleSelectRow(c.id)}
+                          className="p-1 rounded text-ink-muted hover:text-ink transition-colors flex items-center justify-center mx-auto"
+                        >
+                          {isSelected ? (
+                            <CheckSquare className="w-4 h-4 text-brand-deep" />
+                          ) : (
+                            <Square className="w-4 h-4 text-ink-faint" />
+                          )}
+                        </button>
+                      </td>
+                      <td className="py-2.5 px-3 text-center font-mono text-[11px] text-ink-faint">
+                        {(currentPage - 1) * perPage + idx + 1}
+                      </td>
+                      <td className="py-2.5 px-4 font-medium text-ink">
                         <span>{c.name}</span>
-                        {c.tag && (
-                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface-sunken bg-surface-alt text-ink-soft text-ink-muted border border-line border-line">
-                            {c.tag}
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="py-2.5 px-4 font-mono text-[11px] text-leaf-deep text-brand-soft font-medium">
-                      <div className="flex items-center gap-1.5">
-                        <Phone className="w-3 h-3 text-ink-faint" />
-                        <span>+{c.phone}</span>
-                      </div>
-                    </td>
-                    <td className="py-2.5 px-4">
-                      <Badge variant="secondary" className="text-[11px] font-normal">
-                        {c.group}
-                      </Badge>
-                    </td>
-                    <td className="py-2.5 px-4">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        {Object.entries(c.custom || {}).length === 0 ? (
+                      </td>
+                      <td className="py-2.5 px-4 font-mono text-[11px] text-brand-soft font-medium">
+                        <div className="flex items-center gap-1.5">
+                          <Phone className="w-3 h-3 text-ink-faint" />
+                          <span>+{c.phone}</span>
+                        </div>
+                      </td>
+                      {/* Kolom Tag Mandiri */}
+                      <td className="py-2.5 px-4">
+                        {contactTags.length === 0 ? (
                           <span className="text-[10px] text-ink-faint italic">-</span>
                         ) : (
-                          Object.entries(c.custom || {}).map(([k, v]) => (
-                            <span
-                              key={k}
-                              className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface-sunken text-ink-soft border border-line"
-                            >
-                              <strong className="text-brand-deep font-semibold">{k}:</strong> {String(v)}
-                            </span>
-                          ))
+                          <div className="flex flex-wrap items-center gap-1">
+                            {contactTags.map((t, tIdx) => (
+                              <Badge
+                                key={tIdx}
+                                variant="default"
+                                className="font-mono text-[10px]"
+                              >
+                                {t}
+                              </Badge>
+                            ))}
+                          </div>
                         )}
-                      </div>
-                    </td>
-                    <td className="py-2.5 px-4 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <button
-                          type="button"
-                          onClick={() => handleOpenEdit(c)}
-                          className="p-1 rounded text-ink-faint hover:text-brand-deep hover:bg-brand-wash  transition-colors"
-                          title="Edit kontak & variabel"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void handleDeleteContact(c.id)}
-                          className="p-1 rounded text-ink-faint hover:text-clay hover:bg-clay-wash dark:hover:bg-rose-950/30 transition-colors"
-                          title="Hapus kontak"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                      </td>
+                      <td className="py-2.5 px-4">
+                        <Badge variant="secondary" className="text-[11px] font-normal">
+                          {c.group}
+                        </Badge>
+                      </td>
+                      <td className="py-2.5 px-4">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {Object.entries(c.custom || {}).length === 0 ? (
+                            <span className="text-[10px] text-ink-faint italic">-</span>
+                          ) : (
+                            Object.entries(c.custom || {}).map(([k, v]) => (
+                              <span
+                                key={k}
+                                className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface-sunken text-ink-soft border border-line"
+                              >
+                                <strong className="text-brand-deep font-semibold">{k}:</strong> {String(v)}
+                              </span>
+                            ))
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-2.5 px-4 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEdit(c)}
+                            className="p-1 rounded text-ink-faint hover:text-brand-deep hover:bg-brand-wash transition-colors"
+                            title="Edit kontak & variabel"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void handleDeleteContact(c.id)}
+                            className="p-1 rounded text-ink-faint hover:text-clay hover:bg-clay-wash dark:hover:bg-rose-950/30 transition-colors"
+                            title="Hapus kontak"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -707,6 +1002,167 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
         </div>
       </div>
 
+      {/* Modal Bulk Edit Kontak Terpilih */}
+      <Dialog open={isBulkEditModalOpen} onOpenChange={setIsBulkEditModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-sm font-semibold text-ink flex items-center gap-2">
+              <SlidersHorizontal className="w-4 h-4 text-brand-deep" />
+              <span>Edit Massal ({selectedIds.length} Kontak Terpilih)</span>
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2 text-xs">
+            {/* Bagian 1: Segmen Grup */}
+            <div className="space-y-1.5 p-3 rounded-lg border border-line bg-surface-alt/40">
+              <label className="block text-[11px] font-semibold text-ink">
+                1. Ubah Segmen Grup
+              </label>
+              <div className="space-y-2">
+                <select
+                  value={bulkGroupMode}
+                  onChange={(e) => setBulkGroupMode(e.target.value)}
+                  className="w-full h-8 px-2 rounded-lg bg-surface border border-line text-xs text-ink focus:outline-none focus:border-brand"
+                >
+                  <option value="keep">Jangan Ubah Segmen Grup</option>
+                  <option value="set">Pindahkan ke Segmen Grup Baru</option>
+                </select>
+
+                {bulkGroupMode === 'set' && (
+                  <select
+                    value={bulkGroup}
+                    onChange={(e) => setBulkGroup(e.target.value)}
+                    className="w-full h-8 px-2 rounded-lg bg-surface border border-line text-xs text-ink focus:outline-none focus:border-brand"
+                  >
+                    {groups?.map((g) => (
+                      <option key={g.id} value={g.name}>
+                        {g.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            </div>
+
+            {/* Bagian 2: Tag / Label Multi-Tag */}
+            <div className="space-y-1.5 p-3 rounded-lg border border-line bg-surface-alt/40">
+              <label className="block text-[11px] font-semibold text-ink">
+                2. Pengaturan Tag / Label
+              </label>
+              <div className="space-y-2">
+                <select
+                  value={bulkTagMode}
+                  onChange={(e) => setBulkTagMode(e.target.value)}
+                  className="w-full h-8 px-2 rounded-lg bg-surface border border-line text-xs text-ink focus:outline-none focus:border-brand"
+                >
+                  <option value="keep">Jangan Ubah Tag Kontak</option>
+                  <option value="add">Tambahkan Tag Baru (Tanpa Hapus yang Ada)</option>
+                  <option value="replace">Ganti Seluruh Tag dengan yang Baru</option>
+                  <option value="remove">Hapus Tag Tertentu dari Kontak</option>
+                </select>
+
+                {bulkTagMode !== 'keep' && (
+                  <div>
+                    <TagInput
+                      value={bulkTags}
+                      onChange={setBulkTags}
+                      suggestions={allUniqueTags}
+                      placeholder="Ketik tag lalu Enter (cth: Prioritas)"
+                    />
+                    <p className="text-[10px] text-ink-faint mt-1">
+                      {bulkTagMode === 'add' && 'Tag ini akan digabungkan ke tag kontak yang sudah ada.'}
+                      {bulkTagMode === 'replace' && 'Tag lama di kontak terpilih akan ditimpa seluruhnya.'}
+                      {bulkTagMode === 'remove' && 'Tag yang dicocokkan akan dihilangkan dari kontak.'}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Bagian 3: Variabel Dinamis JSON */}
+            <div className="space-y-1.5 p-3 rounded-lg border border-line bg-surface-alt/40">
+              <div className="flex items-center justify-between">
+                <label className="block text-[11px] font-semibold text-ink">
+                  3. Update Variabel Dinamis (Key-Value)
+                </label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={addBulkCustomField}
+                  className="h-6 px-2 text-[10px]"
+                >
+                  <Plus className="w-3 h-3 mr-1" />
+                  <span>Tambah Variabel</span>
+                </Button>
+              </div>
+
+              {bulkCustomFields.length === 0 ? (
+                <p className="text-[10px] text-ink-faint italic">
+                  Tidak ada variabel kustom yang akan diubah massal. Klik Tambah Variabel jika diperlukan.
+                </p>
+              ) : (
+                <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1">
+                  {bulkCustomFields.map((field, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        placeholder="Key (cth: kota)"
+                        value={field.key}
+                        onChange={(e) => updateBulkCustomField(idx, 'key', e.target.value)}
+                        className="w-1/2 h-7 px-2 rounded bg-surface border border-line text-[11px] font-mono text-ink focus:outline-none focus:border-brand"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Nilai (cth: Jakarta)"
+                        value={field.value}
+                        onChange={(e) => updateBulkCustomField(idx, 'value', e.target.value)}
+                        className="w-1/2 h-7 px-2 rounded bg-surface border border-line text-[11px] font-mono text-ink focus:outline-none focus:border-brand"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeBulkCustomField(idx)}
+                        className="p-1 text-ink-faint hover:text-clay"
+                        title="Hapus baris"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter className="flex items-center justify-between gap-2 border-t border-line pt-3">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsBulkEditModalOpen(false)}
+              disabled={isBulkUpdating}
+            >
+              Batal
+            </Button>
+            <Button
+              variant="default"
+              size="sm"
+              onClick={handleExecuteBulkUpdate}
+              disabled={isBulkUpdating}
+              className="gap-1.5 bg-brand hover:bg-brand-strong text-white"
+            >
+              {isBulkUpdating ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  <span>Menyimpan Perubahan…</span>
+                </>
+              ) : (
+                <span>Terapkan ke {selectedIds.length} Kontak</span>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Modal Tambah Kontak dengan Dukungan Multi Variabel Dinamis Kustom */}
       <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
         <DialogContent className="sm:max-w-lg">
@@ -777,14 +1233,14 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
 
               <div>
                 <label className="block text-[11px] font-medium text-ink-soft text-ink-soft mb-1">
-                  Tag / Label Ringkas
+                  Tag / Label (Bisa Multi-Tag)
                 </label>
-                <input
-                  type="text"
-                  placeholder="Misal: VIP, Member, Prioritas"
-                  value={tag}
-                  onChange={(e) => setTag(e.target.value)}
-                  className="w-full h-8 px-2.5 rounded-lg bg-shell bg-surface border border-line border-line text-xs text-ink text-ink-soft focus:outline-none focus:border-brand"
+                <TagInput
+                  value={tagList}
+                  onChange={setTagList}
+                  suggestions={allUniqueTags}
+                  placeholder="Ketik tag lalu Enter (cth: VIP)"
+                  className="mb-0"
                 />
               </div>
             </div>
@@ -929,14 +1385,14 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
 
               <div>
                 <label className="block text-[11px] font-medium text-ink-soft text-ink-soft mb-1">
-                  Tag / Label Ringkas
+                  Tag / Label (Bisa Multi-Tag)
                 </label>
-                <input
-                  type="text"
-                  placeholder="Misal: VIP, Member, Prioritas"
-                  value={editTag}
-                  onChange={(e) => setEditTag(e.target.value)}
-                  className="w-full h-8 px-2.5 rounded-lg bg-shell bg-surface border border-line border-line text-xs text-ink text-ink-soft focus:outline-none focus:border-brand"
+                <TagInput
+                  value={editTagList}
+                  onChange={setEditTagList}
+                  suggestions={allUniqueTags}
+                  placeholder="Ketik tag lalu Enter (cth: VIP)"
+                  className="mb-0"
                 />
               </div>
             </div>
@@ -1125,6 +1581,7 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
                         <th className="px-2.5 py-1.5">#</th>
                         <th className="px-2.5 py-1.5">Nama</th>
                         <th className="px-2.5 py-1.5">Nomor (Normalisasi)</th>
+                        <th className="px-2.5 py-1.5">Tag</th>
                         <th className="px-2.5 py-1.5">Grup</th>
                         {previewData.customKeys.map((k) => (
                           <th key={k} className="px-2.5 py-1.5 text-amber-600 dark:text-amber-400 font-mono">
@@ -1139,6 +1596,9 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
                           <td className="px-2.5 py-1.5 text-ink-faint font-mono">{idx + 1}</td>
                           <td className="px-2.5 py-1.5 font-medium">{item.name}</td>
                           <td className="px-2.5 py-1.5 font-mono text-brand-deep">{item.normalizedPhone}</td>
+                          <td className="px-2.5 py-1.5 text-ink-muted font-mono text-[10px]">
+                            {item.tag || '-'}
+                          </td>
                           <td className="px-2.5 py-1.5 text-ink-muted">{item.group}</td>
                           {previewData.customKeys.map((k) => (
                             <td key={k} className="px-2.5 py-1.5 text-ink-muted">

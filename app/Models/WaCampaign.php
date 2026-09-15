@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Model;
 class WaCampaign extends Model
 {
     protected $fillable = [
-        'user_id', 'name', 'batch_id', 'group_name', 'template_id', 'template_title',
+        'user_id', 'name', 'batch_id', 'group_name', 'target_type', 'target_tags', 'template_id', 'template_title',
         'total_recipients', 'sent_count', 'delivered_count', 'read_count',
         'failed_count', 'status', 'session_used', 'queue',
     ];
@@ -22,6 +22,7 @@ class WaCampaign extends Model
         'delivered_count' => 'integer',
         'read_count' => 'integer',
         'failed_count' => 'integer',
+        'target_tags' => 'array',
         'queue' => 'array',
     ];
 }

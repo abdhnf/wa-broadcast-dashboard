@@ -233,6 +233,20 @@ export function deleteContact(id) {
   return crmFetch(`/contacts/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
+export function bulkUpdateContacts({ contactIds, group, groupMode, tagMode, tags, custom, customMode }) {
+  return crmFetch('/contacts/bulk-update', {
+    method: 'POST',
+    body: { contactIds, group, groupMode, tagMode, tags, custom, customMode },
+  });
+}
+
+export function bulkDeleteContacts(contactIds) {
+  return crmFetch('/contacts/bulk-delete', {
+    method: 'POST',
+    body: { contactIds },
+  });
+}
+
 export function fetchGroups({ signal } = {}) {
   return crmFetch('/groups', { signal }).then((res) => res?.groups ?? []);
 }

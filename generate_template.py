@@ -36,7 +36,7 @@ def generate_wa_contacts_template(output_path):
     )
 
     # Row 1: Banner / Petunjuk
-    ws.merge_cells("A1:G1")
+    ws.merge_cells("A1:H1")
     banner_cell = ws["A1"]
     banner_cell.value = "📋 TEMPLATE IMPORT AUDIENS WHATSAPP BLAST — Kolom Amber = Wajib/Dasar, Kolom Cokelat = Variabel Kustom Dinamis ({{key}})"
     banner_cell.fill = note_fill
@@ -49,6 +49,7 @@ def generate_wa_contacts_template(output_path):
         ("name", "Nama Kontak (Wajib)", header_fill),
         ("phone", "Nomor WhatsApp (Wajib: 628xx)", header_fill),
         ("group", "Segmen / Grup (Opsional)", header_fill),
+        ("tag", "Tag / Label (Pisahkan koma)", header_fill),
         ("kota", "Variabel: kota", custom_fill),
         ("voucher", "Variabel: voucher", custom_fill),
         ("nominal", "Variabel: nominal", custom_fill),
@@ -65,11 +66,11 @@ def generate_wa_contacts_template(output_path):
 
     # Sample Data (Row 3-7)
     sample_data = [
-        ("Budi Santoso", "081234567890", "Pelanggan VIP", "Jakarta", "PROMO100K", "100.000", "https://srvx.id/v/budi"),
-        ("Siti Rahma", "6285712345678", "Reseller Reguler", "Surabaya", "DISC25", "50.000", "https://srvx.id/v/siti"),
-        ("Ahmad Fauzi", "+6281987654321", "Lead Prospek", "Bandung", "NEWUSER", "25.000", "https://srvx.id/v/ahmad"),
-        ("Dewi Lestari", "085299887766", "Pelanggan VIP", "Medan", "VIP50", "150.000", "https://srvx.id/v/dewi"),
-        ("Rian Pratama", "6289611223344", "Reseller Reguler", "Yogyakarta", "CASHBACK", "75.000", "https://srvx.id/v/rian"),
+        ("Budi Santoso", "081234567890", "Pelanggan VIP", "VIP, Jakarta, Prioritas", "Jakarta", "PROMO100K", "100.000", "https://srvx.id/v/budi"),
+        ("Siti Rahma", "6285712345678", "Reseller Reguler", "Reseller, Surabaya", "Surabaya", "DISC25", "50.000", "https://srvx.id/v/siti"),
+        ("Ahmad Fauzi", "+6281234564321", "Lead Prospek", "Hot Lead, Promo", "Bandung", "NEWUSER", "25.000", "https://srvx.id/v/ahmad"),
+        ("Dewi Lestari", "085299887766", "Pelanggan VIP", "VIP, Medan", "Medan", "VIP50", "150.000", "https://srvx.id/v/dewi"),
+        ("Rian Pratama", "6289611223344", "Reseller Reguler", "Reseller, Jogja", "Yogyakarta", "CASHBACK", "75.000", "https://srvx.id/v/rian"),
     ]
 
     for row_idx, row_values in enumerate(sample_data, 3):
@@ -86,9 +87,9 @@ def generate_wa_contacts_template(output_path):
             
             # Format text explicitly agar nomor HP dengan awalan 0 tidak hilang
             cell.number_format = '@'
-            if col_idx in [2, 4, 5]:
+            if col_idx in [2, 5, 6]:
                 cell.alignment = Alignment(horizontal="center", vertical="center")
-            elif col_idx == 6:
+            elif col_idx == 7:
                 cell.alignment = Alignment(horizontal="right", vertical="center")
             else:
                 cell.alignment = Alignment(horizontal="left", vertical="center")
@@ -98,10 +99,11 @@ def generate_wa_contacts_template(output_path):
         'A': 22, # name
         'B': 22, # phone
         'C': 20, # group
-        'D': 16, # kota
-        'E': 16, # voucher
-        'F': 16, # nominal
-        'G': 28, # link
+        'D': 25, # tag
+        'E': 16, # kota
+        'F': 16, # voucher
+        'G': 16, # nominal
+        'H': 28, # link
     }
     for col_letter, width in col_widths.items():
         ws.column_dimensions[col_letter].width = width
@@ -123,7 +125,8 @@ def generate_wa_contacts_template(output_path):
         ("name", "Nama penerima pesan (Wajib diisi). Digunakan untuk variabel {{name}}.", "Budi Santoso"),
         ("phone", "Nomor WhatsApp (Wajib diisi). Format otomatis dinormalisasi ke 628xx.", "081234567890 atau 6281234567890"),
         ("group", "Nama segmen audiens / kategori kontak (Opsional). Jika kosong masuk grup default.", "Pelanggan VIP"),
-        ("Variabel Kustom", "Semua kolom tambahan di samping kanan kolom group (misal: kota, voucher, tagihan, dll) otomatis disimpan sebagai Variabel Kustom Kontak.", "Kolom baru: tagihan, tenor, dsb"),
+        ("tag", "Tag atau label kontak (Opsional). Bisa multi-tag dipisahkan dengan koma.", "VIP, Jakarta, Member"),
+        ("Variabel Kustom", "Semua kolom tambahan di samping kanan kolom tag (misal: kota, voucher, tagihan, dll) otomatis disimpan sebagai Variabel Kustom Kontak.", "Kolom baru: tagihan, tenor, dsb"),
         ("Cara Panggil", "Di template pesan WA Blast, panggil menggunakan format kurung kurawal ganda.", "Halo {{name}}, voucher Anda {{voucher}} di {{kota}}"),
     ]
 
