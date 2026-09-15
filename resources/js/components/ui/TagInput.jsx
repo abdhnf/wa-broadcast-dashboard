@@ -20,6 +20,7 @@ export function TagInput({
   placeholder = 'Tambah tag…',
   maxTags = 50,
   disabled = false,
+  inlineSuggestions = false,
   className,
 }) {
   const [draft, setDraft] = useState('');
@@ -56,13 +57,15 @@ export function TagInput({
       setDraft('');
       setShowSuggestions(false);
     }
-    // Enter di dalam form: event sudah di-preventDefault di atas, jadi tidak
-    // akan meng-submit form induk secara tak sengaja.
   };
 
   const remainingSuggestions = suggestions
-    .filter((s) => !hasTag(s))
-    .slice(0, 8);
+    .filter(
+      (s) =>
+        !hasTag(s) &&
+        (!draft || s.toLowerCase().includes(draft.toLowerCase()))
+    )
+    .slice(0, 10);
 
   return (
     <div className={cn('relative', className)}>
@@ -114,9 +117,9 @@ export function TagInput({
 
       {/* Sugesti tag yang sudah ada di database */}
       {showSuggestions && remainingSuggestions.length > 0 && (
-        <div className="absolute z-30 mt-1 w-full rounded-lg border border-line bg-surface p-1 shadow-lg">
+        <div className="absolute z-30 mt-1 w-full rounded-lg border border-line bg-surface p-1.5 shadow-lg">
           <p className="px-1.5 pb-1 text-[9px] uppercase tracking-wide text-ink-faint">
-            Tag terdaftar
+            Pilih tag yang sudah ada
           </p>
           <div className="flex flex-wrap gap-1">
             {remainingSuggestions.map((s) => (
@@ -130,10 +133,28 @@ export function TagInput({
                 }}
                 className="rounded-md border border-line bg-surface-alt px-1.5 py-0.5 text-[10px] font-semibold text-ink-muted transition-colors hover:border-brand/40 hover:text-ink"
               >
-                {s}
+                + {s}
               </button>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Sugesti inline statis jika diaktifkan (memudahkan klik langsung tanpa fokus) */}
+      {inlineSuggestions && remainingSuggestions.length > 0 && (
+        <div className="mt-1.5 flex flex-wrap items-center gap-1">
+          <span className="text-[10px] text-ink-faint">Sugesti tag:</span>
+          {remainingSuggestions.slice(0, 6).map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => addTag(s)}
+              className="inline-flex items-center gap-1 rounded border border-line/70 bg-surface-alt px-1.5 py-0.5 text-[10px] font-medium text-ink-soft transition-colors hover:border-brand hover:text-brand"
+            >
+              <span>+</span>
+              <span>{s}</span>
+            </button>
+          ))}
         </div>
       )}
     </div>

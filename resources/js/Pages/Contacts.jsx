@@ -1067,6 +1067,7 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
                       value={bulkTags}
                       onChange={setBulkTags}
                       suggestions={allUniqueTags}
+                      inlineSuggestions={true}
                       placeholder="Ketik tag lalu Enter (cth: Prioritas)"
                     />
                     <p className="text-[10px] text-ink-faint mt-1">
@@ -1165,88 +1166,85 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
 
       {/* Modal Tambah Kontak dengan Dukungan Multi Variabel Dinamis Kustom */}
       <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Tambah Kontak Baru</DialogTitle>
           </DialogHeader>
 
-          <form onSubmit={handleSaveContact} className="space-y-3.5 text-xs py-1">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[11px] font-medium text-ink-soft text-ink-soft mb-1">
-                  Nama Lengkap Penerima *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Misal: Budi Santoso"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full h-8 px-2.5 rounded-lg bg-shell bg-surface border border-line border-line text-xs text-ink text-ink-soft focus:outline-none focus:border-brand"
-                />
-              </div>
+          <form onSubmit={handleSaveContact} className="space-y-3 text-xs py-1">
+            <div>
+              <label className="block text-[11px] font-medium text-ink-soft mb-1">
+                Nama Lengkap Penerima *
+              </label>
+              <input
+                type="text"
+                required
+                placeholder="Misal: Budi Santoso"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full h-8 px-2.5 rounded-lg bg-surface border border-line text-xs text-ink focus:outline-none focus:border-brand"
+              />
+            </div>
 
-              <div>
-                <label className="block text-[11px] font-medium text-ink-soft text-ink-soft mb-1">
-                  Nomor WhatsApp *
-                </label>
-                <input
-                  type="text"
-                  required
-                  inputMode="numeric"
-                  autoComplete="off"
-                  maxLength={15}
-                  placeholder="628123456789"
-                  value={phone}
-                  onChange={(e) => setPhone(toPhoneInput(e.target.value))}
-                  className="w-full h-8 px-2.5 rounded-lg bg-shell bg-surface border border-line border-line text-xs text-ink text-ink-soft font-mono focus:outline-none focus:border-brand"
-                />
-                <p className="text-[10px] text-ink-faint text-ink-faint mt-1">
-                  Ketik 0851... otomatis jadi 62851...
-                </p>
-              </div>
+            <div>
+              <label className="block text-[11px] font-medium text-ink-soft mb-1">
+                Nomor WhatsApp *
+              </label>
+              <input
+                type="text"
+                required
+                inputMode="numeric"
+                autoComplete="off"
+                maxLength={15}
+                placeholder="628123456789"
+                value={phone}
+                onChange={(e) => setPhone(toPhoneInput(e.target.value))}
+                className="w-full h-8 px-2.5 rounded-lg bg-surface border border-line text-xs text-ink font-mono focus:outline-none focus:border-brand"
+              />
+              <p className="text-[10px] text-ink-faint mt-1">
+                Ketik 0851... otomatis jadi 62851...
+              </p>
             </div>
 
             {/* Galat dari server (nomor duplikat / format tidak sah) tampil di dalam
                 modal supaya isian yang sudah diketik tidak hilang. */}
             {errorMsg && (
-              <p className="text-[11px] text-clay text-clay bg-clay-wash dark:bg-rose-950/30 border border-clay-line dark:border-rose-900/60 rounded-lg px-2.5 py-2">
+              <p className="text-[11px] text-clay bg-clay-wash dark:bg-rose-950/30 border border-clay-line dark:border-rose-900/60 rounded-lg px-2.5 py-2">
                 {errorMsg}
               </p>
             )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[11px] font-medium text-ink-soft text-ink-soft mb-1">
-                  Segmen Grup
-                </label>
-                <select
-                  value={group}
-                  onChange={(e) => setGroup(e.target.value)}
-                  className="w-full h-8 px-2 rounded-lg bg-shell bg-surface border border-line border-line text-xs text-ink text-ink-soft focus:outline-none focus:border-brand"
-                >
-                  {groups?.map((g) => (
-                    <option key={g.id} value={g.name}>{g.name}</option>
-                  ))}
-                </select>
-              </div>
+            <div>
+              <label className="block text-[11px] font-medium text-ink-soft mb-1">
+                Segmen Grup
+              </label>
+              <select
+                value={group}
+                onChange={(e) => setGroup(e.target.value)}
+                className="w-full h-8 px-2 rounded-lg bg-surface border border-line text-xs text-ink focus:outline-none focus:border-brand"
+              >
+                {groups?.map((g) => (
+                  <option key={g.id} value={g.name}>{g.name}</option>
+                ))}
+              </select>
+            </div>
 
-              <div>
-                <label className="block text-[11px] font-medium text-ink-soft text-ink-soft mb-1">
-                  Tag / Label (Bisa Multi-Tag)
-                </label>
-                <TagInput
-                  value={tagList}
-                  onChange={setTagList}
-                  suggestions={allUniqueTags}
-                  placeholder="Ketik tag lalu Enter (cth: VIP)"
-                  className="mb-0"
-                />
-              </div>
+            <div>
+              <label className="block text-[11px] font-medium text-ink-soft mb-1">
+                Tag / Label (Bisa Multi-Tag)
+              </label>
+              <TagInput
+                value={tagList}
+                onChange={setTagList}
+                suggestions={allUniqueTags}
+                inlineSuggestions={true}
+                placeholder="Ketik tag lalu Enter (cth: VIP)"
+                className="mb-0"
+              />
             </div>
 
             {/* Variabel Dinamis Dinamis (Key-Value Builder) */}
-            <div className="pt-2 border-t border-line border-line">
+            <div className="pt-2 border-t border-line">
               <div className="flex items-center justify-between mb-2">
                 <div>
                   <div className="text-[11px] font-semibold text-ink text-ink-soft flex items-center gap-1.5">
@@ -1319,86 +1317,83 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
 
       {/* Modal Edit Kontak & Variabel JSON */}
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Edit Data Kontak</DialogTitle>
           </DialogHeader>
 
-          <form onSubmit={handleUpdateContact} className="space-y-3.5 text-xs py-1">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[11px] font-medium text-ink-soft text-ink-soft mb-1">
-                  Nama Lengkap Penerima *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Misal: Budi Santoso"
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  className="w-full h-8 px-2.5 rounded-lg bg-shell bg-surface border border-line border-line text-xs text-ink text-ink-soft focus:outline-none focus:border-brand"
-                />
-              </div>
+          <form onSubmit={handleUpdateContact} className="space-y-3 text-xs py-1">
+            <div>
+              <label className="block text-[11px] font-medium text-ink-soft mb-1">
+                Nama Lengkap Penerima *
+              </label>
+              <input
+                type="text"
+                required
+                placeholder="Misal: Budi Santoso"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                className="w-full h-8 px-2.5 rounded-lg bg-surface border border-line text-xs text-ink focus:outline-none focus:border-brand"
+              />
+            </div>
 
-              <div>
-                <label className="block text-[11px] font-medium text-ink-soft text-ink-soft mb-1">
-                  Nomor WhatsApp *
-                </label>
-                <input
-                  type="text"
-                  required
-                  inputMode="numeric"
-                  autoComplete="off"
-                  maxLength={15}
-                  placeholder="628123456789"
-                  value={editPhone}
-                  onChange={(e) => setEditPhone(toPhoneInput(e.target.value))}
-                  className="w-full h-8 px-2.5 rounded-lg bg-shell bg-surface border border-line border-line text-xs text-ink text-ink-soft font-mono focus:outline-none focus:border-brand"
-                />
-                <p className="text-[10px] text-ink-faint text-ink-faint mt-1">
-                  Ketik 0851... otomatis jadi 62851...
-                </p>
-              </div>
+            <div>
+              <label className="block text-[11px] font-medium text-ink-soft mb-1">
+                Nomor WhatsApp *
+              </label>
+              <input
+                type="text"
+                required
+                inputMode="numeric"
+                autoComplete="off"
+                maxLength={15}
+                placeholder="628123456789"
+                value={editPhone}
+                onChange={(e) => setEditPhone(toPhoneInput(e.target.value))}
+                className="w-full h-8 px-2.5 rounded-lg bg-surface border border-line text-xs text-ink font-mono focus:outline-none focus:border-brand"
+              />
+              <p className="text-[10px] text-ink-faint mt-1">
+                Ketik 0851... otomatis jadi 62851...
+              </p>
             </div>
 
             {editErrorMsg && (
-              <p className="text-[11px] text-clay text-clay bg-clay-wash dark:bg-rose-950/30 border border-clay-line dark:border-rose-900/60 rounded-lg px-2.5 py-2">
+              <p className="text-[11px] text-clay bg-clay-wash dark:bg-rose-950/30 border border-clay-line dark:border-rose-900/60 rounded-lg px-2.5 py-2">
                 {editErrorMsg}
               </p>
             )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[11px] font-medium text-ink-soft text-ink-soft mb-1">
-                  Segmen Grup
-                </label>
-                <select
-                  value={editGroup}
-                  onChange={(e) => setEditGroup(e.target.value)}
-                  className="w-full h-8 px-2 rounded-lg bg-shell bg-surface border border-line border-line text-xs text-ink text-ink-soft focus:outline-none focus:border-brand"
-                >
-                  {groups?.map((g) => (
-                    <option key={g.id} value={g.name}>{g.name}</option>
-                  ))}
-                </select>
-              </div>
+            <div>
+              <label className="block text-[11px] font-medium text-ink-soft mb-1">
+                Segmen Grup
+              </label>
+              <select
+                value={editGroup}
+                onChange={(e) => setEditGroup(e.target.value)}
+                className="w-full h-8 px-2 rounded-lg bg-surface border border-line text-xs text-ink focus:outline-none focus:border-brand"
+              >
+                {groups?.map((g) => (
+                  <option key={g.id} value={g.name}>{g.name}</option>
+                ))}
+              </select>
+            </div>
 
-              <div>
-                <label className="block text-[11px] font-medium text-ink-soft text-ink-soft mb-1">
-                  Tag / Label (Bisa Multi-Tag)
-                </label>
-                <TagInput
-                  value={editTagList}
-                  onChange={setEditTagList}
-                  suggestions={allUniqueTags}
-                  placeholder="Ketik tag lalu Enter (cth: VIP)"
-                  className="mb-0"
-                />
-              </div>
+            <div>
+              <label className="block text-[11px] font-medium text-ink-soft mb-1">
+                Tag / Label (Bisa Multi-Tag)
+              </label>
+              <TagInput
+                value={editTagList}
+                onChange={setEditTagList}
+                suggestions={allUniqueTags}
+                inlineSuggestions={true}
+                placeholder="Ketik tag lalu Enter (cth: VIP)"
+                className="mb-0"
+              />
             </div>
 
             {/* Variabel Dinamis Kustom JSON */}
-            <div className="pt-2 border-t border-line border-line">
+            <div className="pt-2 border-t border-line">
               <div className="flex items-center justify-between mb-2">
                 <div>
                   <div className="text-[11px] font-semibold text-ink text-ink-soft flex items-center gap-1.5">
