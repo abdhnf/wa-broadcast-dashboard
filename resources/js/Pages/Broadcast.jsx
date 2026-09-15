@@ -398,7 +398,8 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
           name: campaignName.trim(),
           groupName: targetType === 'group' ? selectedGroup : `Tag: ${selectedTags.join(', ')}`,
           targetType,
-          targetTags: targetType === 'tag' ? selectedTags.join(', ') : null,
+          // Backend & kolom DB (JSON) mengharapkan array, bukan string koma
+          targetTags: targetType === 'tag' ? selectedTags : null,
           templateId: tpl.id,
           templateTitle: tpl.title,
           sessionUsed: sessionLabel,
@@ -436,7 +437,8 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
           batchId: newBatchId,
           groupName: displayGroup,
           targetType,
-          targetTags: targetType === 'tag' ? selectedTags.join(', ') : null,
+          // Backend & kolom DB (JSON) mengharapkan array, bukan string koma
+          targetTags: targetType === 'tag' ? selectedTags : null,
           templateId: tpl.id,
           templateTitle: tpl.title,
           sessionUsed: sessionLabel,
