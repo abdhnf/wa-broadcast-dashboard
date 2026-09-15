@@ -66,7 +66,7 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
   const [isBulkUpdating, setIsBulkUpdating] = useState(false);
   const [bulkGroupMode, setBulkGroupMode] = useState('keep'); // 'keep' | 'set' | 'clear'
   const [bulkGroup, setBulkGroup] = useState('');
-  const [bulkTagMode, setBulkTagMode] = useState('keep'); // 'keep' | 'append' | 'replace' | 'remove'
+  const [bulkTagMode, setBulkTagMode] = useState('keep'); // 'keep' | 'append' | 'replace' | 'remove' (harus sama dgn validasi backend)
   const [bulkTags, setBulkTags] = useState([]); // array chip tag dari TagInput
   const [bulkCustomMode, setBulkCustomMode] = useState('merge'); // 'merge' | 'replace' | 'clear'
   const [bulkCustomFields, setBulkCustomFields] = useState([{ key: '', value: '' }]);
@@ -1056,7 +1056,7 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
                   className="w-full h-8 px-2 rounded-lg bg-surface border border-line text-xs text-ink focus:outline-none focus:border-brand"
                 >
                   <option value="keep">Jangan Ubah Tag Kontak</option>
-                  <option value="add">Tambahkan Tag Baru (Tanpa Hapus yang Ada)</option>
+                  <option value="append">Tambahkan Tag Baru (Tanpa Hapus yang Ada)</option>
                   <option value="replace">Ganti Seluruh Tag dengan yang Baru</option>
                   <option value="remove">Hapus Tag Tertentu dari Kontak</option>
                 </select>
@@ -1070,7 +1070,7 @@ export function ContactsPage({ groups = [], onGroupsRefresh, onContactsChange, o
                       placeholder="Ketik tag lalu Enter (cth: Prioritas)"
                     />
                     <p className="text-[10px] text-ink-faint mt-1">
-                      {bulkTagMode === 'add' && 'Tag ini akan digabungkan ke tag kontak yang sudah ada.'}
+                      {bulkTagMode === 'append' && 'Tag ini akan digabungkan ke tag kontak yang sudah ada.'}
                       {bulkTagMode === 'replace' && 'Tag lama di kontak terpilih akan ditimpa seluruhnya.'}
                       {bulkTagMode === 'remove' && 'Tag yang dicocokkan akan dihilangkan dari kontak.'}
                     </p>
