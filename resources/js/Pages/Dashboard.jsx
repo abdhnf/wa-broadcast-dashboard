@@ -410,6 +410,7 @@ export function DashboardPage({ onNavigate }) {
                 <th className="py-2.5 px-4">Status Koneksi</th>
                 <th className="py-2.5 px-4">Total Terkirim</th>
                 <th className="py-2.5 px-4">Delay Pacing</th>
+                <th className="py-2.5 px-4">Profil & Warm-Up</th>
                 <th className="py-2.5 px-4">Anti-Ban Risk</th>
                 <th className="py-2.5 px-4 text-right">Peran Pengiriman</th>
               </tr>
@@ -458,6 +459,17 @@ export function DashboardPage({ onNavigate }) {
                     </td>
                     <td className="py-3 px-4 text-ink text-ink-soft">
                       {(s.metrics?.avgPacingDelaySec ?? 0).toFixed(1)}s
+                    </td>
+                    <td className="py-3 px-4">
+                      {s.numberProfile === 'fresh' ? (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-honey-wash text-honey-deep border border-honey-line/60">
+                          <span>🟡 Fresh (H-{s.warmupDay || 1})</span>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-brand-wash text-brand-deep border border-brand-line">
+                          <span>🟢 Mature Uncapped</span>
+                        </span>
+                      )}
                     </td>
                     <td className="py-3 px-4">
                       <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${

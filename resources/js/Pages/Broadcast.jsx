@@ -2021,12 +2021,13 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
                     <option value="auto_rotate">Auto Rotate (Rotasi Otomatis Semua Nomor Online)</option>
                     {sessions?.map((s) => (
                       <option key={s.id} value={s.id}>
+                        {s.numberProfile === 'fresh' ? '🟡 [Fresh] ' : '🟢 '}
                         {s.name} (+{s.phone}) - {s.status}
                       </option>
                     ))}
                   </select>
 
-                  {/* Indikator Beban Sesi */}
+                  {/* Indikator Beban & Profil Sesi */}
                   {(() => {
                     if (selectedSessionId === 'auto_rotate') {
                       const connected = (sessions || []).filter((s) => s.status === 'connected' || s.status === 'open');
@@ -2058,22 +2059,35 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
                     if (!sess) return null;
                     const qPending = sess.queue?.pendingCount || 0;
                     const qSec = sess.queue?.estimatedWaitSeconds || Math.round(qPending * 3.5);
-
-                    if (qPending > 0) {
-                      return (
-                        <div className="mt-2 p-2 rounded-lg bg-honey-wash border border-honey-line text-[11px] text-honey-deep">
-                          <div className="flex items-center gap-1.5 font-medium">
-                            <AlertCircle className="w-3.5 h-3.5 text-honey shrink-0" />
-                            <span>Nomor ini sedang memproses {qPending} antrean (est. {qSec > 60 ? `~${Math.ceil(qSec / 60)} menit` : `${qSec} detik`})</span>
-                          </div>
-                        </div>
-                      );
-                    }
+                    const isFresh = sess.numberProfile === 'fresh';
 
                     return (
-                      <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-leaf-deep font-medium">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-leaf shrink-0" />
-                        <span>Nomor siap digunakan, antrean kosong.</span>
+                      <div className="space-y-1.5 mt-2">
+                        {isFresh && (
+                          <div className="p-2 rounded-lg bg-honey-wash/70 border border-honey-line text-[11px] text-honey-deep">
+                            <div className="flex items-center gap-1.5 font-semibold">
+                              <AlertTriangle className="w-3.5 h-3.5 text-honey shrink-0" />
+                              <span>Profil Fresh Warm-Up (Hari ke-{sess.warmupDay || 1}/7)</span>
+                            </div>
+                            <p className="text-[10px] text-honey-deep/90 mt-0.5 ml-5 leading-relaxed">
+                              Nomor baru dengan batas kuota bertahap. Disarankan blast volume besar menggunakan Auto Rotate atau nomor matang.
+                            </p>
+                          </div>
+                        )}
+
+                        {qPending > 0 ? (
+                          <div className="p-2 rounded-lg bg-honey-wash border border-honey-line text-[11px] text-honey-deep">
+                            <div className="flex items-center gap-1.5 font-medium">
+                              <AlertCircle className="w-3.5 h-3.5 text-honey shrink-0" />
+                              <span>Nomor ini sedang memproses {qPending} antrean (est. {qSec > 60 ? `~${Math.ceil(qSec / 60)} menit` : `${qSec} detik`})</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1.5 text-[11px] text-leaf-deep font-medium">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-leaf shrink-0" />
+                            <span>Nomor siap ({sess.numberProfile === 'fresh' ? 'Fresh Warmup' : 'Mature Uncapped'}), antrean kosong.</span>
+                          </div>
+                        )}
                       </div>
                     );
                   })()}
