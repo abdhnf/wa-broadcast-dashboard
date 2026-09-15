@@ -139,6 +139,8 @@ export function StandaloneApp() {
       targetTags: payload.targetTags,
       templateId: payload.templateId,
       templateTitle: payload.templateTitle,
+      messageSource: payload.messageSource,
+      messageContent: payload.messageContent,
       sessionUsed: payload.sessionUsed,
       totalRecipients: payload.totalRecipients,
       status: payload.status,

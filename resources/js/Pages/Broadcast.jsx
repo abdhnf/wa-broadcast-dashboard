@@ -26,7 +26,9 @@ import {
   AlertCircle,
   X,
   XCircle,
-  Edit2
+  Edit2,
+  Type,
+  FileEdit,
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
@@ -39,6 +41,7 @@ import {
   DialogFooter
 } from '../components/ui/Dialog';
 import { WhatsAppBubblePreview } from '../components/WhatsAppBubblePreview';
+import { WhatsAppFormattingToolbar } from '../components/WhatsAppFormattingToolbar';
 import {
   clearQueue,
   clearBatch,
@@ -194,9 +197,13 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
   const [campaignName, setCampaignName] = useState('');
   const [targetType, setTargetType] = useState('group'); // 'group' | 'tag'
   const [selectedGroup, setSelectedGroup] = useState('');
+  const [tagSelectionType, setTagSelectionType] = useState('single'); // 'single' | 'multiple'
   const [selectedTags, setSelectedTags] = useState([]); // array tag terpilih
   const [tagMatchMode, setTagMatchMode] = useState('or'); // 'or' | 'and'
+  const [messageSource, setMessageSource] = useState('template'); // 'template' | 'manual'
   const [selectedTemplate, setSelectedTemplate] = useState('');
+  const [manualMessage, setManualMessage] = useState('');
+  const manualTextareaRef = useRef(null);
   const [selectedSessionId, setSelectedSessionId] = useState('auto_rotate'); // Default: Auto Rotate
   const [campaignPriority, setCampaignPriority] = useState('normal'); // 'normal' | 'high'
   const [formError, setFormError] = useState('');
@@ -266,12 +273,12 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
         : [];
       if (cTags.length === 0) return false;
 
-      if (tagMatchMode === 'and') {
+      if (tagSelectionType === 'multiple' && tagMatchMode === 'and') {
         return selectedTags.every((st) => cTags.includes(st.toLowerCase()));
       }
       return selectedTags.some((st) => cTags.includes(st.toLowerCase()));
     });
-  }, [targetType, selectedGroup, selectedTags, tagMatchMode, contacts, groupMembers]);
+  }, [targetType, selectedGroup, selectedTags, tagSelectionType, tagMatchMode, contacts, groupMembers]);
 
   useEffect(() => {
     if (!launchGroup) return;
@@ -347,8 +354,24 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
     if (camp.status === 'completed') return;
     setEditingCampaign(camp);
     setCampaignName(camp.name || '');
-    setSelectedGroup(camp.groupName || '');
+
+    const isTagTarget = camp.targetType === 'tag' || Boolean(camp.groupName?.startsWith('Tag: '));
+    setTargetType(isTagTarget ? 'tag' : 'group');
+    setSelectedGroup(!isTagTarget ? (camp.groupName || '') : '');
+
+    const campTags = Array.isArray(camp.targetTags)
+      ? camp.targetTags
+      : camp.groupName?.startsWith('Tag: ')
+      ? camp.groupName.replace('Tag: ', '').split(',').map((t) => t.trim()).filter(Boolean)
+      : [];
+    setSelectedTags(campTags);
+    setTagSelectionType(campTags.length > 1 ? 'multiple' : 'single');
+
+    const isManual = camp.messageSource === 'manual' || (!camp.templateId && Boolean(camp.messageContent));
+    setMessageSource(isManual ? 'manual' : 'template');
     setSelectedTemplate(camp.templateId || '');
+    setManualMessage(camp.messageContent || '');
+
     setCampaignPriority(camp.priority || 'normal');
     setSelectedSessionId(
       camp.sessionUsed === 'Auto-Rotate Pool' || !camp.sessionUsed ? 'auto_rotate' : (
@@ -368,10 +391,6 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
       setFormError('Nama kampanye wajib diisi.');
       return;
     }
-    if (!selectedTemplate) {
-      setFormError('Pilih template pesan terlebih dahulu.');
-      return;
-    }
     if (targetType === 'group' && !selectedGroup) {
       setFormError('Pilih target segmen audiens terlebih dahulu.');
       return;
@@ -381,11 +400,28 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
       return;
     }
 
-    const tpl = templates?.find((t) => t.id === selectedTemplate);
-    if (!tpl) {
-      setFormError('Template yang dipilih tidak ditemukan. Muat ulang halaman lalu coba lagi.');
-      return;
+    let tpl = null;
+    if (messageSource === 'template') {
+      if (!selectedTemplate) {
+        setFormError('Pilih template pesan terlebih dahulu.');
+        return;
+      }
+      tpl = templates?.find((t) => t.id === selectedTemplate);
+      if (!tpl) {
+        setFormError('Template yang dipilih tidak ditemukan. Muat ulang halaman lalu coba lagi.');
+        return;
+      }
+    } else {
+      if (!manualMessage.trim()) {
+        setFormError('Tulis isi pesan teks broadcast terlebih dahulu.');
+        return;
+      }
     }
+
+    const isManual = messageSource === 'manual';
+    const finalTemplateId = isManual ? null : tpl?.id;
+    const finalTemplateTitle = isManual ? 'Teks Manual' : tpl?.title;
+    const finalMessageContent = isManual ? manualMessage.trim() : (tpl?.content || null);
 
     const chosenSession = sessions?.find((s) => s.id === selectedSessionId);
     const sessionLabel = selectedSessionId === 'auto_rotate' ? 'Auto-Rotate Pool' : chosenSession?.name || selectedSessionId;
@@ -398,10 +434,11 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
           name: campaignName.trim(),
           groupName: targetType === 'group' ? selectedGroup : `Tag: ${selectedTags.join(', ')}`,
           targetType,
-          // Backend & kolom DB (JSON) mengharapkan array, bukan string koma
           targetTags: targetType === 'tag' ? selectedTags : null,
-          templateId: tpl.id,
-          templateTitle: tpl.title,
+          templateId: finalTemplateId,
+          templateTitle: finalTemplateTitle,
+          messageSource: isManual ? 'manual' : 'template',
+          messageContent: finalMessageContent,
           sessionUsed: sessionLabel,
           priority: campaignPriority,
         };
@@ -412,8 +449,11 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
         setEditingCampaign(null);
         setCampaignName('');
         setSelectedTemplate('');
+        setManualMessage('');
+        setMessageSource('template');
         setSelectedGroup('');
         setSelectedTags([]);
+        setTagSelectionType('single');
         setCampaignPriority('normal');
         setIsWizardOpen(false);
       } else {
@@ -437,10 +477,11 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
           batchId: newBatchId,
           groupName: displayGroup,
           targetType,
-          // Backend & kolom DB (JSON) mengharapkan array, bukan string koma
           targetTags: targetType === 'tag' ? selectedTags : null,
-          templateId: tpl.id,
-          templateTitle: tpl.title,
+          templateId: finalTemplateId,
+          templateTitle: finalTemplateTitle,
+          messageSource: isManual ? 'manual' : 'template',
+          messageContent: finalMessageContent,
           sessionUsed: sessionLabel,
           priority: campaignPriority,
           totalRecipients: seed.length,
@@ -456,8 +497,11 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
 
         setCampaignName('');
         setSelectedTemplate('');
+        setManualMessage('');
+        setMessageSource('template');
         setSelectedGroup('');
         setSelectedTags([]);
+        setTagSelectionType('single');
         setCampaignPriority('normal');
         setIsWizardOpen(false);
         setSelectedCampaign(created);
@@ -485,10 +529,16 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
         await retryMessage(item.messageId);
       } else {
         // Fallback kirim ulang langsung jika messageId belum ada
-        const tpl = templates.find((t) => t.id === selectedCampaign?.templateId) || {
-          messageType: 'text',
-          content: selectedCampaign?.content || 'Pemberitahuan',
-        };
+        const isManual = selectedCampaign?.messageSource === 'manual' || (!selectedCampaign?.templateId && Boolean(selectedCampaign?.messageContent));
+        const tpl = isManual
+          ? {
+              messageType: 'text',
+              content: selectedCampaign?.messageContent || '',
+            }
+          : templates.find((t) => t.id === selectedCampaign?.templateId) || {
+              messageType: 'text',
+              content: selectedCampaign?.messageContent || selectedCampaign?.content || 'Pemberitahuan',
+            };
         const rendered = renderMessage(tpl.content, {
           nama: item.name || 'Pelanggan',
           ...item.custom,
@@ -677,9 +727,18 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
       return;
     }
 
-    const tpl = templates?.find((t) => t.id === selectedCampaign.templateId);
+    const isManual = selectedCampaign.messageSource === 'manual' || (!selectedCampaign.templateId && Boolean(selectedCampaign.messageContent));
+    const tpl = isManual
+      ? {
+          id: 'manual',
+          title: 'Teks Manual',
+          messageType: 'text',
+          content: selectedCampaign.messageContent || '',
+        }
+      : templates?.find((t) => t.id === selectedCampaign.templateId);
+
     if (!tpl) {
-      setQueueError('Template pesan kampanye ini tidak ditemukan. Pilih ulang template sebelum mengirim.');
+      setQueueError('Template atau isi pesan kampanye ini tidak ditemukan. Pastikan pesan sudah diisi.');
       return;
     }
 
@@ -1373,8 +1432,15 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
                         {camp.groupName}
                       </Badge>
                     </td>
-                    <td className="py-3 px-4 text-ink text-ink-soft font-medium">
-                      {camp.templateTitle}
+                    <td className="py-3 px-4 text-ink font-medium">
+                      {camp.messageSource === 'manual' || camp.templateTitle === 'Teks Manual' ? (
+                        <span className="inline-flex items-center gap-1.5 text-xs text-brand font-semibold">
+                          <Type className="w-3.5 h-3.5" />
+                          <span>Teks Manual</span>
+                        </span>
+                      ) : (
+                        <span>{camp.templateTitle || '-'}</span>
+                      )}
                     </td>
                     <td className="py-3 px-4">
                       <span className="inline-flex items-center gap-1 font-mono text-[11px] text-leaf-deep text-brand-soft font-medium">
@@ -2017,37 +2083,73 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
                       )}
                     </div>
                   ) : (
-                    /* Mode Pilihan Multi-Tag */
+                    /* Mode Pilihan Tag Target */
                     <div className="space-y-3 p-3 rounded-lg border border-line bg-surface-alt/40">
+                      {/* Pilihan: Tag Tunggal (Salah Satu) vs Kombinasi Tag */}
+                      <div className="flex items-center gap-1 bg-surface p-0.5 rounded-lg border border-line text-xs">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTagSelectionType('single');
+                            if (selectedTags.length > 1) {
+                              setSelectedTags([selectedTags[0]]);
+                            }
+                          }}
+                          className={`flex-1 py-1 px-2.5 rounded-md text-center transition-all ${
+                            tagSelectionType === 'single'
+                              ? 'bg-brand text-white font-semibold shadow-xs'
+                              : 'text-ink-muted hover:text-ink'
+                          }`}
+                        >
+                          Salah Satu Tag (Tunggal)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setTagSelectionType('multiple')}
+                          className={`flex-1 py-1 px-2.5 rounded-md text-center transition-all ${
+                            tagSelectionType === 'multiple'
+                              ? 'bg-brand text-white font-semibold shadow-xs'
+                              : 'text-ink-muted hover:text-ink'
+                          }`}
+                        >
+                          Kombinasi Beberapa Tag
+                        </button>
+                      </div>
+
                       <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-medium text-ink">Pilih Tag Target:</span>
-                        {/* Match Mode Switch: OR vs AND */}
-                        <div className="flex items-center gap-1 bg-surface p-0.5 rounded border border-line text-[10px]">
-                          <button
-                            type="button"
-                            onClick={() => setTagMatchMode('or')}
-                            className={`px-2 py-0.5 rounded font-mono transition-colors ${
-                              tagMatchMode === 'or'
-                                ? 'bg-brand text-white font-semibold'
-                                : 'text-ink-muted hover:text-ink'
-                            }`}
-                            title="Kontak yang memiliki salah satu tag terpilih akan menerima pesan"
-                          >
-                            Salah Satu (OR)
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setTagMatchMode('and')}
-                            className={`px-2 py-0.5 rounded font-mono transition-colors ${
-                              tagMatchMode === 'and'
-                                ? 'bg-brand text-white font-semibold'
-                                : 'text-ink-muted hover:text-ink'
-                            }`}
-                            title="Hanya kontak yang memiliki semua tag terpilih yang akan menerima pesan"
-                          >
-                            Semua Tag (AND)
-                          </button>
-                        </div>
+                        <span className="text-[11px] font-medium text-ink">
+                          {tagSelectionType === 'single' ? 'Pilih 1 Tag Target:' : 'Pilih Beberapa Tag:'}
+                        </span>
+
+                        {/* Match Mode Switch: Hanya muncul pada mode Kombinasi Beberapa Tag */}
+                        {tagSelectionType === 'multiple' && (
+                          <div className="flex items-center gap-1 bg-surface p-0.5 rounded border border-line text-[10px]">
+                            <button
+                              type="button"
+                              onClick={() => setTagMatchMode('or')}
+                              className={`px-2 py-0.5 rounded font-mono transition-colors ${
+                                tagMatchMode === 'or'
+                                  ? 'bg-brand text-white font-semibold'
+                                  : 'text-ink-muted hover:text-ink'
+                              }`}
+                              title="Kontak yang memiliki salah satu tag terpilih akan menerima pesan"
+                            >
+                              Minimal Salah Satu (OR)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setTagMatchMode('and')}
+                              className={`px-2 py-0.5 rounded font-mono transition-colors ${
+                                tagMatchMode === 'and'
+                                  ? 'bg-brand text-white font-semibold'
+                                  : 'text-ink-muted hover:text-ink'
+                              }`}
+                              title="Hanya kontak yang memiliki semua tag terpilih yang akan menerima pesan"
+                            >
+                              Wajib Semua (AND)
+                            </button>
+                          </div>
+                        )}
                       </div>
 
                       {availableTags.length === 0 ? (
@@ -2063,9 +2165,13 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
                                 key={t}
                                 type="button"
                                 onClick={() => {
-                                  setSelectedTags((prev) =>
-                                    isSelected ? prev.filter((item) => item !== t) : [...prev, t]
-                                  );
+                                  if (tagSelectionType === 'single') {
+                                    setSelectedTags(isSelected ? [] : [t]);
+                                  } else {
+                                    setSelectedTags((prev) =>
+                                      isSelected ? prev.filter((item) => item !== t) : [...prev, t]
+                                    );
+                                  }
                                 }}
                                 className={`px-2 py-1 rounded text-xs font-mono border transition-all ${
                                   isSelected
@@ -2079,6 +2185,14 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
                           })}
                         </div>
                       )}
+
+                      <p className="text-[10px] text-ink-muted leading-relaxed">
+                        {tagSelectionType === 'single'
+                          ? 'Klik satu tag di atas. Hanya satu tag yang dapat aktif.'
+                          : tagMatchMode === 'and'
+                          ? 'Mode Wajib Semua: hanya kontak yang memiliki seluruh tag terpilih yang akan menerima pesan.'
+                          : 'Mode Salah Satu: kontak yang memiliki minimal salah satu tag terpilih akan menerima pesan.'}
+                      </p>
                     </div>
                   )}
 
@@ -2099,55 +2213,146 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
               </div>
             )}
 
-            {/* STEP 2: TEMPLATE PESAN & LIVE PREVIEW BUBBLE WA */}
+            {/* STEP 2: TEMPLATE PESAN ATAU TEKS MANUAL & LIVE PREVIEW BUBBLE WA */}
             {wizardStep === 2 && (
               <div className="space-y-3 blast-page-transition">
-                <div>
-                  <label className="block text-[11px] font-medium text-ink mb-1">
-                    Pilih Template Pesan *
-                  </label>
-                  <select
-                    value={selectedTemplate}
-                    onChange={(e) => setSelectedTemplate(e.target.value)}
-                    className="w-full h-9 px-3 rounded-lg bg-surface border border-line text-xs text-ink focus:outline-none focus:border-brand"
+                {/* Switcher Mode: Template vs Manual */}
+                <div className="flex items-center gap-1 bg-surface-alt p-1 rounded-lg border border-line">
+                  <button
+                    type="button"
+                    onClick={() => setMessageSource('template')}
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-md text-xs font-medium transition-all ${
+                      messageSource === 'template'
+                        ? 'bg-surface text-ink font-semibold shadow-xs border border-line'
+                        : 'text-ink-muted hover:text-ink'
+                    }`}
                   >
-                    <option value="">Pilih template pesan...</option>
-                    {templates?.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.title} ({t.messageType || 'text'})
-                      </option>
-                    ))}
-                  </select>
-                  {templates?.length === 0 && (
-                    <p className="text-[10px] text-honey mt-1">
-                      Belum ada template. Buat template pesan terlebih dahulu di halaman Template.
-                    </p>
-                  )}
+                    <FileText className="w-3.5 h-3.5" />
+                    <span>Template Tersimpan</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMessageSource('manual')}
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-md text-xs font-medium transition-all ${
+                      messageSource === 'manual'
+                        ? 'bg-surface text-ink font-semibold shadow-xs border border-line'
+                        : 'text-ink-muted hover:text-ink'
+                    }`}
+                  >
+                    <Type className="w-3.5 h-3.5" />
+                    <span>Teks Manual Langsung</span>
+                  </button>
                 </div>
+
+                {messageSource === 'template' ? (
+                  /* Mode Template Tersimpan */
+                  <div>
+                    <label className="block text-[11px] font-medium text-ink mb-1">
+                      Pilih Template Pesan *
+                    </label>
+                    <select
+                      value={selectedTemplate}
+                      onChange={(e) => setSelectedTemplate(e.target.value)}
+                      className="w-full h-9 px-3 rounded-lg bg-surface border border-line text-xs text-ink focus:outline-none focus:border-brand"
+                    >
+                      <option value="">Pilih template pesan...</option>
+                      {templates?.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.title} ({t.messageType || 'text'})
+                        </option>
+                      ))}
+                    </select>
+                    {templates?.length === 0 && (
+                      <p className="text-[10px] text-honey mt-1">
+                        Belum ada template. Buat template pesan terlebih dahulu di halaman Template.
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  /* Mode Teks Manual Langsung (Editor Mirip Playground) */
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-[11px] font-medium text-ink">
+                        Isi Pesan Teks Broadcast *
+                      </label>
+                      <span className="text-[10px] font-mono text-ink-muted">
+                        {manualMessage.length} karakter
+                      </span>
+                    </div>
+
+                    {/* Toolbar Format WhatsApp, Emoji, Variabel, dan Spintax */}
+                    <WhatsAppFormattingToolbar
+                      value={manualMessage}
+                      onChange={setManualMessage}
+                      textareaRef={manualTextareaRef}
+                      contacts={contacts}
+                      activeContact={resolvedTargetMembers[0] || contacts[0] || null}
+                    />
+
+                    <textarea
+                      ref={manualTextareaRef}
+                      rows={5}
+                      value={manualMessage}
+                      onChange={(e) => setManualMessage(e.target.value)}
+                      placeholder="Tulis pesan dengan format WhatsApp (*tebal*, _miring_, emoji 👋, spintax {Halo|Hai}, atau variabel {{nama}})..."
+                      className="w-full p-2.5 rounded-b-lg bg-surface border border-t-0 border-line text-xs text-ink font-sans focus:outline-none focus:border-brand leading-relaxed resize-y"
+                    />
+
+                    <p className="text-[10px] text-ink-muted pt-0.5">
+                      Gunakan tombol toolbar di atas untuk format teks cepat, emoji, atau menyisipkan variabel kontak.
+                    </p>
+                  </div>
+                )}
 
                 {/* Pratinjau Pesan Khas WhatsApp dengan Doodle */}
                 {(() => {
-                  const tpl = templates?.find((t) => String(t.id) === String(selectedTemplate));
-                  if (!tpl) {
+                  if (messageSource === 'template') {
+                    const tpl = templates?.find((t) => String(t.id) === String(selectedTemplate));
+                    if (!tpl) {
+                      return (
+                        <div className="p-4 rounded-xl bg-surface-sunken border border-dashed border-line text-center text-xs text-ink-muted">
+                          Pilih template pesan di atas untuk melihat pratinjau bubble WhatsApp.
+                        </div>
+                      );
+                    }
                     return (
-                      <div className="p-4 rounded-xl bg-surface-sunken border border-dashed border-line text-center text-xs text-ink-muted">
-                        Pilih template pesan di atas untuk melihat pratinjau bubble WhatsApp.
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-[11px] font-medium text-ink-muted">
+                          <span>Pratinjau Pesan Keluar:</span>
+                          <span className="font-mono text-[10px] text-brand">{tpl.messageType || 'text'}</span>
+                        </div>
+                        <div className="max-w-[340px] mx-auto">
+                          <WhatsAppBubblePreview
+                            content={tpl.content || tpl.body || ''}
+                            mediaUrl={tpl.mediaUrl || null}
+                            mediaType={tpl.mediaType || 'image'}
+                            location={tpl.location || null}
+                            contact={resolvedTargetMembers[0] || contacts[0] || { name: 'Nama Pelanggan', phone: '628123456789' }}
+                          />
+                        </div>
                       </div>
                     );
                   }
+
+                  // Pratinjau untuk Teks Manual
+                  if (!manualMessage.trim()) {
+                    return (
+                      <div className="p-4 rounded-xl bg-surface-sunken border border-dashed border-line text-center text-xs text-ink-muted">
+                        Ketik pesan teks di atas untuk melihat live pratinjau bubble WhatsApp.
+                      </div>
+                    );
+                  }
+
                   return (
                     <div className="space-y-2">
                       <div className="flex items-center justify-between text-[11px] font-medium text-ink-muted">
-                        <span>Pratinjau Pesan Keluar:</span>
-                        <span className="font-mono text-[10px] text-brand">{tpl.messageType || 'text'}</span>
+                        <span>Live Pratinjau Pesan Manual:</span>
+                        <span className="font-mono text-[10px] text-brand">text (manual)</span>
                       </div>
                       <div className="max-w-[340px] mx-auto">
                         <WhatsAppBubblePreview
-                          content={tpl.content || tpl.body || ''}
-                          mediaUrl={tpl.mediaUrl || null}
-                          mediaType={tpl.mediaType || 'image'}
-                          location={tpl.location || null}
-                          contact={{ name: 'Nama Pelanggan', phone: '628123456789' }}
+                          content={manualMessage}
+                          contact={resolvedTargetMembers[0] || contacts[0] || { name: 'Nama Pelanggan', phone: '628123456789' }}
                         />
                       </div>
                     </div>
@@ -2336,7 +2541,16 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
                       <div className="text-[10px] text-ink-muted flex items-start gap-1.5 pt-1">
                         <Info className="w-3.5 h-3.5 text-brand shrink-0 mt-px" />
                         <span>
-                          Template <strong>"{tpl?.title || '-'}"</strong> akan dimuat ke antrean dalam status <strong>Draft</strong>. Pesan baru akan dikirim bertahap setelah tombol Mulai Blast ditekan.
+                          {messageSource === 'manual' ? (
+                            <>
+                              Pesan <strong>"Teks Manual Langsung"</strong> ({manualMessage.length} karakter) akan dimuat ke antrean dalam status <strong>Draft</strong>.
+                            </>
+                          ) : (
+                            <>
+                              Template <strong>"{tpl?.title || '-'}"</strong> akan dimuat ke antrean dalam status <strong>Draft</strong>.
+                            </>
+                          )}{' '}
+                          Pesan baru akan dikirim bertahap setelah tombol Mulai Blast ditekan.
                         </span>
                       </div>
                     </div>
@@ -2396,9 +2610,21 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
                           setFormError('Nama kampanye wajib diisi.');
                           return;
                         }
+                        if (targetType === 'group' && !selectedGroup) {
+                          setFormError('Pilih target segmen audiens terlebih dahulu.');
+                          return;
+                        }
+                        if (targetType === 'tag' && selectedTags.length === 0) {
+                          setFormError('Pilih minimal satu tag target audiens.');
+                          return;
+                        }
                       } else if (wizardStep === 2) {
-                        if (!selectedTemplate) {
+                        if (messageSource === 'template' && !selectedTemplate) {
                           setFormError('Pilih template pesan terlebih dahulu.');
+                          return;
+                        }
+                        if (messageSource === 'manual' && !manualMessage.trim()) {
+                          setFormError('Tulis isi pesan teks broadcast terlebih dahulu.');
                           return;
                         }
                       }

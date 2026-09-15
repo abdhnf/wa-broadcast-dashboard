@@ -12,6 +12,7 @@ class WaCampaign extends Model
 {
     protected $fillable = [
         'user_id', 'name', 'batch_id', 'group_name', 'target_type', 'target_tags', 'template_id', 'template_title',
+        'message_source', 'message_content',
         'total_recipients', 'sent_count', 'delivered_count', 'read_count',
         'failed_count', 'status', 'session_used', 'queue',
     ];
