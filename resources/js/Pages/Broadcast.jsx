@@ -68,6 +68,7 @@ import { ContactSearchInput } from '../components/ContactSearchInput';
 const QUEUE_RUNNING_STATUSES = ['pending', 'pacing', 'sending'];
 const QUEUE_SUCCESS_STATUSES = ['sent', 'delivered', 'read'];
 const QUEUE_FAILURE_STATUSES = ['failed', 'invalid_number', 'not_registered'];
+const QUEUE_CANCELLED_STATUSES = ['cancelled'];
 const QUEUE_PAGE_SIZE = 50;
 
 const QUEUE_STATUS_OPTIONS = [
@@ -82,6 +83,7 @@ const QUEUE_STATUS_OPTIONS = [
   { value: 'failed', label: 'Gagal' },
   { value: 'invalid_number', label: 'Nomor tidak valid' },
   { value: 'not_registered', label: 'Tidak terdaftar' },
+  { value: 'cancelled', label: 'Dibatalkan' },
 ];
 
 const QUEUE_STATUS_LABEL = Object.fromEntries(QUEUE_STATUS_OPTIONS.map((s) => [s.value, s.label]));
@@ -109,6 +111,7 @@ function getCampaignStats(camp) {
   if (queue.length > 0) {
     let qSuccess = 0;
     let qFailed = 0;
+    let qCancelled = 0;
     let qInFlight = 0;
     let qDraft = 0;
 
@@ -118,6 +121,8 @@ function getCampaignStats(camp) {
         qSuccess += 1;
       } else if (['failed', 'invalid_number', 'not_registered'].includes(st)) {
         qFailed += 1;
+      } else if (st === 'cancelled') {
+        qCancelled += 1;
       } else if (['pacing', 'sending'].includes(st) || (st === 'pending' && isCampActive)) {
         qInFlight += 1;
       } else {
@@ -125,14 +130,14 @@ function getCampaignStats(camp) {
       }
     });
 
-    if (qSuccess > 0 || qFailed > 0 || qInFlight > 0) {
+    if (qSuccess > 0 || qFailed > 0 || qInFlight > 0 || qCancelled > 0) {
       successCount = qSuccess;
       failedCount = qFailed;
       inFlightCount = qInFlight;
       draftCount = qDraft;
       total = queue.length;
     } else {
-      draftCount = Math.max(0, total - (successCount + failedCount));
+      draftCount = Math.max(0, total - (successCount + failedCount + qCancelled));
     }
   }
 
@@ -942,7 +947,8 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
       // Pesan yang sudah berada di gateway wa-api terkunci (tidak bisa dihapus dari tabel lokal).
       const canDelete = !isEnqueuedToGateway && realStatus === 'draft' && !isRunning;
       const isFailed = QUEUE_FAILURE_STATUSES.includes(realStatus);
-      const canRetry = isFailed && !isRunning;
+      const isCancelled = QUEUE_CANCELLED_STATUSES.includes(realStatus);
+      const canRetry = (isFailed || isCancelled) && !isRunning;
       const mergedCustom = (item.custom && Object.keys(item.custom).length > 0)
         ? item.custom
         : (contactMap.get(item.phone) || {});
@@ -1188,7 +1194,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
           const sCount = nextQueue.filter((i) => QUEUE_SUCCESS_STATUSES.includes(i.status)).length;
           const fCount = nextQueue.filter((i) => QUEUE_FAILURE_STATUSES.includes(i.status)).length;
           const allDone = nextQueue.length > 0 && nextQueue.every((i) =>
-            QUEUE_SUCCESS_STATUSES.includes(i.status) || QUEUE_FAILURE_STATUSES.includes(i.status)
+            QUEUE_SUCCESS_STATUSES.includes(i.status) || QUEUE_FAILURE_STATUSES.includes(i.status) || QUEUE_CANCELLED_STATUSES.includes(i.status)
           );
           const nextCampStatus = allDone ? 'completed' : selectedCampaign.status;
 
@@ -2038,6 +2044,21 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
                               {Number(item.liveData?.jitterDelayMs) > 0 && (
                                 <div className="text-[10px] text-indigo-600 dark:text-indigo-400 font-mono">
                                   {(Number(item.liveData.jitterDelayMs) / 1000).toFixed(1)}s jeda
+                                </div>
+                              )}
+                            </div>
+                          ) : item.status === 'cancelled' ? (
+                            <div>
+                              <span
+                                className="inline-flex items-center gap-1 text-[11px] text-ink-muted text-ink-muted font-medium"
+                                title={item.liveData?.errorDetail || item.error || 'Dibatalkan oleh pengguna'}
+                              >
+                                <XCircle className="w-3.5 h-3.5" />
+                                <span>Dibatalkan</span>
+                              </span>
+                              {item.liveData?.errorDetail && (
+                                <div className="text-[10px] text-ink-faint truncate max-w-[160px]" title={item.liveData.errorDetail}>
+                                  {item.liveData.errorDetail}
                                 </div>
                               )}
                             </div>
