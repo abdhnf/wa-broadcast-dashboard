@@ -28,6 +28,8 @@ import {
   MinusSquare,
   Info,
   AlertCircle,
+  Check,
+  Radio,
   X,
   XCircle,
   Edit2,
@@ -1740,19 +1742,19 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
 
                             {/* Baris Bawah: Breakdown Angka Berhasil & Gagal */}
                             <div className="flex items-center gap-2 text-[10px] flex-wrap font-medium">
-                              <span className="text-leaf-deep inline-flex items-center gap-0.5 font-semibold">
-                                <span>✓</span>
+                              <span className="text-leaf-deep inline-flex items-center gap-1 font-semibold">
+                                <Check className="w-3 h-3 text-leaf" />
                                 <span>{stats.successCount} berhasil</span>
                               </span>
                               {stats.failedCount > 0 && (
-                                <span className="text-clay text-clay inline-flex items-center gap-0.5">
-                                  <span>✕</span>
+                                <span className="text-clay inline-flex items-center gap-1">
+                                  <X className="w-3 h-3 text-clay" />
                                   <span>{stats.failedCount} gagal</span>
                                 </span>
                               )}
                               {stats.inFlightCount > 0 && (
-                                <span className="text-honey text-honey inline-flex items-center gap-0.5">
-                                  <span>⏳</span>
+                                <span className="text-honey inline-flex items-center gap-1">
+                                  <Clock className="w-3 h-3 text-honey animate-spin" />
                                   <span>{stats.inFlightCount} proses</span>
                                 </span>
                               )}
@@ -1804,207 +1806,263 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
       {/* TAMPILAN 2: SUB-HALAMAN ANTREAN PESAN (SUBVIEW = 'queue') */}
       {subView === 'queue' && (
         <div className="space-y-3">
-          {/* Detail Kampanye & Kontrol Pacing */}
+          {/* Card Kontrol Terpadu Kampanye & Anti-Ban (UI/UX Clean) */}
           {selectedCampaign && (
-            <div className="bg-surface  p-3 rounded-lg border border-line border-line flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className={`w-2 h-2 rounded-full ${sending ? 'bg-honey animate-pulse' : (queuePaused || selectedCampaign.status === 'paused') ? 'bg-honey' : selectedCampaign.status === 'in_progress' ? 'bg-brand animate-pulse' : 'bg-slate'}`} />
-                <span className="font-semibold text-ink dark:text-white">{selectedCampaign.name}</span>
-                {selectedCampaign.batchId ? (
-                  <span className="text-ink-faint text-[11px]">({selectedCampaign.batchId})</span>
-                ) : (
-                  <span className="text-ink-faint text-[11px]">(draft lokal)</span>
-                )}
-                <Badge variant={selectedCampaign.status === 'in_progress' ? 'default' : 'secondary'} className="text-[10px]">
-                  {sending
-                    ? 'Menyerahkan ke Gateway...'
-                    : selectedCampaign.status === 'in_progress'
+            <div className="bg-surface rounded-xl border border-line p-3.5 sm:p-4 space-y-3 shadow-xs">
+              {/* Baris 1: Header Kampanye, Status & Aksi Utama */}
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <span
+                    className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                      sending
+                        ? 'bg-amber-500 animate-pulse'
+                        : queuePaused || selectedCampaign.status === 'paused'
+                        ? 'bg-amber-500'
+                        : selectedCampaign.status === 'in_progress'
+                        ? 'bg-brand animate-pulse'
+                        : selectedCampaign.status === 'completed'
+                        ? 'bg-emerald-500'
+                        : 'bg-slate-400'
+                    }`}
+                  />
+                  <span className="font-semibold text-sm text-ink">{selectedCampaign.name}</span>
+                  {selectedCampaign.batchId ? (
+                    <span className="font-mono text-[11px] text-ink-muted bg-surface-alt px-2 py-0.5 rounded border border-line/60">
+                      {selectedCampaign.batchId}
+                    </span>
+                  ) : (
+                    <span className="text-[11px] text-ink-muted bg-surface-alt px-2 py-0.5 rounded border border-line/60">
+                      draft lokal
+                    </span>
+                  )}
+                  <Badge
+                    variant={
+                      selectedCampaign.status === 'in_progress'
+                        ? 'default'
+                        : selectedCampaign.status === 'completed'
+                        ? 'outline'
+                        : 'secondary'
+                    }
+                    className={`text-[10px] font-medium ${
+                      selectedCampaign.status === 'completed'
+                        ? 'border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10'
+                        : ''
+                    }`}
+                  >
+                    {sending
+                      ? 'Menyerahkan ke Gateway...'
+                      : selectedCampaign.status === 'in_progress'
                       ? 'Berjalan di Gateway'
                       : selectedCampaign.status === 'paused' || queuePaused
-                        ? 'Dijeda'
-                        : selectedCampaign.status === 'completed'
-                          ? 'Selesai'
-                          : 'Siap Mulai'}
-                </Badge>
-                {avgPacingSec > 0 && (
-                  <Badge variant="outline" className="text-[10px]">
-                    Jeda riil {avgPacingSec.toFixed(1)}s
+                      ? 'Dijeda'
+                      : selectedCampaign.status === 'completed'
+                      ? 'Selesai'
+                      : 'Siap Mulai'}
                   </Badge>
-                )}
-              </div>
+                  {avgPacingSec > 0 && (
+                    <Badge variant="outline" className="text-[10px] border-line font-mono text-ink-muted inline-flex items-center gap-1">
+                      <Clock className="w-3 h-3 opacity-70" />
+                      <span>Jeda {avgPacingSec.toFixed(1)}s</span>
+                    </Badge>
+                  )}
+                </div>
 
-              <div className="flex items-center gap-2 flex-wrap">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={sending || selectedCampaign?.status === 'in_progress' || selectedCampaign?.status === 'paused'}
-                  onClick={handleLoadSegmentContacts}
-                  className="h-7 text-xs disabled:opacity-50"
-                >
-                  <Users className="w-3 h-3 mr-1" />
-                  <span>Muat Kontak Segmen</span>
-                </Button>
-
-                {/* Kontrol Antrean: Jeda / Lanjutkan / Stop / Mulai Blast */}
-                {(sending || selectedCampaign.status === 'in_progress' || selectedCampaign.status === 'paused' || queuePaused || activePacingCount > 0) ? (
-                  <div className="flex items-center gap-1.5">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={handleTogglePause}
-                      className="h-7 text-xs"
-                    >
-                      {queuePaused || selectedCampaign.status === 'paused' ? (
-                        <>
-                          <Play className="w-3 h-3 mr-1 text-brand-deep" />
-                          <span>Lanjutkan Antrean</span>
-                        </>
-                      ) : (
-                        <>
-                          <Pause className="w-3 h-3 mr-1 text-amber-500" />
-                          <span>Jeda Antrean</span>
-                        </>
-                      )}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={handleStopBlast}
-                      className="h-7 text-xs border-clay-line text-clay text-clay hover:bg-clay-wash dark:hover:bg-rose-950/30"
-                      title="Hentikan dan batalkan sisa antrean blast di gateway"
-                    >
-                      <Square className="w-3 h-3 mr-1" />
-                      <span>Stop</span>
-                    </Button>
-                  </div>
-                ) : selectedCampaign.status === 'completed' ? (
-                  <div className="flex items-center gap-1.5">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled
-                      className="h-7 text-xs border-brand-line text-brand-deep font-medium cursor-default"
-                    >
-                      <CheckCircle2 className="w-3 h-3 mr-1" />
-                      <span>Selesai</span>
-                    </Button>
-                    {recipientQueue.some((i) => !i.status || i.status === 'draft' || QUEUE_FAILURE_STATUSES.includes(i.status)) && (
-                      <Button
-                        type="button"
-                        variant="default"
-                        size="sm"
-                        onClick={handleStartBlast}
-                        className="h-7 text-xs bg-brand hover:bg-brand text-white"
-                      >
-                        <Play className="w-3 h-3 mr-1" />
-                        <span>Kirim Sisa Target</span>
-                      </Button>
-                    )}
-                  </div>
-                ) : (
+                <div className="flex items-center gap-2 flex-wrap">
                   <Button
                     type="button"
-                    variant="default"
+                    variant="outline"
                     size="sm"
-                    disabled={sending}
-                    onClick={handleStartBlast}
-                    className="h-7 text-xs bg-brand hover:bg-brand text-white"
+                    disabled={sending || selectedCampaign?.status === 'in_progress' || selectedCampaign?.status === 'paused'}
+                    onClick={handleLoadSegmentContacts}
+                    className="h-8 text-xs border-line hover:bg-surface-alt disabled:opacity-50"
                   >
-                    <Play className="w-3 h-3 mr-1" />
-                    <span>{sending ? 'Menyerahkan ke Gateway...' : 'Mulai Blast'}</span>
+                    <Users className="w-3.5 h-3.5 mr-1.5 text-ink-muted" />
+                    <span>Muat Kontak Segmen</span>
                   </Button>
-                )}
+
+                  {/* Kontrol Antrean: Jeda / Lanjutkan / Stop / Mulai Blast */}
+                  {(sending || selectedCampaign.status === 'in_progress' || selectedCampaign.status === 'paused' || queuePaused || activePacingCount > 0) ? (
+                    <div className="flex items-center gap-1.5">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleTogglePause}
+                        className="h-8 text-xs border-line hover:bg-surface-alt"
+                      >
+                        {queuePaused || selectedCampaign.status === 'paused' ? (
+                          <>
+                            <Play className="w-3.5 h-3.5 mr-1.5 text-brand-deep" />
+                            <span>Lanjutkan Antrean</span>
+                          </>
+                        ) : (
+                          <>
+                            <Pause className="w-3.5 h-3.5 mr-1.5 text-amber-500" />
+                            <span>Jeda Antrean</span>
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleStopBlast}
+                        className="h-8 text-xs border-rose-500/30 text-rose-600 dark:text-rose-400 hover:bg-rose-500/10"
+                        title="Hentikan dan batalkan sisa antrean blast di gateway"
+                      >
+                        <Square className="w-3.5 h-3.5 mr-1.5" />
+                        <span>Stop</span>
+                      </Button>
+                    </div>
+                  ) : selectedCampaign.status === 'completed' ? (
+                    <div className="flex items-center gap-1.5">
+                      <div className="h-8 px-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-medium inline-flex items-center">
+                        <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />
+                        <span>Selesai Terkirim</span>
+                      </div>
+                      {recipientQueue.some((i) => !i.status || i.status === 'draft' || QUEUE_FAILURE_STATUSES.includes(i.status)) && (
+                        <Button
+                          type="button"
+                          variant="default"
+                          size="sm"
+                          onClick={handleStartBlast}
+                          className="h-8 text-xs bg-brand hover:bg-brand text-white"
+                        >
+                          <Play className="w-3.5 h-3.5 mr-1.5" />
+                          <span>Kirim Sisa Target</span>
+                        </Button>
+                      )}
+                    </div>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="default"
+                      size="sm"
+                      disabled={sending}
+                      onClick={handleStartBlast}
+                      className="h-8 text-xs bg-brand hover:bg-brand text-white font-medium"
+                    >
+                      <Play className="w-3.5 h-3.5 mr-1.5" />
+                      <span>{sending ? 'Menyerahkan ke Gateway...' : 'Mulai Blast'}</span>
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              {/* Baris 2: Sub-toolbar Integrasi Sesi Pengirim & Pengaturan Anti-Ban */}
+              <div className="pt-2.5 border-t border-line/60 flex flex-col md:flex-row md:items-center justify-between gap-2.5 text-xs">
+                {/* Kiri: Info Sesi Pengirim */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div className="p-1 rounded bg-surface-alt text-ink-muted">
+                    {targetAntibanSession ? (
+                      <Smartphone className="w-3.5 h-3.5" />
+                    ) : (
+                      <Radio className="w-3.5 h-3.5" />
+                    )}
+                  </div>
+                  <span className="text-ink-muted">Sesi Pengirim:</span>
+                  <span className="font-semibold text-ink">
+                    {targetAntibanSession ? targetAntibanSession.name : 'Auto-Rotate Pool'}
+                  </span>
+                  <span className="inline-flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                    <span>Terkoneksi</span>
+                  </span>
+                </div>
+
+                {/* Kanan: Pengaturan Preset Anti-Ban */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div className="flex items-center gap-1.5">
+                    <div className="p-1 rounded bg-surface-alt">
+                      {activeAntibanPreset === 'broadcast' ? (
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                      ) : activeAntibanPreset === 'strict' ? (
+                        <ShieldAlert className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400" />
+                      ) : (
+                        <Shield className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                      )}
+                    </div>
+                    <span className="text-ink-muted">Anti-Ban:</span>
+                    <span
+                      className={`text-[11px] font-semibold uppercase px-2 py-0.5 rounded-md border ${
+                        activeAntibanPreset === 'broadcast'
+                          ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-600 dark:text-emerald-400'
+                          : activeAntibanPreset === 'strict'
+                          ? 'bg-sky-500/10 border-sky-500/25 text-sky-600 dark:text-sky-400'
+                          : 'bg-amber-500/10 border-amber-500/25 text-amber-600 dark:text-amber-400'
+                      }`}
+                    >
+                      {activeAntibanPreset}
+                    </span>
+                    {activeAntibanPreset === 'broadcast' ? (
+                      <span className="text-[10px] text-emerald-600 dark:text-emerald-400 hidden lg:inline font-medium">
+                        (Tanpa distraksi, optimal blast)
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-amber-600 dark:text-amber-400 hidden lg:inline font-medium">
+                        (Jeda distraksi aktif 5-20m)
+                      </span>
+                    )}
+                  </div>
+
+                  {activeAntibanPreset !== 'broadcast' && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={updatingAntiban}
+                      onClick={() => handleChangeAntibanPreset('broadcast')}
+                      className="h-7 text-[11px] border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 font-medium px-2.5"
+                      title="Ganti ke preset Broadcast untuk pengiriman massal tanpa tertahan jeda distraksi"
+                    >
+                      <Zap className="w-3 h-3 mr-1 text-emerald-500" />
+                      <span>Setel ke Broadcast</span>
+                    </Button>
+                  )}
+
+                  <select
+                    disabled={updatingAntiban || loadingAntiban}
+                    value={activeAntibanPreset}
+                    onChange={(e) => handleChangeAntibanPreset(e.target.value)}
+                    className="h-7 px-2 text-xs rounded-md bg-surface-alt border border-line text-ink font-medium focus:outline-none focus:ring-1 focus:ring-brand cursor-pointer"
+                  >
+                    <option value="broadcast">Broadcast (Blast & Notifikasi)</option>
+                    <option value="balanced">Balanced (Chat Interaktif)</option>
+                    <option value="strict">Strict (Keamanan Ekstra)</option>
+                  </select>
+                </div>
               </div>
             </div>
           )}
 
-          {/* Panel Kontrol Preset Anti-Ban Sesi Pengirim (Item #4) */}
-          <div className="bg-surface p-2.5 sm:p-3 rounded-lg border border-line flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
-            <div className="flex items-center gap-2 flex-wrap">
-              <div className="p-1.5 rounded-lg bg-surface-alt text-brand-deep">
-                {activeAntibanPreset === 'broadcast' ? (
-                  <ShieldCheck className="w-4 h-4 text-pine" />
-                ) : (
-                  <ShieldAlert className="w-4 h-4 text-honey" />
-                )}
-              </div>
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-ink-muted">Preset Anti-Ban Sesi:</span>
-                <span className="font-semibold text-ink">
-                  {targetAntibanSession ? targetAntibanSession.name : 'Auto-Rotate Pool'}
-                </span>
-                <Badge
-                  variant="outline"
-                  className={`text-[10px] font-semibold uppercase px-1.5 py-0.5 ${
-                    activeAntibanPreset === 'broadcast'
-                      ? 'bg-pine-wash border-pine-line text-pine'
-                      : activeAntibanPreset === 'strict'
-                      ? 'bg-clay-wash border-clay-line text-clay'
-                      : 'bg-honey-wash border-honey-line text-honey'
-                  }`}
-                >
-                  {activeAntibanPreset}
-                </Badge>
-                {activeAntibanPreset === 'broadcast' ? (
-                  <span className="text-[10px] text-pine hidden md:inline">
-                    (Optimal Blast: Delay 2-5s, tanpa distraksi, Reply Ratio off)
-                  </span>
-                ) : (
-                  <span className="text-[10px] text-honey hidden md:inline">
-                    (Chat interaktif: ada jeda distraksi 5-20m & Reply Ratio)
-                  </span>
-                )}
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 flex-wrap">
-              {activeAntibanPreset !== 'broadcast' && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={updatingAntiban}
-                  onClick={() => handleChangeAntibanPreset('broadcast')}
-                  className="h-7 text-[11px] border-brand-line text-brand-deep hover:bg-brand-wash px-2.5 font-medium"
-                  title="Ganti ke preset Broadcast untuk pengiriman massal tanpa tertahan jeda distraksi"
-                >
-                  <ShieldCheck className="w-3.5 h-3.5 mr-1 text-pine" />
-                  <span>Setel ke Broadcast</span>
-                </Button>
-              )}
-
-              <select
-                disabled={updatingAntiban || loadingAntiban}
-                value={activeAntibanPreset}
-                onChange={(e) => handleChangeAntibanPreset(e.target.value)}
-                className="h-7 px-2.5 text-xs rounded-lg bg-surface border border-line text-ink font-medium focus:outline-none focus:border-brand cursor-pointer"
-              >
-                <option value="broadcast">📢 Broadcast (Notifikasi & Blast)</option>
-                <option value="balanced">💬 Balanced (Chat Interaktif)</option>
-                <option value="strict">🛡️ Strict (Keamanan Ekstra)</option>
-              </select>
-            </div>
-          </div>
-
+          {/* Alert Notifikasi Perubahan Preset (Berwarna & Elegan, Tanpa Plain Outline Hitam) */}
           {antibanFeedback && (
             <div
-              className={`p-2.5 rounded-lg text-xs flex items-center justify-between gap-2 ${
+              className={`p-3 rounded-xl text-xs flex items-center justify-between gap-3 transition-all ${
                 antibanFeedback.type === 'success'
-                  ? 'bg-pine-wash border border-pine-line text-pine font-medium'
-                  : 'bg-clay-wash border border-clay-line text-clay font-medium'
+                  ? 'bg-emerald-500/10 border border-emerald-500/25 text-emerald-800 dark:text-emerald-300'
+                  : 'bg-rose-500/10 border border-rose-500/25 text-rose-800 dark:text-rose-300'
               }`}
             >
-              <span>{antibanFeedback.text}</span>
+              <div className="flex items-center gap-2">
+                {antibanFeedback.type === 'success' ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
+                )}
+                <span className="font-medium">{antibanFeedback.text}</span>
+              </div>
               <button
                 type="button"
                 onClick={() => setAntibanFeedback(null)}
-                className="text-xs hover:opacity-75 font-bold px-1"
+                className={`p-1 rounded-md transition hover:bg-black/5 dark:hover:bg-white/10 ${
+                  antibanFeedback.type === 'success'
+                    ? 'text-emerald-700 dark:text-emerald-300'
+                    : 'text-rose-700 dark:text-rose-300'
+                }`}
+                aria-label="Tutup notifikasi"
               >
-                ✕
+                <X className="w-4 h-4" />
               </button>
             </div>
           )}
@@ -2806,7 +2864,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
                     <option value="auto_rotate">Auto Rotate (Rotasi Otomatis Semua Nomor Online)</option>
                     {sessions?.map((s) => (
                       <option key={s.id} value={s.id}>
-                        {s.numberProfile === 'fresh' ? '🟡 [Fresh] ' : '🟢 '}
+                        {s.numberProfile === 'fresh' ? '[Fresh] ' : ''}
                         {s.name} (+{s.phone}) - {s.status}
                       </option>
                     ))}
