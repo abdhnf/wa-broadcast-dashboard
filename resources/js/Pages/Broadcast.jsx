@@ -1276,10 +1276,11 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
       }
       await loadLiveQueue();
 
-      // Jika dilanjutkan (resume) dan masih ada kontak pending yang belum terkirim ke wa-api,
-      // jalankan kembali handleStartBlast untuk mendispatch sisa kontak
-      if (!next && selectedCampaign) {
-        const remainingTargets = recipientQueue.filter((item) => item.status === 'pending');
+      // Jika dilanjutkan (resume), gateway wa-api sudah memegang antrean batch dan worker akan
+      // otomatis melanjutkan pengiriman pesan pending yang ada tanpa perlu re-dispatch gelombang baru.
+      // Hanya dispatch jika kampanye belum pernah memiliki batch di gateway sama sekali.
+      if (!next && selectedCampaign && !selectedCampaign.batchId) {
+        const remainingTargets = recipientQueue.filter((item) => !item.status || item.status === 'draft');
         if (remainingTargets.length > 0 && !sending) {
           void handleStartBlast();
         }

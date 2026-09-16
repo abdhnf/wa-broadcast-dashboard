@@ -789,7 +789,7 @@ class CrmController extends Controller
             'status' => $c->status,
             'sessionUsed' => $c->session_used,
             'queue' => $c->queue ?? [],
-            'createdAt' => $c->created_at?->format('Y-m-d H:i') . ' WIB',
+            'createdAt' => $c->created_at ? $c->created_at->timezone('Asia/Jakarta')->format('Y-m-d H:i') . ' WIB' : '-',
         ];
     }
 
