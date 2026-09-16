@@ -3,6 +3,8 @@ import {
   Send,
   Users,
   FileText,
+  Shield,
+  ShieldAlert,
   ShieldCheck,
   CheckCircle2,
   Clock,
@@ -50,6 +52,8 @@ import {
   pauseBatch,
   resumeBatch,
   fetchBatchStatus,
+  fetchAntiBanStatus,
+  updateAntiBanPreset,
   fetchMessages,
   fetchQueueStatus,
   pauseQueue,
@@ -235,6 +239,78 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
 
   const activeSessionId = selectedSessionId === 'auto_rotate' ? 'auto' : selectedSessionId;
   const isRunning = Boolean(sending || selectedCampaign?.status === 'in_progress');
+
+  // Anti-Ban Preset State & Controls (Item #4)
+  const [activeAntibanPreset, setActiveAntibanPreset] = useState('broadcast');
+  const [loadingAntiban, setLoadingAntiban] = useState(false);
+  const [updatingAntiban, setUpdatingAntiban] = useState(false);
+  const [antibanFeedback, setAntibanFeedback] = useState(null);
+
+  // Sesi target yang diatur preset anti-ban nya
+  const targetAntibanSession = useMemo(() => {
+    if (activeSessionId !== 'auto') {
+      return sessions?.find((s) => s.id === activeSessionId) || null;
+    }
+    const used = selectedCampaign?.sessionUsed;
+    if (used && used !== 'auto_rotate' && used !== 'all' && used !== 'auto' && used !== 'Auto-Rotate') {
+      return sessions?.find((s) => s.id === used || s.name === used) || null;
+    }
+    return null; // Mode Auto-Rotate
+  }, [activeSessionId, selectedCampaign?.sessionUsed, sessions]);
+
+  const loadAntibanStatus = useCallback(async () => {
+    const sessId = targetAntibanSession?.id || sessions?.find((s) => s.status === 'connected')?.id;
+    if (!sessId) return;
+    try {
+      setLoadingAntiban(true);
+      const res = await fetchAntiBanStatus(sessId);
+      if (res?.antiBan?.preset) {
+        setActiveAntibanPreset(res.antiBan.preset);
+      }
+    } catch {
+      // abaikan bila sesi belum merespons
+    } finally {
+      setLoadingAntiban(false);
+    }
+  }, [targetAntibanSession?.id, sessions]);
+
+  useEffect(() => {
+    void loadAntibanStatus();
+  }, [loadAntibanStatus]);
+
+  const handleChangeAntibanPreset = async (newPreset) => {
+    if (!newPreset || newPreset === activeAntibanPreset) return;
+    setUpdatingAntiban(true);
+    setAntibanFeedback(null);
+    try {
+      if (targetAntibanSession) {
+        await updateAntiBanPreset(targetAntibanSession.id, newPreset);
+        setAntibanFeedback({
+          type: 'success',
+          text: `Preset anti-ban untuk "${targetAntibanSession.name}" berhasil diubah ke ${newPreset.toUpperCase()}.`,
+        });
+      } else {
+        const connectedSessions = (sessions || []).filter((s) => s.status === 'connected');
+        if (connectedSessions.length === 0) {
+          throw new Error('Tidak ada sesi WhatsApp yang sedang terhubung.');
+        }
+        await Promise.all(connectedSessions.map((s) => updateAntiBanPreset(s.id, newPreset)));
+        setAntibanFeedback({
+          type: 'success',
+          text: `Preset anti-ban untuk seluruh ${connectedSessions.length} sesi Auto-Rotate Pool berhasil diubah ke ${newPreset.toUpperCase()}.`,
+        });
+      }
+      setActiveAntibanPreset(newPreset);
+      setTimeout(() => setAntibanFeedback(null), 5000);
+    } catch (err) {
+      setAntibanFeedback({
+        type: 'error',
+        text: `Gagal mengubah preset: ${err?.message || 'Error'}`,
+      });
+    } finally {
+      setUpdatingAntiban(false);
+    }
+  };
 
   // Resolusi nama sesi WhatsApp agar selalu ramah manusia (bukan ID teknis sess-xxx)
   const resolveSessionName = useCallback(
@@ -1293,7 +1369,8 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
 
   // Jeda/Lanjutkan antrean berbasis batchId kampanye agar tidak membekukan sesi secara global
   const handleTogglePause = async () => {
-    const next = !queuePaused;
+    const isCurrentlyPaused = Boolean(queuePaused || selectedCampaign?.status === 'paused');
+    const next = !isCurrentlyPaused;
     isPausedRef.current = next;
     setQueuePaused(next);
     setQueueError('');
@@ -1395,12 +1472,33 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
 
   const liveQueued = filteredUnifiedQueue.filter((m) => QUEUE_RUNNING_STATUSES.includes(m.status)).length;
 
-  // Status jeda antrean per sesi pengirim (endpoint queue/status wa-api).
+  // Status jeda antrean: prioritas tunggal pada batchId kampanye yang aktif (Item #3)
+  const campBatchId = selectedCampaign?.batchId;
   const monitorSessionId = activeSessionId !== 'auto'
     ? activeSessionId
     : sessions?.find((s) => s.status === 'connected')?.id;
 
   const loadQueueStatus = useCallback(async () => {
+    // 1. Jika kampanye aktif memiliki batchId di gateway, periksa langsung status batch tersebut
+    if (campBatchId) {
+      try {
+        const batchRes = await fetchBatchStatus(campBatchId);
+        if (batchRes && typeof batchRes.isPaused === 'boolean') {
+          setQueuePaused(batchRes.isPaused);
+          // Sinkronkan status kampanye bila berbeda
+          if (batchRes.isPaused && selectedCampaign?.status === 'in_progress') {
+            setSelectedCampaign((prev) => (prev ? { ...prev, status: 'paused' } : prev));
+          } else if (!batchRes.isPaused && selectedCampaign?.status === 'paused' && batchRes.activeCount > 0) {
+            setSelectedCampaign((prev) => (prev ? { ...prev, status: 'in_progress' } : prev));
+          }
+          return;
+        }
+      } catch {
+        // Fallback jika batch belum terdaftar di gateway
+      }
+    }
+
+    // 2. Fallback per-sesi bila belum ada batchId
     if (!monitorSessionId) {
       setQueuePaused(false);
       return;
@@ -1411,7 +1509,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
     } catch {
       // status jeda hanya informasi; kegagalan tidak perlu mengganggu UI
     }
-  }, [monitorSessionId]);
+  }, [campBatchId, selectedCampaign?.status, monitorSessionId]);
 
   useEffect(() => {
     void loadQueueStatus();
@@ -1821,6 +1919,93 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
                   </Button>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* Panel Kontrol Preset Anti-Ban Sesi Pengirim (Item #4) */}
+          <div className="bg-surface p-2.5 sm:p-3 rounded-lg border border-line flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="p-1.5 rounded-lg bg-surface-alt text-brand-deep">
+                {activeAntibanPreset === 'broadcast' ? (
+                  <ShieldCheck className="w-4 h-4 text-pine" />
+                ) : (
+                  <ShieldAlert className="w-4 h-4 text-honey" />
+                )}
+              </div>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-ink-muted">Preset Anti-Ban Sesi:</span>
+                <span className="font-semibold text-ink">
+                  {targetAntibanSession ? targetAntibanSession.name : 'Auto-Rotate Pool'}
+                </span>
+                <Badge
+                  variant="outline"
+                  className={`text-[10px] font-semibold uppercase px-1.5 py-0.5 ${
+                    activeAntibanPreset === 'broadcast'
+                      ? 'bg-pine-wash border-pine-line text-pine'
+                      : activeAntibanPreset === 'strict'
+                      ? 'bg-clay-wash border-clay-line text-clay'
+                      : 'bg-honey-wash border-honey-line text-honey'
+                  }`}
+                >
+                  {activeAntibanPreset}
+                </Badge>
+                {activeAntibanPreset === 'broadcast' ? (
+                  <span className="text-[10px] text-pine hidden md:inline">
+                    (Optimal Blast: Delay 2-5s, tanpa distraksi, Reply Ratio off)
+                  </span>
+                ) : (
+                  <span className="text-[10px] text-honey hidden md:inline">
+                    (Chat interaktif: ada jeda distraksi 5-20m & Reply Ratio)
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              {activeAntibanPreset !== 'broadcast' && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={updatingAntiban}
+                  onClick={() => handleChangeAntibanPreset('broadcast')}
+                  className="h-7 text-[11px] border-brand-line text-brand-deep hover:bg-brand-wash px-2.5 font-medium"
+                  title="Ganti ke preset Broadcast untuk pengiriman massal tanpa tertahan jeda distraksi"
+                >
+                  <ShieldCheck className="w-3.5 h-3.5 mr-1 text-pine" />
+                  <span>Setel ke Broadcast</span>
+                </Button>
+              )}
+
+              <select
+                disabled={updatingAntiban || loadingAntiban}
+                value={activeAntibanPreset}
+                onChange={(e) => handleChangeAntibanPreset(e.target.value)}
+                className="h-7 px-2.5 text-xs rounded-lg bg-surface border border-line text-ink font-medium focus:outline-none focus:border-brand cursor-pointer"
+              >
+                <option value="broadcast">📢 Broadcast (Notifikasi & Blast)</option>
+                <option value="balanced">💬 Balanced (Chat Interaktif)</option>
+                <option value="strict">🛡️ Strict (Keamanan Ekstra)</option>
+              </select>
+            </div>
+          </div>
+
+          {antibanFeedback && (
+            <div
+              className={`p-2.5 rounded-lg text-xs flex items-center justify-between gap-2 ${
+                antibanFeedback.type === 'success'
+                  ? 'bg-pine-wash border border-pine-line text-pine font-medium'
+                  : 'bg-clay-wash border border-clay-line text-clay font-medium'
+              }`}
+            >
+              <span>{antibanFeedback.text}</span>
+              <button
+                type="button"
+                onClick={() => setAntibanFeedback(null)}
+                className="text-xs hover:opacity-75 font-bold px-1"
+              >
+                ✕
+              </button>
             </div>
           )}
 
@@ -2691,6 +2876,68 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
                       </div>
                     );
                   })()}
+                </div>
+
+                {/* Selector Preset Anti-Ban Sesi di Wizard (Item #4) */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-[11px] font-medium text-ink">
+                      Preset Anti-Ban untuk Pengiriman Ini
+                    </label>
+                    <span className="text-[10px] text-ink-muted">
+                      {selectedSessionId === 'auto_rotate' ? 'Diterapkan ke seluruh pool online' : 'Diterapkan ke sesi terpilih'}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      {
+                        id: 'broadcast',
+                        label: 'Broadcast',
+                        desc: 'Optimal blast, tanpa jeda distraksi',
+                        badge: 'Rekomendasi',
+                        icon: ShieldCheck,
+                      },
+                      {
+                        id: 'balanced',
+                        label: 'Balanced',
+                        desc: 'Standar chat, jeda distraksi 5-20m',
+                        badge: 'Chat 2-Arah',
+                        icon: Shield,
+                      },
+                      {
+                        id: 'strict',
+                        label: 'Strict',
+                        desc: 'Delay panjang 3-8s, kuota ketat',
+                        badge: 'Nomor Baru',
+                        icon: ShieldAlert,
+                      },
+                    ].map((p) => {
+                      const Icon = p.icon;
+                      const isSelected = activeAntibanPreset === p.id;
+                      return (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => handleChangeAntibanPreset(p.id)}
+                          className={`flex flex-col justify-between p-2 rounded-lg border text-left transition ${
+                            isSelected
+                              ? 'bg-brand-wash border-brand text-brand-deep ring-1 ring-brand/30'
+                              : 'bg-surface border-line text-ink-muted hover:border-line-strong'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between w-full mb-1">
+                            <Icon className={`w-3.5 h-3.5 ${isSelected ? 'text-brand-deep' : 'text-ink-muted'}`} />
+                            <span className="text-[9px] font-semibold opacity-75">{p.badge}</span>
+                          </div>
+                          <div>
+                            <div className="text-[11px] font-semibold">{p.label}</div>
+                            <div className="text-[9px] text-ink-faint leading-tight mt-0.5">{p.desc}</div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 {/* Prioritas Antrean */}

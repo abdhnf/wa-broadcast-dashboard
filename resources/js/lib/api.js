@@ -426,6 +426,17 @@ export function fetchBatchStatus(batchId, { signal } = {}) {
   return apiFetch(`/batches/${encodeURIComponent(batchId)}/status`, { signal });
 }
 
+export function fetchAntiBanStatus(sessionId, { signal } = {}) {
+  return apiFetch(`/sessions/${encodeURIComponent(sessionId)}/antiban`, { signal });
+}
+
+export function updateAntiBanPreset(sessionId, preset, config = null) {
+  return apiFetch(`/sessions/${encodeURIComponent(sessionId)}/antiban`, {
+    method: 'PUT',
+    body: { preset, config },
+  });
+}
+
 export function pauseQueue(sessionId, reason) {
   return apiFetch(`/sessions/${encodeURIComponent(sessionId)}/queue/pause`, {
     method: 'POST',
