@@ -22,6 +22,8 @@ import {
   RefreshCw,
   Smartphone,
   Square,
+  CheckSquare,
+  MinusSquare,
   Info,
   AlertCircle,
   X,
@@ -223,6 +225,8 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
   const [newRecipientPhone, setNewRecipientPhone] = useState('');
   const [newRecipientName, setNewRecipientName] = useState('');
   const [newRecipientCustom, setNewRecipientCustom] = useState({});
+  const [selectedQueueIds, setSelectedQueueIds] = useState([]);
+  const [isBulkDeleteQueueOpen, setIsBulkDeleteQueueOpen] = useState(false);
 
   const activeSessionId = selectedSessionId === 'auto_rotate' ? 'auto' : selectedSessionId;
   const isRunning = Boolean(sending || selectedCampaign?.status === 'in_progress');
@@ -890,8 +894,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
       selectedCampaign.status === 'in_progress' ||
       selectedCampaign.status === 'paused' ||
       selectedCampaign.status === 'completed' ||
-      Number(selectedCampaign.sentCount) > 0 ||
-      Boolean(selectedCampaign.batchId)
+      Number(selectedCampaign.sentCount) > 0
     );
 
     const contactMap = new Map();
@@ -982,15 +985,19 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
   };
 
   const filteredUnifiedQueue = useMemo(() => {
-    const needle = queueSearch.toLowerCase();
+    const needle = queueSearch.toLowerCase().trim();
     return mergedQueue.filter((item) => {
       const matchStatus = queueStatusFilter === 'all' || item.status === queueStatusFilter;
+      const matchCustom = item.custom && typeof item.custom === 'object'
+        ? Object.values(item.custom).some((v) => String(v).toLowerCase().includes(needle))
+        : false;
       const matchSearch =
         !needle ||
-        String(item.name).toLowerCase().includes(needle) ||
-        String(item.phone).includes(queueSearch) ||
+        String(item.name || '').toLowerCase().includes(needle) ||
+        String(item.phone || '').includes(needle) ||
         String(item.sessionDisplay || '').toLowerCase().includes(needle) ||
-        String(item.liveData?.text || '').toLowerCase().includes(needle);
+        String(item.liveData?.text || '').toLowerCase().includes(needle) ||
+        matchCustom;
       return matchStatus && matchSearch;
     });
   }, [mergedQueue, queueStatusFilter, queueSearch]);
@@ -1013,6 +1020,79 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
   useEffect(() => {
     setQueuePage(1);
   }, [queueStatusFilter, queueSearch, selectedCampaign?.id]);
+
+  // Reset seleksi antrean HANYA jika berganti kampanye (bukan saat search berubah!)
+  useEffect(() => {
+    setSelectedQueueIds([]);
+  }, [selectedCampaign?.id]);
+
+  const isCampaignStarted = Boolean(
+    selectedCampaign && (
+      selectedCampaign.status === 'in_progress' ||
+      selectedCampaign.status === 'paused' ||
+      selectedCampaign.status === 'completed' ||
+      Number(selectedCampaign.sentCount) > 0
+    )
+  );
+  const canBulkDeleteQueue = !isCampaignStarted && !isRunning;
+
+  const selectablePagedQueue = useMemo(
+    () => pagedQueue.filter((i) => i.canDelete),
+    [pagedQueue],
+  );
+  const selectablePagedKeys = useMemo(
+    () => selectablePagedQueue.map((i) => i.phone || i.id),
+    [selectablePagedQueue],
+  );
+
+  const isAllQueuePageSelected =
+    selectablePagedKeys.length > 0 &&
+    selectablePagedKeys.every((key) => selectedQueueIds.includes(key));
+
+  const isSomeQueuePageSelected =
+    selectablePagedKeys.some((key) => selectedQueueIds.includes(key)) && !isAllQueuePageSelected;
+
+  const handleToggleSelectQueueRow = (key) => {
+    setSelectedQueueIds((prev) =>
+      prev.includes(key) ? prev.filter((x) => x !== key) : [...prev, key]
+    );
+  };
+
+  const handleToggleSelectQueuePage = () => {
+    if (isAllQueuePageSelected) {
+      setSelectedQueueIds((prev) => prev.filter((key) => !selectablePagedKeys.includes(key)));
+    } else {
+      setSelectedQueueIds((prev) => Array.from(new Set([...prev, ...selectablePagedKeys])));
+    }
+  };
+
+  const handleSelectAllFilteredQueue = () => {
+    const filterableDeletableKeys = filteredUnifiedQueue
+      .filter((i) => i.canDelete)
+      .map((i) => i.phone || i.id);
+    setSelectedQueueIds((prev) => Array.from(new Set([...prev, ...filterableDeletableKeys])));
+  };
+
+  const handleExecuteBulkDeleteQueue = () => {
+    if (selectedQueueIds.length === 0) return;
+
+    const nextQueue = recipientQueue.filter((item) => {
+      const phone = String(item.phone || '').trim();
+      const id = item.id ? String(item.id).trim() : null;
+      const prefixedPhone = phone ? `q_${phone}` : null;
+
+      const isMatch = selectedQueueIds.some((sel) => {
+        const s = String(sel).trim();
+        return s === phone || s === id || s === prefixedPhone || (id && s === `q_${id}`);
+      });
+
+      return !isMatch;
+    });
+
+    persistQueue(nextQueue);
+    setSelectedQueueIds([]);
+    setIsBulkDeleteQueueOpen(false);
+  };
 
   const pagePhones = useMemo(
     () => pagedQueue.map((item) => item.phone).filter(Boolean),
@@ -1733,13 +1813,68 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
               <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint" />
               <input
                 type="text"
-                placeholder="Cari nama, nomor, atau pesan..."
+                placeholder="Cari nama, nomor, pesan, atau custom field..."
                 value={queueSearch}
                 onChange={(e) => setQueueSearch(e.target.value)}
-                className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-shell bg-surface border border-line border-line text-xs text-ink text-ink-soft focus:outline-none focus:border-brand"
+                className={`w-full pl-8 ${queueSearch ? 'pr-8' : 'pr-3'} py-1.5 rounded-lg bg-shell bg-surface border border-line border-line text-xs text-ink text-ink-soft focus:outline-none focus:border-brand`}
               />
+              {queueSearch && (
+                <button
+                  type="button"
+                  onClick={() => setQueueSearch('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded text-ink-faint hover:text-ink transition-colors"
+                  title="Hapus pencarian"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
           </div>
+
+          {/* Floating / Sticky Bulk Action Bar Antrean */}
+          {selectedQueueIds.length > 0 && canBulkDeleteQueue && (
+            <div className="bg-brand-wash border border-brand-line p-2.5 px-4 rounded-lg flex flex-col sm:flex-row items-center justify-between gap-2.5 text-xs text-brand-deep shadow-xs">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-semibold font-mono">{selectedQueueIds.length} nomor antrean dipilih</span>
+                {queueSearch && (
+                  <span className="text-[10px] bg-brand/10 border border-brand/20 px-1.5 py-0.5 rounded text-brand-deep font-medium">
+                    Lintas Pencarian
+                  </span>
+                )}
+                {filteredUnifiedQueue.filter((i) => i.canDelete).some((i) => !selectedQueueIds.includes(i.id || i.phone)) && (
+                  <button
+                    type="button"
+                    onClick={handleSelectAllFilteredQueue}
+                    className="underline hover:opacity-80 text-[11px] font-medium"
+                  >
+                    + Tambah {filteredUnifiedQueue.filter((i) => i.canDelete && !selectedQueueIds.includes(i.id || i.phone)).length} nomor hasil filter ini
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSelectedQueueIds([])}
+                  className="h-7 text-xs border-line text-ink-muted hover:text-ink"
+                >
+                  <X className="w-3.5 h-3.5 mr-1" />
+                  <span>Batal Seleksi</span>
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsBulkDeleteQueueOpen(true)}
+                  className="h-7 text-xs text-clay border-clay-line hover:bg-clay-wash"
+                >
+                  <Trash2 className="w-3.5 h-3.5 mr-1" />
+                  <span>Hapus Terpilih ({selectedQueueIds.length})</span>
+                </Button>
+              </div>
+            </div>
+          )}
 
           {/* Tabel Tunggal Terpadu: Target Kampanye & Status Live wa-api */}
           <div className="bg-surface  rounded-lg border border-line border-line overflow-hidden ">
@@ -1769,6 +1904,25 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
               <table className="w-full text-left text-xs text-ink-soft text-ink-soft min-w-[760px]">
                 <thead className="bg-shell bg-surface text-ink-soft text-ink-muted uppercase text-[10px] tracking-wider font-semibold border-b border-line border-line">
                   <tr>
+                    {canBulkDeleteQueue && (
+                      <th className="py-2.5 px-3 w-10 text-center">
+                        <button
+                          type="button"
+                          onClick={handleToggleSelectQueuePage}
+                          disabled={selectablePagedKeys.length === 0}
+                          className="p-1 rounded text-ink-muted hover:text-ink transition-colors flex items-center justify-center mx-auto disabled:opacity-40 cursor-pointer"
+                          title={isAllQueuePageSelected ? 'Batal pilih semua di halaman ini' : 'Pilih semua di halaman ini'}
+                        >
+                          {isAllQueuePageSelected ? (
+                            <CheckSquare className="w-4 h-4 text-brand-deep" />
+                          ) : isSomeQueuePageSelected ? (
+                            <MinusSquare className="w-4 h-4 text-brand-deep" />
+                          ) : (
+                            <Square className="w-4 h-4 text-ink-faint" />
+                          )}
+                        </button>
+                      </th>
+                    )}
                     <th className="py-2.5 px-4 w-12 text-center">#</th>
                     <th className="py-2.5 px-4">Kontak & Nomor</th>
                     <th className="py-2.5 px-4">Sesi Pengirim</th>
@@ -1781,18 +1935,45 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
                 <tbody className="divide-y divide-line">
                   {pagedQueue.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-8 text-center text-ink-faint text-ink-faint">
+                      <td colSpan={canBulkDeleteQueue ? 8 : 7} className="py-8 text-center text-ink-faint text-ink-faint">
                         {loadingQueue
                           ? 'Memuat antrean...'
                           : 'Belum ada nomor target pada filter ini. Klik "Tambah Nomor Antrean" atau "Muat Kontak Segmen".'}
                       </td>
                     </tr>
                   ) : (
-                    pagedQueue.map((item, idx) => (
-                      <tr key={item.id} className="hover:bg-surface-alt/60 transition-colors">
-                        <td className="py-2.5 px-4 text-center text-[11px] text-ink-faint">
-                          {(safeQueuePage - 1) * QUEUE_PAGE_SIZE + idx + 1}
-                        </td>
+                    pagedQueue.map((item, idx) => {
+                      const itemKey = item.phone || item.id;
+                      const isSelected = selectedQueueIds.includes(itemKey) || (item.phone && selectedQueueIds.includes(item.phone)) || (item.id && selectedQueueIds.includes(item.id));
+                      return (
+                        <tr
+                          key={item.id}
+                          className={`transition-colors ${
+                            isSelected ? 'bg-brand-wash/50 dark:bg-brand/10' : 'hover:bg-surface-alt/60'
+                          }`}
+                        >
+                          {canBulkDeleteQueue && (
+                            <td className="py-2.5 px-3 text-center">
+                              {item.canDelete ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleSelectQueueRow(itemKey)}
+                                  className="p-1 rounded text-ink-muted hover:text-ink transition-colors flex items-center justify-center mx-auto cursor-pointer"
+                                >
+                                  {isSelected ? (
+                                    <CheckSquare className="w-4 h-4 text-brand-deep" />
+                                  ) : (
+                                    <Square className="w-4 h-4 text-ink-faint" />
+                                  )}
+                                </button>
+                              ) : (
+                                <span className="text-[10px] text-ink-faint italic">-</span>
+                              )}
+                            </td>
+                          )}
+                          <td className="py-2.5 px-4 text-center text-[11px] text-ink-faint">
+                            {(safeQueuePage - 1) * QUEUE_PAGE_SIZE + idx + 1}
+                          </td>
                         <td className="py-2.5 px-4">
                           <div className="font-semibold text-ink text-ink">{item.name}</div>
                           <div className="text-[11px] text-leaf-deep text-brand-soft font-medium">+{item.phone}</div>
@@ -1925,9 +2106,10 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
                           </div>
                         </td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
+                    );
+                  })
+                )}
+              </tbody>
               </table>
             </div>
 
@@ -2753,17 +2935,79 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
               Batal
             </Button>
             <Button
-              type="button"
-              variant="destructive"
-              size="sm"
-              onClick={() => deletingRecipient && handleRemoveRecipient(deletingRecipient)}
-              className="text-xs bg-clay hover:bg-rose-700 text-white"
+            type="button"
+            variant="destructive"
+            size="sm"
+            onClick={() => deletingRecipient && handleRemoveRecipient(deletingRecipient)}
+            className="text-xs bg-clay hover:bg-rose-700 text-white"
             >
-              Hapus Nomor
+            Hapus Nomor
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            </DialogFooter>
+            </DialogContent>
+            </Dialog>
+
+            {/* Modal Konfirmasi Hapus Massal (Bulk Delete) Nomor dari Antrean */}
+            <Dialog open={isBulkDeleteQueueOpen} onOpenChange={setIsBulkDeleteQueueOpen}>
+            <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+            <DialogTitle>Hapus {selectedQueueIds.length} Nomor dari Antrean?</DialogTitle>
+            </DialogHeader>
+            <div className="py-3 space-y-3 text-xs text-ink-soft">
+            <p>
+            Apakah Anda yakin ingin menghapus <strong>{selectedQueueIds.length} nomor</strong> terpilih dari antrean kampanye ini?
+            </p>
+            <div className="max-h-36 overflow-y-auto p-2.5 rounded bg-surface-alt border border-line space-y-1">
+            {recipientQueue
+              .filter((item) => {
+                const phone = String(item.phone || '').trim();
+                const id = item.id ? String(item.id).trim() : null;
+                const prefixedPhone = phone ? `q_${phone}` : null;
+                return selectedQueueIds.some((sel) => {
+                  const s = String(sel).trim();
+                  return s === phone || s === id || s === prefixedPhone;
+                });
+              })
+              .slice(0, 6)
+              .map((item) => (
+                <div key={item.id || item.phone} className="flex items-center justify-between text-[11px]">
+                  <span className="font-medium text-ink truncate max-w-[180px]">{item.name || 'Kontak'}</span>
+                  <span className="font-mono text-brand-deep">+{item.phone}</span>
+                </div>
+              ))}
+            {selectedQueueIds.length > 6 && (
+              <div className="text-[10px] text-ink-faint pt-1 text-center italic">
+                ...dan {selectedQueueIds.length - 6} nomor lainnya
+              </div>
+            )}
+            </div>
+            <p className="text-[11px] text-ink-muted">
+            Nomor yang dihapus tidak akan menerima pesan blast saat kampanye dimulai. Tindakan ini hanya dapat dilakukan sebelum blast dimulai.
+            </p>
+            </div>
+            <DialogFooter className="gap-2">
+            <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setIsBulkDeleteQueueOpen(false)}
+            className="text-xs"
+            >
+            Batal
+            </Button>
+            <Button
+            type="button"
+            variant="destructive"
+            size="sm"
+            onClick={handleExecuteBulkDeleteQueue}
+            className="text-xs bg-clay hover:bg-rose-700 text-white"
+            >
+            <Trash2 className="w-3.5 h-3.5 mr-1" />
+            <span>Hapus {selectedQueueIds.length} Nomor</span>
+            </Button>
+            </DialogFooter>
+            </DialogContent>
+            </Dialog>
 
       {/* Modal Konfirmasi Pembatalan Sisa Antrean */}
       <Dialog open={isCancelConfirmOpen} onOpenChange={setIsCancelConfirmOpen}>
