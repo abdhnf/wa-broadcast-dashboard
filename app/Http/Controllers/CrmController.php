@@ -847,9 +847,13 @@ class CrmController extends Controller
             'status' => ['nullable', 'in:idle,in_progress,paused,completed,failed'],
             'sessionUsed' => ['nullable', 'string', 'max:120'],
             'queue' => ['nullable', 'array', 'max:5000'],
+            'queue.*.id' => ['nullable', 'string', 'max:120'],
             'queue.*.phone' => ['required_with:queue', 'string'],
             'queue.*.name' => ['nullable', 'string', 'max:150'],
             'queue.*.status' => ['nullable', 'string', 'max:40'],
+            'queue.*.custom' => ['nullable'],
+            'queue.*.sentAt' => ['nullable', 'string', 'max:50'],
+            'queue.*.session' => ['nullable', 'string', 'max:120'],
         ])->validate();
 
         $campaign = WaCampaign::create([
@@ -904,9 +908,13 @@ class CrmController extends Controller
             // Antrean target ikut disimpan di sini. Tanpa kolom ini, nomor yang
             // sudah ditambahkan pengguna hilang setiap halaman dimuat ulang.
             'queue' => ['sometimes', 'nullable', 'array', 'max:5000'],
+            'queue.*.id' => ['nullable', 'string', 'max:120'],
             'queue.*.phone' => ['required_with:queue', 'string', 'regex:/^\d{8,15}$/'],
             'queue.*.name' => ['nullable', 'string', 'max:150'],
             'queue.*.status' => ['nullable', 'string', 'max:40'],
+            'queue.*.custom' => ['nullable'],
+            'queue.*.sentAt' => ['nullable', 'string', 'max:50'],
+            'queue.*.session' => ['nullable', 'string', 'max:120'],
         ])->validate();
 
         // Hanya field yang benar-benar dikirim yang diubah, supaya pemanggil bisa

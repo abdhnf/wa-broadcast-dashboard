@@ -14,11 +14,27 @@ export function cn(...inputs) {
  * bukan diam-diam jadi teks kosong.
  */
 export function renderVariables(text, contact = {}) {
-  const custom = contact?.custom || {};
+  const custom = (contact?.custom && typeof contact.custom === 'object') ? contact.custom : {};
+  // Gabungkan properti kontak dan custom field, dukung lookup case-insensitive
+  const combined = { ...custom, ...contact };
+  const lowerMap = new Map();
+  Object.keys(combined).forEach((k) => {
+    if (combined[k] !== undefined && combined[k] !== null && combined[k] !== '') {
+      lowerMap.set(k.toLowerCase(), combined[k]);
+    }
+  });
+
   return String(text ?? '').replace(/\{\{\s*([\w.]+)\s*\}\}/g, (match, rawKey) => {
     const key = String(rawKey).trim();
-    const value = contact?.[key] ?? custom?.[key];
-    return value === undefined || value === null || value === '' ? match : String(value);
+    const directVal = contact?.[key] ?? custom?.[key];
+    if (directVal !== undefined && directVal !== null && directVal !== '') {
+      return String(directVal);
+    }
+    const lowerVal = lowerMap.get(key.toLowerCase());
+    if (lowerVal !== undefined && lowerVal !== null && lowerVal !== '') {
+      return String(lowerVal);
+    }
+    return match;
   });
 }
 

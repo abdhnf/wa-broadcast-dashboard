@@ -267,6 +267,51 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
     return Array.from(set).sort();
   }, [contacts]);
 
+  // Peta variabel kustom per nomor telepon (fallback bila objek antrean belum menyimpan field kustom)
+  const contactCustomMap = useMemo(() => {
+    const map = new Map();
+    (contacts || []).forEach((c) => {
+      const p = normalizePhone(c.phone);
+      if (p) {
+        let customObj = c.custom;
+        if (typeof customObj === 'string') {
+          try {
+            customObj = JSON.parse(customObj);
+          } catch {
+            customObj = null;
+          }
+        }
+        if (customObj && typeof customObj === 'object' && Object.keys(customObj).length > 0) {
+          map.set(p, customObj);
+          if (c.phone && c.phone !== p) {
+            map.set(c.phone, customObj);
+          }
+        }
+      }
+    });
+    return map;
+  }, [contacts]);
+
+  // Resolusi variabel kustom penerima secara konsisten di seluruh alur blast, retry, dan tabel antrean
+  const resolveRecipientCustom = useCallback(
+    (item) => {
+      let custom = item?.custom;
+      if (typeof custom === 'string') {
+        try {
+          custom = JSON.parse(custom);
+        } catch {
+          custom = null;
+        }
+      }
+      if (custom && typeof custom === 'object' && Object.keys(custom).length > 0) {
+        return custom;
+      }
+      const pNorm = normalizePhone(item?.phone);
+      return contactCustomMap.get(pNorm) || (item?.phone ? contactCustomMap.get(item.phone) : null) || {};
+    },
+    [contactCustomMap],
+  );
+
   // Anggota target dinamis: berdasarkan group atau tag (or / and)
   const resolvedTargetMembers = useMemo(() => {
     if (targetType === 'group') {
@@ -473,7 +518,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
           campaignId: newBatchId,
           phone: normalizePhone(c.phone),
           name: c.name,
-          custom: c.custom || {},
+          custom: resolveRecipientCustom(c),
           status: 'draft',
           sentAt: '-',
           session: sessionLabel,
@@ -548,9 +593,13 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
               messageType: 'text',
               content: selectedCampaign?.messageContent || selectedCampaign?.content || 'Pemberitahuan',
             };
+        const recipientCustom = resolveRecipientCustom(item);
         const rendered = renderMessage(tpl.content, {
+          name: item.name || 'Pelanggan',
           nama: item.name || 'Pelanggan',
-          ...item.custom,
+          phone: item.phone,
+          ...recipientCustom,
+          custom: recipientCustom,
         });
 
         if (tpl.messageType === 'media') {
@@ -782,11 +831,13 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
         break;
       }
       try {
+        const recipientCustom = resolveRecipientCustom(item);
         const rendered = renderMessage(tpl.content, {
-          name: item.name,
-          nama: item.name,
+          name: item.name || '',
+          nama: item.name || '',
           phone: item.phone,
-          ...(item.custom || {}),
+          ...recipientCustom,
+          custom: recipientCustom,
         });
 
         const res = tpl.messageType === 'media'
@@ -902,14 +953,6 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
       Number(selectedCampaign.sentCount) > 0
     );
 
-    const contactMap = new Map();
-    (contacts || []).forEach((c) => {
-      const p = normalizePhone(c.phone);
-      if (p && c.custom && typeof c.custom === 'object' && Object.keys(c.custom).length > 0) {
-        contactMap.set(p, c.custom);
-      }
-    });
-
     const rawQueue = Array.isArray(selectedCampaign?.queue)
       ? selectedCampaign.queue
       : (typeof selectedCampaign?.queue === 'string'
@@ -949,9 +992,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
       const isFailed = QUEUE_FAILURE_STATUSES.includes(realStatus);
       const isCancelled = QUEUE_CANCELLED_STATUSES.includes(realStatus);
       const canRetry = (isFailed || isCancelled) && !isRunning;
-      const mergedCustom = (item.custom && Object.keys(item.custom).length > 0)
-        ? item.custom
-        : (contactMap.get(item.phone) || {});
+      const mergedCustom = resolveRecipientCustom(item);
 
       const rawSession = live?.sessionId || item.session || selectedCampaign?.sessionUsed || 'Auto-Rotate';
       const sessionLabel = resolveSessionName(rawSession);
