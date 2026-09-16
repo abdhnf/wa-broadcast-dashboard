@@ -520,7 +520,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
     setFormError('');
 
     if (!campaignName.trim()) {
-      setFormError('Nama kampanye wajib diisi.');
+      setFormError('Nama broadcast wajib diisi.');
       return;
     }
     if (targetType === 'group' && !selectedGroup) {
@@ -623,7 +623,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
         });
 
         if (!created) {
-          setFormError('Kampanye gagal disimpan. Coba lagi.');
+          setFormError('Broadcast gagal disimpan. Coba lagi.');
           return;
         }
 
@@ -641,7 +641,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
         setSubView('queue');
       }
     } catch (err) {
-      setFormError(err?.message || 'Kampanye gagal disimpan.');
+      setFormError(err?.message || 'Broadcast gagal disimpan.');
     } finally {
       setCreating(false);
     }
@@ -750,7 +750,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
       || (campaigns.length > 0 ? campaigns[0] : null);
 
     if (!targetCampaign) {
-      setFormError('Pilih atau buat kampanye terlebih dahulu sebelum menambah nomor antrean.');
+      setFormError('Pilih atau buat broadcast terlebih dahulu sebelum menambah nomor antrean.');
       return;
     }
 
@@ -769,7 +769,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
       : (targetCampaign.queue || []);
 
     if (currentCampQueue.some((item) => item.phone === phone)) {
-      setFormError(`Nomor itu sudah ada di antrean kampanye "${targetCampaign.name}".`);
+      setFormError(`Nomor itu sudah ada di antrean broadcast "${targetCampaign.name}".`);
       return;
     }
 
@@ -874,7 +874,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
       : templates?.find((t) => t.id === selectedCampaign.templateId);
 
     if (!tpl) {
-      setQueueError('Template atau isi pesan kampanye ini tidak ditemukan. Pastikan pesan sudah diisi.');
+      setQueueError('Template atau isi pesan broadcast ini tidak ditemukan. Pastikan pesan sudah diisi.');
       return;
     }
 
@@ -1524,7 +1524,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-base font-bold text-ink dark:text-white">
-              {subView === 'campaigns' ? 'Blast Engine & Kampanye' : `Antrean Pesan: ${selectedCampaign?.name || 'Semua Kampanye'}`}
+              {subView === 'campaigns' ? 'Blast Engine & Broadcast' : `Antrean Broadcast: ${selectedCampaign?.name || 'Semua Broadcast'}`}
             </h1>
             {subView === 'queue' && selectedCampaign?.priority === 'high' && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-500/15 text-honey text-honey border border-honey-line">
@@ -1533,7 +1533,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
             )}
             <Badge variant="outline" className="text-[10px]">
               {subView === 'campaigns'
-                ? `${campaigns.length} Kampanye`
+                ? `${campaigns.length} Broadcast`
                 : `${filteredUnifiedQueue.length} Target · ${
                     selectedCampaign?.status === 'completed'
                       ? 'Selesai'
@@ -1547,7 +1547,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
           </div>
           <p className="text-xs text-ink-muted text-ink-muted mt-0.5">
             {subView === 'campaigns'
-              ? 'Kelola kampanye broadcast WhatsApp dengan opsi nomor spesifik atau auto-rotate pool.'
+              ? 'Kelola tugas broadcast WhatsApp dengan opsi nomor spesifik atau auto-rotate pool.'
               : 'Tambah nomor target, jalankan blast, lalu pantau status riil dari antrean wa-api.'}
           </p>
         </div>
@@ -1563,7 +1563,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
                 className="text-xs"
               >
                 <ChevronLeft className="w-3.5 h-3.5 mr-1" />
-                <span>Daftar Kampanye</span>
+                <span>Daftar Broadcast</span>
               </Button>
               {selectedCampaign && (liveQueued > 0 || isRunning || draftCount > 0) && (
                 <Button
@@ -1619,21 +1619,21 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
                 className="text-xs"
               >
                 <Plus className="w-3.5 h-3.5 mr-1" />
-                <span>Buat Kampanye Baru</span>
+                <span>Buat Broadcast Baru</span>
               </Button>
             </>
           )}
         </div>
       </div>
 
-      {/* TAMPILAN 1: DAFTAR KAMPANYE (SUBVIEW = 'campaigns') */}
+      {/* TAMPILAN 1: DAFTAR BROADCAST (SUBVIEW = 'campaigns') */}
       {subView === 'campaigns' && (
         <div className="bg-surface  rounded-lg border border-line border-line overflow-hidden ">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs text-ink-soft text-ink-soft min-w-[750px]">
               <thead className="bg-shell bg-surface text-ink-soft text-ink-muted uppercase text-[10px] tracking-wider font-semibold border-b border-line border-line">
                 <tr>
-                  <th className="py-2.5 px-4">Nama Kampanye</th>
+                  <th className="py-2.5 px-4">Nama Broadcast</th>
                   <th className="py-2.5 px-4">Segmen Audiens</th>
                   <th className="py-2.5 px-4">Template Pesan</th>
                   <th className="py-2.5 px-4">Sesi WhatsApp</th>
@@ -1777,7 +1777,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
                             size="sm"
                             onClick={(e) => handleOpenEditCampaign(camp, e)}
                             className="text-xs h-7 text-ink-muted hover:text-ink dark:hover:text-white"
-                            title="Edit informasi kampanye"
+                            title="Edit informasi broadcast"
                           >
                             <Edit2 className="w-3 h-3 mr-1 text-ink-faint" />
                             <span>Edit</span>
@@ -2217,7 +2217,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
                     <th className="py-2.5 px-4 w-12 text-center">#</th>
                     <th className="py-2.5 px-4">Kontak & Nomor</th>
                     <th className="py-2.5 px-4">Sesi Pengirim</th>
-                    <th className="py-2.5 px-4">Kampanye / Pesan</th>
+                    <th className="py-2.5 px-4">Broadcast / Pesan</th>
                     <th className="py-2.5 px-4">Variabel Khusus</th>
                     <th className="py-2.5 px-4">Status & Jeda</th>
                     <th className="py-2.5 px-4 text-right">Aksi</th>
@@ -2473,7 +2473,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
           <DialogHeader>
             <div className="flex items-center justify-between pr-6">
               <DialogTitle className="text-base font-bold text-ink">
-                {editingCampaign ? 'Edit Informasi Kampanye' : 'Buat Kampanye Blast Baru'}
+                {editingCampaign ? 'Edit Informasi Broadcast' : 'Buat Broadcast Baru'}
               </DialogTitle>
               <span className="text-[11px] font-mono font-semibold text-brand">
                 Langkah {wizardStep} dari 3
@@ -2493,12 +2493,12 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
           </DialogHeader>
 
           <form onSubmit={handleCreateCampaign} className="space-y-4 text-xs py-2">
-            {/* STEP 1: NAMA KAMPANYE & TARGET AUDIENS (GRUP ATAU TAG) */}
+            {/* STEP 1: NAMA BROADCAST & TARGET AUDIENS (GRUP ATAU TAG) */}
             {wizardStep === 1 && (
               <div className="space-y-4 blast-page-transition">
                 <div>
                   <label className="block text-[11px] font-medium text-ink mb-1">
-                    Nama Kampanye *
+                    Nama Broadcast *
                   </label>
                   <input
                     type="text"
@@ -2885,7 +2885,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
                               <span>Pool memiliki {totalPending} antrean aktif (est. {totalWaitSec > 60 ? `~${Math.ceil(totalWaitSec / 60)} menit` : `${totalWaitSec} detik`})</span>
                             </div>
                             <p className="text-[10px] text-honey-deep/90 mt-0.5 ml-5 leading-relaxed">
-                              Pesan kampanye baru akan didistribusikan merata ke {connected.length} nomor aktif.
+                              Pesan broadcast baru akan didistribusikan merata ke {connected.length} nomor aktif.
                             </p>
                           </div>
                         );
@@ -2955,6 +2955,10 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
                         desc: 'Optimal blast, tanpa jeda distraksi',
                         badge: 'Rekomendasi',
                         icon: ShieldCheck,
+                        activeClasses: 'bg-emerald-500/10 border-emerald-500 text-emerald-800 dark:text-emerald-200 ring-1 ring-emerald-500/30',
+                        activeBadgeClasses: 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300',
+                        activeIconColor: 'text-emerald-600 dark:text-emerald-400',
+                        idleIconColor: 'text-emerald-500/70',
                       },
                       {
                         id: 'balanced',
@@ -2962,6 +2966,10 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
                         desc: 'Standar chat, jeda distraksi 5-20m',
                         badge: 'Chat 2-Arah',
                         icon: Shield,
+                        activeClasses: 'bg-amber-500/10 border-amber-500 text-amber-800 dark:text-amber-200 ring-1 ring-amber-500/30',
+                        activeBadgeClasses: 'bg-amber-500/20 text-amber-700 dark:text-amber-300',
+                        activeIconColor: 'text-amber-600 dark:text-amber-400',
+                        idleIconColor: 'text-amber-500/70',
                       },
                       {
                         id: 'strict',
@@ -2969,6 +2977,10 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
                         desc: 'Delay panjang 3-8s, kuota ketat',
                         badge: 'Nomor Baru',
                         icon: ShieldAlert,
+                        activeClasses: 'bg-sky-500/10 border-sky-500 text-sky-800 dark:text-sky-200 ring-1 ring-sky-500/30',
+                        activeBadgeClasses: 'bg-sky-500/20 text-sky-700 dark:text-sky-300',
+                        activeIconColor: 'text-sky-600 dark:text-sky-400',
+                        idleIconColor: 'text-sky-500/70',
                       },
                     ].map((p) => {
                       const Icon = p.icon;
@@ -2978,19 +2990,25 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
                           key={p.id}
                           type="button"
                           onClick={() => handleChangeAntibanPreset(p.id)}
-                          className={`flex flex-col justify-between p-2 rounded-lg border text-left transition ${
+                          className={`flex flex-col justify-between p-2.5 rounded-xl border text-left transition-all ${
                             isSelected
-                              ? 'bg-brand-wash border-brand text-brand-deep ring-1 ring-brand/30'
-                              : 'bg-surface border-line text-ink-muted hover:border-line-strong'
+                              ? p.activeClasses
+                              : 'bg-surface border-line text-ink-muted hover:border-line-strong hover:bg-surface-alt/50'
                           }`}
                         >
-                          <div className="flex items-center justify-between w-full mb-1">
-                            <Icon className={`w-3.5 h-3.5 ${isSelected ? 'text-brand-deep' : 'text-ink-muted'}`} />
-                            <span className="text-[9px] font-semibold opacity-75">{p.badge}</span>
+                          <div className="flex items-center justify-between w-full mb-1.5">
+                            <Icon className={`w-4 h-4 ${isSelected ? p.activeIconColor : p.idleIconColor}`} />
+                            <span
+                              className={`text-[9px] font-semibold px-1.5 py-0.2 rounded-md ${
+                                isSelected ? p.activeBadgeClasses : 'bg-surface-alt text-ink-muted'
+                              }`}
+                            >
+                              {p.badge}
+                            </span>
                           </div>
                           <div>
-                            <div className="text-[11px] font-semibold">{p.label}</div>
-                            <div className="text-[9px] text-ink-faint leading-tight mt-0.5">{p.desc}</div>
+                            <div className={`text-[11px] font-bold ${isSelected ? '' : 'text-ink'}`}>{p.label}</div>
+                            <div className="text-[9px] opacity-80 leading-tight mt-0.5">{p.desc}</div>
                           </div>
                         </button>
                       );
@@ -3157,7 +3175,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
                       setFormError('');
                       if (wizardStep === 1) {
                         if (!campaignName.trim()) {
-                          setFormError('Nama kampanye wajib diisi.');
+                          setFormError('Nama broadcast wajib diisi.');
                           return;
                         }
                         if (targetType === 'group' && !selectedGroup) {
@@ -3203,7 +3221,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
           <form onSubmit={handleAddRecipient} className="space-y-3 text-xs py-1">
             <div>
               <label className="block text-[11px] font-medium text-ink-soft text-ink-soft mb-1">
-                Target Kampanye *
+                Target Broadcast *
               </label>
               <select
                 value={targetCampaignId || selectedCampaign?.id || (campaigns.length > 0 ? campaigns[0].id : '')}
@@ -3290,7 +3308,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
           <div className="py-2 text-xs text-ink-soft text-ink-muted">
             Apakah Anda yakin ingin menghapus{' '}
             <strong className="text-ink text-ink">{deletingRecipient?.name || 'nomor ini'}</strong>{' '}
-            (<span className="font-mono text-brand-deep">+{deletingRecipient?.phone}</span>) dari antrean kampanye ini?
+            (<span className="font-mono text-brand-deep">+{deletingRecipient?.phone}</span>) dari antrean broadcast ini?
           </div>
           <DialogFooter className="gap-2">
             <Button
@@ -3323,7 +3341,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
             </DialogHeader>
             <div className="py-3 space-y-3 text-xs text-ink-soft">
             <p>
-            Apakah Anda yakin ingin menghapus <strong>{selectedQueueIds.length} nomor</strong> terpilih dari antrean kampanye ini?
+            Apakah Anda yakin ingin menghapus <strong>{selectedQueueIds.length} nomor</strong> terpilih dari antrean broadcast ini?
             </p>
             <div className="max-h-36 overflow-y-auto p-2.5 rounded bg-surface-alt border border-line space-y-1">
             {recipientQueue
@@ -3350,7 +3368,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
             )}
             </div>
             <p className="text-[11px] text-ink-muted">
-            Nomor yang dihapus tidak akan menerima pesan blast saat kampanye dimulai. Tindakan ini hanya dapat dilakukan sebelum blast dimulai.
+            Nomor yang dihapus tidak akan menerima pesan blast saat broadcast dimulai. Tindakan ini hanya dapat dilakukan sebelum blast dimulai.
             </p>
             </div>
             <DialogFooter className="gap-2">
@@ -3383,16 +3401,16 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-sm text-clay text-clay">
               <AlertCircle className="w-4 h-4" />
-              <span>Batalkan Sisa Antrean Kampanye</span>
+              <span>Batalkan Sisa Antrean Broadcast</span>
             </DialogTitle>
           </DialogHeader>
           <div className="py-2 text-xs text-ink-soft text-ink-soft space-y-2">
             <p>
-              Apakah Anda yakin ingin membatalkan sisa antrean untuk kampanye{' '}
+              Apakah Anda yakin ingin membatalkan sisa antrean untuk broadcast{' '}
               <strong className="text-ink text-ink">{selectedCampaign?.name}</strong>?
             </p>
             <p className="text-[11px] text-ink-muted text-ink-muted">
-              Pesan yang belum terkirim di wa-api akan dibatalkan, dan kuota nomor pengirim akan langsung dibebaskan untuk kampanye lainnya.
+              Pesan yang belum terkirim di wa-api akan dibatalkan, dan kuota nomor pengirim akan langsung dibebaskan untuk broadcast lainnya.
             </p>
           </div>
           <DialogFooter className="flex items-center justify-end gap-2 pt-2">
