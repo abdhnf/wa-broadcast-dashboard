@@ -54,6 +54,9 @@ import {
   pauseBatch,
   resumeBatch,
   fetchBatchStatus,
+  fetchBatchApproval,
+  approveBatchRecipients,
+  revokeBatchApproval,
   fetchAntiBanStatus,
   updateAntiBanPreset,
   fetchMessages,
@@ -192,6 +195,10 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
   // User harus memilih batch (mis. dari Dashboard) untuk dipantau di sini.
   const [batchId, setBatchId] = useState('');
   const [queueStatusFilter, setQueueStatusFilter] = useState('all');
+  // Whitelist penerima kampanye (contactGraph). Sumber kebenaran tetap di gateway;
+  // state ini hanya cermin untuk ditampilkan.
+  const [batchApproval, setBatchApproval] = useState(null); // { batchId, count, recipients }
+  const [whitelistBusy, setWhitelistBusy] = useState(false);
   const [queueSearch, setQueueSearch] = useState('');
   const [queuePage, setQueuePage] = useState(1);
 
@@ -1514,8 +1521,92 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
     }
   }, [campBatchId, selectedCampaign?.status, monitorSessionId]);
 
+  /**
+   * Muat status whitelist penerima untuk batch kampanye aktif.
+   * Kegagalan tidak boleh mengganggu UI — whitelist hanya informasi tambahan.
+   */
+  const loadBatchApproval = useCallback(async () => {
+    if (!campBatchId || !monitorSessionId) {
+      setBatchApproval(null);
+      return;
+    }
+    try {
+      const res = await fetchBatchApproval(monitorSessionId, campBatchId);
+      setBatchApproval({
+        batchId: res.batchId,
+        count: res.count || 0,
+        recipients: res.recipients || [],
+      });
+    } catch {
+      setBatchApproval(null);
+    }
+  }, [campBatchId, monitorSessionId]);
+
+  /**
+   * Daftarkan / cabut SELURUH penerima kampanye sekaligus.
+   *
+   * Mengirim seluruh nomor dalam satu permintaan, bukan satu per satu: kampanye
+   * bisa berisi ratusan nomor, dan memanggil endpoint per nomor akan membanjiri
+   * gateway sekaligus membuat UI terasa macet.
+   */
+  const handleToggleAllRecipientsWhitelist = async (approve) => {
+    if (!campBatchId || !monitorSessionId) return;
+    setWhitelistBusy(true);
+    try {
+      if (approve) {
+        // Ambil target dari antrean kampanye (draft lokal + antrean gateway),
+        // bukan dari batchApproval yang masih kosong.
+        const phones = Array.from(
+          new Set(
+            (selectedCampaign?.queue || recipientQueue || [])
+              .map((q) => normalizePhone(q.phone))
+              .filter(Boolean)
+          )
+        );
+        if (phones.length === 0) {
+          setQueueError('Tidak ada nomor pada kampanye ini untuk didaftarkan.');
+          return;
+        }
+        const res = await approveBatchRecipients(monitorSessionId, campBatchId, phones);
+        await loadBatchApproval();
+        // Nomor tidak valid dilaporkan apa adanya: diam-diam melewatinya membuat
+        // operator mengira seluruh penerima sudah terdaftar padahal tidak.
+        const skipped = Array.isArray(res.invalid) && res.invalid.length > 0
+          ? ` ${res.invalid.length} nomor tidak valid dilewati: ${res.invalid.slice(0, 3).join(', ')}${res.invalid.length > 3 ? '…' : ''}`
+          : '';
+        setQueueError(skipped.trim());
+      } else {
+        await revokeBatchApproval(monitorSessionId, campBatchId);
+        await loadBatchApproval();
+        setQueueError('');
+      }
+    } catch (err) {
+      setQueueError(`Gagal ubah whitelist kampanye: ${err.message}`);
+    } finally {
+      setWhitelistBusy(false);
+    }
+  };
+
+  const handleToggleRecipientWhitelist = async (phone, approve) => {
+    if (!campBatchId || !monitorSessionId) return;
+    setWhitelistBusy(true);
+    try {
+      if (approve) {
+        await approveBatchRecipients(monitorSessionId, campBatchId, [phone]);
+      } else {
+        await revokeBatchApproval(monitorSessionId, campBatchId, phone);
+      }
+      await loadBatchApproval();
+    } catch (err) {
+      setQueueError(`Gagal ubah whitelist: ${err.message}`);
+    } finally {
+      setWhitelistBusy(false);
+    }
+  };
+
   useEffect(() => {
     void loadQueueStatus();
+    void loadBatchApproval();
   }, [loadQueueStatus]);
 
   return (
@@ -1947,6 +2038,34 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
                       <span>{sending ? 'Menyerahkan ke Gateway...' : 'Mulai Blast'}</span>
                     </Button>
                   )}
+
+                  {/* Whitelist penerima kampanye (contactGraph).
+                      Penerima blast adalah kontak baru, jadi tanpa didaftarkan
+                      seluruh kampanye akan tertahan handshake. Kontrol ini
+                      berlaku untuk SELURUH penerima kampanye; pengecualian
+                      per nomor tersedia di kolom Whitelist pada tabel antrean. */}
+                  {campBatchId && (
+                    <label
+                      className="flex items-center gap-2 px-2.5 h-8 rounded-md border border-line bg-surface-alt cursor-pointer select-none"
+                      title="Daftarkan penerima kampanye ini agar melewati handshake contactGraph"
+                    >
+                      <input
+                        type="checkbox"
+                        className="w-3.5 h-3.5 accent-[var(--color-brand-deep)] cursor-pointer"
+                        disabled={whitelistBusy}
+                        checked={Boolean(batchApproval && batchApproval.count > 0)}
+                        onChange={(e) => handleToggleAllRecipientsWhitelist(e.target.checked)}
+                      />
+                      <span className="text-[11px] text-ink-muted font-medium whitespace-nowrap">
+                        Penerima lolos handshake
+                      </span>
+                      {batchApproval && (
+                        <span className="text-[10px] font-mono text-ink-faint">
+                          {batchApproval.count} nomor
+                        </span>
+                      )}
+                    </label>
+                  )}
                 </div>
               </div>
 
@@ -2221,13 +2340,14 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
                     <th className="py-2.5 px-4">Broadcast / Pesan</th>
                     <th className="py-2.5 px-4">Variabel Khusus</th>
                     <th className="py-2.5 px-4">Status & Jeda</th>
+                    <th className="py-2.5 px-4 text-center" title="Penerima kampanye yang didaftarkan agar melewati handshake contactGraph">Whitelist</th>
                     <th className="py-2.5 px-4 text-right">Aksi</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line">
                   {pagedQueue.length === 0 ? (
                     <tr>
-                      <td colSpan={canBulkDeleteQueue ? 8 : 7} className="py-8 text-center text-ink-faint text-ink-faint">
+                      <td colSpan={canBulkDeleteQueue ? 9 : 8} className="py-8 text-center text-ink-faint text-ink-faint">
                         {loadingQueue
                           ? 'Memuat antrean...'
                           : 'Belum ada nomor target pada filter ini. Klik "Tambah Nomor Antrean" atau "Muat Kontak Segmen".'}
@@ -2382,6 +2502,50 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
                               <span>{QUEUE_STATUS_LABEL[item.status] || item.status}</span>
                             </span>
                           )}
+                        </td>
+                        {/* Whitelist penerima kampanye (contactGraph).
+                            Sumber kebenaran ada di gateway; sel ini hanya cermin
+                            dari batchApproval yang dimuat lewat loadBatchApproval(). */}
+                        <td className="py-2.5 px-4 text-center">
+                          {(() => {
+                            const jid = `${normalizePhone(item.phone)}@s.whatsapp.net`;
+                            const approved = Boolean(
+                              batchApproval?.recipients?.includes(jid)
+                            );
+                            const canManage = Boolean(campBatchId && monitorSessionId);
+                            if (!canManage) {
+                              return <span className="text-[11px] text-ink-faint">—</span>;
+                            }
+                            return (
+                              <button
+                                type="button"
+                                disabled={whitelistBusy}
+                                onClick={() => handleToggleRecipientWhitelist(item.phone, !approved)}
+                                title={
+                                  approved
+                                    ? 'Terdaftar: nomor ini boleh melewati handshake pada kampanye ini. Klik untuk mencabut.'
+                                    : 'Belum terdaftar: nomor ini akan tertahan handshake. Klik untuk mendaftarkan.'
+                                }
+                                className={`inline-flex items-center gap-1 px-2 py-1 rounded border text-[11px] font-medium transition cursor-pointer disabled:opacity-50 ${
+                                  approved
+                                    ? 'bg-brand-wash/60 dark:bg-brand/15 text-brand-deep dark:text-brand border-brand-line'
+                                    : 'bg-surface-alt text-ink-faint border-line hover:text-ink'
+                                }`}
+                              >
+                                {approved ? (
+                                  <>
+                                    <ShieldCheck className="w-3 h-3" />
+                                    <span>Terdaftar</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <ShieldAlert className="w-3 h-3" />
+                                    <span>Handshake</span>
+                                  </>
+                                )}
+                              </button>
+                            );
+                          })()}
                         </td>
                         <td className="py-2.5 px-4 text-right">
                           <div className="inline-flex items-center justify-end gap-1.5">
