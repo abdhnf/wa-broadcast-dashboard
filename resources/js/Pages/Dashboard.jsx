@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Users,
+  User,
+  Globe,
   Send,
   Plus,
   CheckCircle2,
@@ -87,6 +89,30 @@ export function DashboardPage({ onNavigate }) {
   const [error, setError] = useState('');
   const [lastSync, setLastSync] = useState(null);
 
+  const currentUser = useMemo(() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      return JSON.parse(window.localStorage.getItem(STORAGE_USER) || 'null');
+    } catch {
+      return null;
+    }
+  }, []);
+  const isAdmin = currentUser?.role === 'admin';
+
+  const [adminScope, setAdminScope] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('wa_blast_admin_scope') || 'me';
+    }
+    return 'me';
+  });
+
+  const handleScopeChange = (nextScope) => {
+    setAdminScope(nextScope);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('wa_blast_admin_scope', nextScope);
+    }
+  };
+
   const handleAuthFailure = useCallback((err) => {
     if (err instanceof ApiError && err.isUnauthorized) {
       clearApiConfig();
@@ -141,23 +167,37 @@ export function DashboardPage({ onNavigate }) {
     }
   };
 
+  // ---------- Filter scope data (Personal vs Global untuk Admin) ----------
+  const filteredSessions = useMemo(() => {
+    if (!isAdmin || adminScope === 'all') return sessions;
+    return sessions.filter((s) => s.userId === currentUser?.id);
+  }, [sessions, isAdmin, adminScope, currentUser]);
+
+  const filteredMessages = useMemo(() => {
+    if (!isAdmin || adminScope === 'all') return messages;
+    const mySessionIds = new Set(filteredSessions.map((s) => s.id));
+    return messages.filter(
+      (m) => m.userId === currentUser?.id || (m.sessionId && mySessionIds.has(m.sessionId))
+    );
+  }, [messages, filteredSessions, isAdmin, adminScope, currentUser]);
+
   // ---------- Metrik turunan dari data riil wa-api ----------
   const derived = useMemo(() => {
-    const todayMsgs = messages.filter((m) => isToday(m.timestamp));
+    const todayMsgs = filteredMessages.filter((m) => isToday(m.timestamp));
     const sentToday = todayMsgs.filter((m) => SUCCESS_STATUSES.includes(m.status)).length;
     const failedToday = todayMsgs.filter((m) => FAILURE_STATUSES.includes(m.status)).length;
-    const queued = messages.filter((m) => QUEUED_STATUSES.includes(m.status)).length;
+    const queued = filteredMessages.filter((m) => QUEUED_STATUSES.includes(m.status)).length;
     const closed = sentToday + failedToday;
     const successRate = closed > 0 ? (sentToday / closed) * 100 : null;
 
-    const paced = messages.filter((m) => Number(m.jitterDelayMs) > 0);
+    const paced = filteredMessages.filter((m) => Number(m.jitterDelayMs) > 0);
     const avgDelayMs = paced.length
       ? paced.reduce((sum, m) => sum + Number(m.jitterDelayMs), 0) / paced.length
       : 0;
 
     // Distribusi jam kirim (6 bucket terakhir yang punya aktivitas)
     const buckets = new Map();
-    for (const m of messages) {
+    for (const m of filteredMessages) {
       if (!m.timestamp) continue;
       const d = new Date(m.timestamp);
       const key = `${String(d.getHours()).padStart(2, '0')}:00`;
@@ -171,7 +211,7 @@ export function DashboardPage({ onNavigate }) {
 
     // Kampanye/antrean batch dari batchId pesan
     const batchMap = new Map();
-    for (const m of messages) {
+    for (const m of filteredMessages) {
       const key = m.batchId || '__single__';
       const entry = batchMap.get(key) || {
         id: key,
@@ -190,10 +230,11 @@ export function DashboardPage({ onNavigate }) {
     }
     const batches = [...batchMap.values()].sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, 6);
 
-    const recent = messages.slice(0, 8);
+    const recent = filteredMessages.slice(0, 8);
 
     return {
-      connectedCount: sessions.filter((s) => s.status === 'connected').length,
+      connectedCount: filteredSessions.filter((s) => s.status === 'connected').length,
+      totalSessionsCount: filteredSessions.length,
       sentToday,
       failedToday,
       queued,
@@ -204,7 +245,7 @@ export function DashboardPage({ onNavigate }) {
       batches,
       recent,
     };
-  }, [messages, sessions]);
+  }, [filteredMessages, filteredSessions]);
 
   const quotaLimit = usage?.quotaLimit ?? 0;
   const usedInPeriod = usage?.usedInPeriod ?? 0;
@@ -214,18 +255,67 @@ export function DashboardPage({ onNavigate }) {
   return (
     <div className="space-y-5">
       {/* Header + aksi cepat */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-surface  p-4 rounded-lg border border-line border-line ">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-surface p-4 rounded-lg border border-line">
         <div>
-          <h1 className="text-base font-bold text-ink dark:text-white">
-            Dashboard Broadcast & CRM
-          </h1>
+          <div className="flex items-center gap-2 flex-wrap">
+            <h1 className="text-base font-bold text-ink dark:text-white">
+              Dashboard Broadcast & CRM
+            </h1>
+            {isAdmin && (
+              <Badge
+                variant="outline"
+                className={`text-[10px] font-semibold tracking-wide ${
+                  adminScope === 'me'
+                    ? 'text-brand-deep border-brand-line bg-brand-wash'
+                    : 'text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-950/40'
+                }`}
+              >
+                {adminScope === 'me' ? 'Scope: Akun Saya (Personal)' : `Scope: Semua Pengguna (${sessions.length} Sesi Total)`}
+              </Badge>
+            )}
+          </div>
           <p className="text-xs text-ink-muted mt-0.5">
-            Data live dari WhatsApp API Gateway
+            {isAdmin
+              ? (adminScope === 'me'
+                  ? 'Menampilkan ringkasan metrik, antrean, dan log pesan milik akun admin'
+                  : 'Menampilkan data agregat gabungan dari seluruh pengguna sistem di gateway')
+              : 'Data live dari WhatsApp API Gateway'}
             {lastSync ? `, sinkron ${formatClock(lastSync.toISOString())} WIB` : ''}
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {isAdmin && (
+            <div className="flex items-center p-0.5 bg-surface-alt rounded-lg border border-line">
+              <button
+                type="button"
+                onClick={() => handleScopeChange('me')}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+                  adminScope === 'me'
+                    ? 'bg-surface text-ink font-semibold shadow-xs border border-line/60'
+                    : 'text-ink-muted hover:text-ink'
+                }`}
+                title="Tampilkan hanya data dan sesi kepemilikan admin sendiri"
+              >
+                <User className="w-3.5 h-3.5 text-brand-deep" />
+                <span>Akun Saya</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleScopeChange('all')}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+                  adminScope === 'all'
+                    ? 'bg-surface text-ink font-semibold shadow-xs border border-line/60'
+                    : 'text-ink-muted hover:text-ink'
+                }`}
+                title="Tampilkan data agregat seluruh pengguna di gateway"
+              >
+                <Globe className="w-3.5 h-3.5 text-indigo-500" />
+                <span>Semua Pengguna</span>
+              </button>
+            </div>
+          )}
+
           <Button
             onClick={() => loadAll()}
             variant="outline"
@@ -233,7 +323,7 @@ export function DashboardPage({ onNavigate }) {
             className="text-xs"
             disabled={loading}
           >
-            <RefreshCw className={`w-3.5 h-3.5 mr-1 text-ink-soft text-ink-muted ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-3.5 h-3.5 mr-1 text-ink-soft ${loading ? 'animate-spin' : ''}`} />
             <span>Muat Ulang</span>
           </Button>
 
@@ -296,7 +386,7 @@ export function DashboardPage({ onNavigate }) {
           <div className="text-xl font-bold text-ink dark:text-white mt-1 flex items-center justify-between">
             <span>
               {derived.connectedCount}{' '}
-              <span className="text-xs font-normal text-ink-faint">/ {sessions.length} Sesi</span>
+              <span className="text-xs font-normal text-ink-faint">/ {filteredSessions.length} Sesi</span>
             </span>
             {derived.connectedCount > 0 && <span className="w-2.5 h-2.5 rounded-full bg-brand animate-pulse" />}
           </div>
@@ -416,22 +506,31 @@ export function DashboardPage({ onNavigate }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-line">
-              {sessions.length === 0 && (
+              {filteredSessions.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="py-6 px-4 text-center text-ink-faint text-[11px]">
-                    {loading ? 'Memuat sesi dari wa-api...' : 'Belum ada sesi WhatsApp pada akun ini.'}
+                  <td colSpan={8} className="py-6 px-4 text-center text-ink-faint text-[11px]">
+                    {loading
+                      ? 'Memuat sesi dari wa-api...'
+                      : (isAdmin && adminScope === 'me'
+                          ? 'Belum ada sesi WhatsApp milik admin sendiri. Buat sesi di panel atau alihkan ke mode "Semua Pengguna" untuk melihat sesi pengguna lain.'
+                          : 'Belum ada sesi WhatsApp pada akun ini.')}
                   </td>
                 </tr>
               )}
-              {sessions.map((s) => {
+              {filteredSessions.map((s) => {
                 const isConn = s.status === 'connected';
                 const risk = s.riskScore || 0;
                 return (
                   <tr key={s.id} className="hover:bg-surface-alt/60 transition-colors">
                     <td className="py-3 px-4 font-semibold text-ink text-ink">
-                      <div className="flex items-center gap-2">
-                        <Smartphone className="w-3.5 h-3.5 text-ink-faint" />
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Smartphone className="w-3.5 h-3.5 text-ink-faint shrink-0" />
                         <span>{s.name}</span>
+                        {isAdmin && adminScope === 'all' && (
+                          <span className="text-[9px] px-1.5 py-0.5 rounded font-normal text-ink-muted bg-surface-alt border border-line">
+                            {s.owner?.name || (s.userId === currentUser?.id ? 'Admin (Saya)' : s.userId || 'Sistem')}
+                          </span>
+                        )}
                       </div>
                       <div className="text-[10px] text-ink-faint mt-0.5">{s.id}</div>
                     </td>
@@ -529,7 +628,9 @@ export function DashboardPage({ onNavigate }) {
                 {derived.batches.length === 0 && (
                   <tr>
                     <td colSpan={3} className="py-6 px-4 text-center text-ink-faint text-[11px]">
-                      Belum ada batch blast tercatat.
+                      {isAdmin && adminScope === 'me'
+                        ? 'Belum ada batch blast yang dikirim dari akun admin.'
+                        : 'Belum ada batch blast tercatat.'}
                     </td>
                   </tr>
                 )}
@@ -582,14 +683,25 @@ export function DashboardPage({ onNavigate }) {
                 {derived.recent.length === 0 && (
                   <tr>
                     <td colSpan={4} className="py-6 px-4 text-center text-ink-faint text-[11px]">
-                      {loading ? 'Memuat log pesan...' : 'Belum ada pesan dikirim dari akun ini.'}
+                      {loading
+                        ? 'Memuat log pesan...'
+                        : (isAdmin && adminScope === 'me'
+                            ? 'Belum ada riwayat pesan yang dikirim dari akun admin.'
+                            : 'Belum ada pesan dikirim dari akun ini.')}
                     </td>
                   </tr>
                 )}
                 {derived.recent.map((m) => (
                   <tr key={m.id} className="hover:bg-surface-alt/60 transition-colors">
                     <td className="py-2.5 px-4">
-                      <div className="text-ink text-ink">+{m.to}</div>
+                      <div className="flex items-center gap-1.5 text-ink text-ink flex-wrap">
+                        <span>+{m.to}</span>
+                        {isAdmin && adminScope === 'all' && m.userId && (
+                          <span className="text-[9px] px-1 py-0.2 rounded text-ink-faint bg-surface-alt border border-line">
+                            {m.userId === currentUser?.id ? 'Admin (Saya)' : m.userId}
+                          </span>
+                        )}
+                      </div>
                       <div className="text-[10px] text-ink-faint truncate max-w-[220px]">
                         {m.text || m.caption || m.mode}
                       </div>
