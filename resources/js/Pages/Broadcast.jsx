@@ -71,7 +71,7 @@ import { ContactSearchInput } from '../components/ContactSearchInput';
 
 // Status antrean disamakan dengan `MessageStatus` wa-api (types.ts).
 // Status yang sah dari wa-api gateway dan status draft lokal
-const QUEUE_RUNNING_STATUSES = ['pending', 'pacing', 'sending'];
+const QUEUE_RUNNING_STATUSES = ['queued', 'pending', 'pacing', 'sending'];
 const QUEUE_SUCCESS_STATUSES = ['sent', 'delivered', 'read'];
 const QUEUE_FAILURE_STATUSES = ['failed', 'invalid_number', 'not_registered'];
 const QUEUE_CANCELLED_STATUSES = ['cancelled'];
@@ -80,7 +80,8 @@ const QUEUE_PAGE_SIZE = 50;
 const QUEUE_STATUS_OPTIONS = [
   { value: 'all', label: 'Semua Status' },
   { value: 'draft', label: 'Siap Dikirim' },
-  { value: 'pending', label: 'Antrean Gateway' },
+  { value: 'queued', label: 'Antrean Gateway' },
+  { value: 'pending', label: 'Antrean Dashboard (lama)' },
   { value: 'pacing', label: 'Jeda anti-ban' },
   { value: 'sending', label: 'Sedang dikirim' },
   { value: 'sent', label: 'Terkirim' },
@@ -129,7 +130,7 @@ function getCampaignStats(camp) {
         qFailed += 1;
       } else if (st === 'cancelled') {
         qCancelled += 1;
-      } else if (['pacing', 'sending'].includes(st) || (st === 'pending' && isCampActive)) {
+      } else if (['pacing', 'sending'].includes(st) || (['pending', 'queued'].includes(st) && isCampActive)) {
         qInFlight += 1;
       } else {
         qDraft += 1;
@@ -702,10 +703,10 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
         }
       }
 
-      // Perbarui status kontak di antrean lokal menjadi pending
+      // Perbarui status kontak di antrean lokal menjadi queued (menunggu di gateway)
       const nextQueue = recipientQueue.map((q) => {
         if (q.phone === item.phone) {
-          return { ...q, status: 'pending', error: null };
+          return { ...q, status: 'queued', error: null };
         }
         return q;
       });
@@ -854,9 +855,9 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
   const handleStartBlast = async () => {
     if (!selectedCampaign || sending) return;
 
-    // Ambil target yang belum selesai (draft / pending lokal)
+    // Ambil target yang belum selesai (draft lokal / antrean gateway)
     const targets = recipientQueue.filter(
-      (item) => !item.status || item.status === 'draft' || item.status === 'pending'
+      (item) => !item.status || item.status === 'draft' || item.status === 'queued' || item.status === 'pending'
     );
     if (targets.length === 0) {
       setQueueError('Antrean masih kosong atau semua target sudah terkirim.');
