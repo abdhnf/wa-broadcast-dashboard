@@ -426,6 +426,34 @@ export function fetchBatchStatus(batchId, { signal } = {}) {
   return apiFetch(`/batches/${encodeURIComponent(batchId)}/status`, { signal });
 }
 
+/**
+ * Whitelist penerima kampanye (contactGraph).
+ *
+ * Approval terikat pasangan (batchId, nomor): penerima yang didaftarkan hanya
+ * lolos handshake pada batch tersebut, di pengiriman lain nomor yang sama tetap
+ * wajib handshake.
+ */
+export function fetchBatchApproval(sessionId, batchId, { signal } = {}) {
+  return apiFetch(
+    `/sessions/${encodeURIComponent(sessionId)}/contact-graph/batch/${encodeURIComponent(batchId)}`,
+    { signal }
+  );
+}
+
+export function approveBatchRecipients(sessionId, batchId, recipients) {
+  return apiFetch(`/sessions/${encodeURIComponent(sessionId)}/contact-graph/batch`, {
+    method: 'POST',
+    body: { batchId, recipients },
+  });
+}
+
+export function revokeBatchApproval(sessionId, batchId, recipient = null) {
+  return apiFetch(
+    `/sessions/${encodeURIComponent(sessionId)}/contact-graph/batch/${encodeURIComponent(batchId)}`,
+    { method: 'DELETE', body: recipient ? { recipient } : {} }
+  );
+}
+
 export function fetchAntiBanStatus(sessionId, { signal } = {}) {
   return apiFetch(`/sessions/${encodeURIComponent(sessionId)}/antiban`, { signal });
 }
