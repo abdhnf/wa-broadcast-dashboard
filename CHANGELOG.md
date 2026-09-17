@@ -9,7 +9,31 @@ dicatat di sini karena berdampak langsung ke kampanye yang sedang berjalan.
 
 ---
 
-## [Unreleased] — branch `feat/campaign-recipient-whitelist`
+## [Unreleased] — branch `main`
+
+**Tema:** pemisahan data scope admin (Personal vs Global System) pada Overview Dashboard.
+
+### Added
+
+- **Scope Selector 1-Klik di Header Overview** (`Dashboard.jsx`).
+  Menyediakan segmented switch khusus untuk pengguna dengan role `admin`:
+  - **Akun Saya (Personal Scope — Default):** Menampilkan metrik murni kepemilikan admin (`s.userId === currentUser.id`, `m.userId === currentUser.id`). Menghilangkan pencampuran data agregat pengguna lain pada kartu Antrean Aktif, Terkirim Hari Ini, Tingkat Pengiriman, Sesi WhatsApp Terhubung, Grafik Distribusi Jam, Daftar Batch Blast, dan Log Pesan Terakhir.
+  - **Semua Pengguna (Global System Scope):** Menampilkan data agregat gabungan dari seluruh pengguna sistem di gateway untuk kebutuhan pengawasan infrastruktur dan beban traffic.
+- **Indikator Badge Status Scope** (`Dashboard.jsx`).
+  Memberikan label penanda jelas di samping judul (`Scope: Akun Saya (Personal)` bernuansa brand emerald dan `Scope: Semua Pengguna (X Sesi Total)` bernuansa indigo).
+- **Label Transparansi Kepemilikan Sesi & Pesan** (`Dashboard.jsx`).
+  Pada mode *Semua Pengguna*, tabel sesi WhatsApp dan tabel log pesan menyertakan badge identitas pemilik (misal: *Admin (Saya)* atau nama pemilik sesi/pesan) sehingga admin dapat langsung membedakan pemilik data.
+- **Persistensi State Scope Lokal** (`Dashboard.jsx`).
+  Preferensi scope yang dipilih admin disimpan ke `localStorage` (`wa_blast_admin_scope`) sehingga tidak ter-reset saat memuat ulang halaman.
+
+### Notes for reviewer
+
+- Perubahan bersifat **100% frontend-only**. Tidak ada modifikasi pada kontrak API gateway (`wa-api`) maupun controller backend Laravel (`CrmController.php`).
+- Sesi dan log pesan difilter langsung di memori browser dari payload API yang sudah menyediakan `userId` dan metadata `owner`.
+
+---
+
+## [Merged] — branch `feat/campaign-recipient-whitelist`
 
 **Tema:** kendali whitelist penerima kampanye (contactGraph) di dashboard.
 **Basis:** `cf4d791` (produksi). **Belum di-merge ke `main`.**
