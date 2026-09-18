@@ -64,10 +64,10 @@ import {
   pauseQueue,
   resumeQueue,
   retryMessage,
-  sendBulkMessages,
   sendLocation,
   sendMedia,
   sendText,
+  sendBulkMessages,
 } from '../lib/api';
 import { renderMessage } from '../lib/utils';
 import { PHONE_ERROR_MESSAGE, isValidPhone, normalizePhone, toPhoneInput } from '../lib/phone';
@@ -969,155 +969,159 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
     let lastError = '';
 
     if (USE_BULK_ENQUEUE) {
-    // Susun payload per penerima. Spintax dan variabel kustom di-render DI SINI
-    // (sisi klien), bukan di gateway, supaya tiap penerima mendapat varian sendiri.
-    const payloads = targets.map((item) => {
-      const recipientCustom = resolveRecipientCustom(item);
-      const rendered = renderMessage(tpl.content, {
-        name: item.name || '',
-        nama: item.name || '',
-        phone: item.phone,
-        ...recipientCustom,
-        custom: recipientCustom,
+      // Susun payload per penerima. Spintax dan variabel kustom di-render DI SINI
+      // (sisi klien), bukan di gateway, supaya tiap penerima mendapat varian sendiri.
+      const payloads = targets.map((item) => {
+        const recipientCustom = resolveRecipientCustom(item);
+        const rendered = renderMessage(tpl.content, {
+          name: item.name || '',
+          nama: item.name || '',
+          phone: item.phone,
+          ...recipientCustom,
+          custom: recipientCustom,
+        });
+
+        if (tpl.messageType === 'media') {
+          return {
+            mode: 'media',
+            to: item.phone,
+            mediaType: tpl.mediaType || 'image',
+            ...(tpl.mediaUrl ? { mediaUrl: tpl.mediaUrl } : {}),
+            ...(tpl.fileName ? { fileName: tpl.fileName } : {}),
+            caption: rendered,
+          };
+        }
+        if (tpl.messageType === 'location') {
+          return {
+            mode: 'location',
+            to: item.phone,
+            latitude: Number(tpl.location?.latitude),
+            longitude: Number(tpl.location?.longitude),
+            ...(tpl.location?.name ? { name: tpl.location.name } : {}),
+            ...(tpl.location?.address ? { address: tpl.location.address } : {}),
+          };
+        }
+        return { mode: 'text', to: item.phone, text: rendered };
       });
 
-      if (tpl.messageType === 'media') {
-        return {
-          mode: 'media',
-          to: item.phone,
-          mediaType: tpl.mediaType || 'image',
-          ...(tpl.mediaUrl ? { mediaUrl: tpl.mediaUrl } : {}),
-          ...(tpl.fileName ? { fileName: tpl.fileName } : {}),
-          caption: rendered,
-        };
-      }
-      if (tpl.messageType === 'location') {
-        return {
-          mode: 'location',
-          to: item.phone,
-          latitude: Number(tpl.location?.latitude),
-          longitude: Number(tpl.location?.longitude),
-          ...(tpl.location?.name ? { name: tpl.location.name } : {}),
-          ...(tpl.location?.address ? { address: tpl.location.address } : {}),
-        };
-      }
-      return { mode: 'text', to: item.phone, text: rendered };
-    });
+      const enqueuePriority = selectedCampaign?.priority || campaignPriority || 'normal';
 
-    const enqueuePriority = selectedCampaign?.priority || campaignPriority || 'normal';
+      for (let offset = 0; offset < payloads.length; offset += BULK_CHUNK_SIZE) {
+        if (isPausedRef.current || isStoppedRef.current) break;
+        const slice = payloads.slice(offset, offset + BULK_CHUNK_SIZE);
 
-    for (let offset = 0; offset < payloads.length; offset += BULK_CHUNK_SIZE) {
-      if (isPausedRef.current || isStoppedRef.current) break;
-      const slice = payloads.slice(offset, offset + BULK_CHUNK_SIZE);
-
-      try {
-        const res = await sendBulkMessages({
-          sessionId: activeSessionId,
-          batchId: activeBatchId,
-          priority: enqueuePriority,
-          messages: slice,
-        });
-
-        // Status awal dari gateway adalah 'queued', bukan 'pending'.
-        (res?.messages || []).forEach((m) => {
-          statusByPhone.set(m.to, {
-            status: m.status || 'queued',
-            messageId: m.id,
-            sentAt: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
-          });
-          okCount += 1;
-        });
-        // Kegagalan per penerima dikumpulkan gateway, tidak menggagalkan seluruh chunk.
-        (res?.errors || []).forEach((e) => {
-          statusByPhone.set(e.to, { status: 'failed', error: e.error, sentAt: '-' });
-          failCount += 1;
-          lastError = e.error;
-        });
-      } catch (err) {
-        // Kegagalan satu chunk tidak menghentikan chunk berikutnya; target yang belum
-        // diserahkan tetap berstatus draft sehingga masih bisa dikirim ulang.
-        const msg = err?.message || 'Gagal menyerahkan batch ke gateway.';
-        lastError = msg;
-        failCount += slice.length;
-        slice.forEach((m) => statusByPhone.set(m.to, { status: 'failed', error: msg, sentAt: '-' }));
-      } finally {
-        setBlastProgress({
-          total: payloads.length,
-          current: Math.min(offset + slice.length, payloads.length),
-          ok: okCount,
-          fail: failCount,
-        });
-      }
-    }
-  } else {
-    // Jalur lama: satu request per penerima, 15 worker paralel.
-await runConcurrentPool(
-      targets,
-      BATCH_CONCURRENCY,
-      async (item) => {
         try {
-          const recipientCustom = resolveRecipientCustom(item);
-          const rendered = renderMessage(tpl.content, {
-            name: item.name || '',
-            nama: item.name || '',
-            phone: item.phone,
-            ...recipientCustom,
-            custom: recipientCustom,
+          const res = await sendBulkMessages({
+            sessionId: activeSessionId,
+            batchId: activeBatchId,
+            priority: enqueuePriority,
+            messages: slice,
           });
 
-          const res = tpl.messageType === 'media'
-            ? await sendMedia({
-                sessionId: activeSessionId,
-                to: item.phone,
-                mediaType: tpl.mediaType || 'image',
-                mediaUrl: tpl.mediaUrl,
-                fileName: tpl.fileName || undefined,
-                caption: rendered,
-                priority: selectedCampaign?.priority || campaignPriority || 'normal',
-                batchId: activeBatchId,
-              })
-            : tpl.messageType === 'location'
-              ? await sendLocation({
+          // Status awal dari gateway adalah 'queued', bukan 'pending'.
+          (res?.messages || []).forEach((m) => {
+            statusByPhone.set(m.to, {
+              status: m.status || 'queued',
+              messageId: m.id,
+              sentAt: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+            });
+            okCount += 1;
+          });
+          // Kegagalan per penerima dikumpulkan gateway, tidak menggagalkan seluruh chunk.
+          (res?.errors || []).forEach((e) => {
+            statusByPhone.set(e.to, { status: 'failed', error: e.error, sentAt: '-' });
+            failCount += 1;
+            lastError = e.error;
+          });
+        } catch (err) {
+          // Kegagalan satu chunk tidak menghentikan chunk berikutnya; target yang belum
+          // diserahkan tetap berstatus draft sehingga masih bisa dikirim ulang.
+          const msg = err?.message || 'Gagal menyerahkan batch ke gateway.';
+          lastError = msg;
+          failCount += slice.length;
+          slice.forEach((m) => statusByPhone.set(m.to, { status: 'failed', error: msg, sentAt: '-' }));
+        } finally {
+          setBlastProgress({
+            total: payloads.length,
+            current: Math.min(offset + slice.length, payloads.length),
+            ok: okCount,
+            fail: failCount,
+          });
+        }
+      }
+    } else {
+      // Jalur lama: satu request per penerima, 15 worker paralel.
+      // Concurrency limit: 15 request paralel ke backend wa-api.
+      // Memangkas waktu penyerahan 500 target dari puluhan detik menjadi 1-2 detik.
+      const BATCH_CONCURRENCY = 15;
+
+      await runConcurrentPool(
+        targets,
+        BATCH_CONCURRENCY,
+        async (item) => {
+          try {
+            const recipientCustom = resolveRecipientCustom(item);
+            const rendered = renderMessage(tpl.content, {
+              name: item.name || '',
+              nama: item.name || '',
+              phone: item.phone,
+              ...recipientCustom,
+              custom: recipientCustom,
+            });
+
+            const res = tpl.messageType === 'media'
+              ? await sendMedia({
                   sessionId: activeSessionId,
                   to: item.phone,
-                  latitude: tpl.location?.latitude,
-                  longitude: tpl.location?.longitude,
-                  name: tpl.location?.name,
-                  address: tpl.location?.address,
+                  mediaType: tpl.mediaType || 'image',
+                  mediaUrl: tpl.mediaUrl,
+                  fileName: tpl.fileName || undefined,
+                  caption: rendered,
                   priority: selectedCampaign?.priority || campaignPriority || 'normal',
                   batchId: activeBatchId,
                 })
-              : await sendText({
-                  sessionId: activeSessionId,
-                  to: item.phone,
-                  text: rendered,
-                  priority: selectedCampaign?.priority || campaignPriority || 'normal',
-                  batchId: activeBatchId,
-                });
+              : tpl.messageType === 'location'
+                ? await sendLocation({
+                    sessionId: activeSessionId,
+                    to: item.phone,
+                    latitude: tpl.location?.latitude,
+                    longitude: tpl.location?.longitude,
+                    name: tpl.location?.name,
+                    address: tpl.location?.address,
+                    priority: selectedCampaign?.priority || campaignPriority || 'normal',
+                    batchId: activeBatchId,
+                  })
+                : await sendText({
+                    sessionId: activeSessionId,
+                    to: item.phone,
+                    text: rendered,
+                    priority: selectedCampaign?.priority || campaignPriority || 'normal',
+                    batchId: activeBatchId,
+                  });
 
-          batch = batch || res?.batchId || activeBatchId;
-          okCount += 1;
-          // Status resmi dari gateway wa-api adalah 'queued'
-          statusByPhone.set(item.phone, {
-            status: res?.status || 'queued',
-            messageId: res?.messageId,
-            sentAt: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
-          });
-        } catch (err) {
-          failCount += 1;
-          lastError = err?.message || 'Pengiriman gagal.';
-          statusByPhone.set(item.phone, { status: 'failed', error: lastError, sentAt: '-' });
-        } finally {
-          setBlastProgress((prev) => ({
-            ...prev,
-            current: prev.current + 1,
-            ok: okCount,
-            fail: failCount,
-          }));
-        }
-      },
-      () => isPausedRef.current || isStoppedRef.current
-    );
+            batch = batch || res?.batchId || activeBatchId;
+            okCount += 1;
+            // Status resmi dari gateway wa-api adalah 'queued'
+            statusByPhone.set(item.phone, {
+              status: res?.status || 'queued',
+              messageId: res?.messageId,
+              sentAt: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+            });
+          } catch (err) {
+            failCount += 1;
+            lastError = err?.message || 'Pengiriman gagal.';
+            statusByPhone.set(item.phone, { status: 'failed', error: lastError, sentAt: '-' });
+          } finally {
+            setBlastProgress((prev) => ({
+              ...prev,
+              current: prev.current + 1,
+              ok: okCount,
+              fail: failCount,
+            }));
+          }
+        },
+        () => isPausedRef.current || isStoppedRef.current
+      );
     }
 
     setSending(false);
