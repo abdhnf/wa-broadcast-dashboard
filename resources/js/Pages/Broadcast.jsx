@@ -84,6 +84,26 @@ const QUEUE_FAILURE_STATUSES = ['failed', 'invalid_number', 'not_registered'];
 const QUEUE_CANCELLED_STATUSES = ['cancelled'];
 const QUEUE_PAGE_SIZE = 50;
 
+/**
+ * Jalankan penyerahan antrean secara paralel dengan batas concurrency terkontrol (worker pool)
+ * dan dukungan jeda/batal instan via shouldStop().
+ */
+async function runConcurrentPool(items, limit, workerFn, shouldStop) {
+  let index = 0;
+  async function worker() {
+    while (index < items.length) {
+      if (shouldStop && shouldStop()) break;
+      const i = index++;
+      await workerFn(items[i], i);
+    }
+  }
+  const workers = [];
+  const count = Math.min(limit, items.length);
+  for (let w = 0; w < count; w++) {
+    workers.push(worker());
+  }
+  await Promise.all(workers);
+}
 
 /**
  * Hitung metrik dan status turunan kampanye secara reaktif mengikuti isi antreannya.
@@ -195,6 +215,9 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
   const [loadingQueue, setLoadingQueue] = useState(false);
   const [queueError, setQueueError] = useState('');
   const [sending, setSending] = useState(false);
+  const [blastProgress, setBlastProgress] = useState({ total: 0, current: 0, ok: 0, fail: 0 });
+  const [pendingResumeCampaign, setPendingResumeCampaign] = useState(null);
+  const [hasCheckedResumePrompt, setHasCheckedResumePrompt] = useState(false);
   const isPausedRef = useRef(false);
   const isStoppedRef = useRef(false);
 
@@ -420,7 +443,42 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
     onLaunchConsumed?.();
   }, [launchGroup, onLaunchConsumed]);
 
+  // Deteksi kampanye yang penyerahannya terhenti sebelum tuntas (misal tab tertutup)
+  const interruptedCampaigns = useMemo(() => {
+    return (campaigns || []).filter((camp) => {
+      if (camp.status !== 'in_progress' && camp.status !== 'paused') return false;
+      const q = Array.isArray(camp.queue)
+        ? camp.queue
+        : (typeof camp.queue === 'string'
+            ? (() => { try { return JSON.parse(camp.queue) || []; } catch { return []; } })()
+            : []);
+      return q.some((i) => !i.messageId && (!i.status || i.status === 'draft'));
+    });
+  }, [campaigns]);
+
+  // Dialog konfirmasi prompt resume saat pertama kali membuka halaman dan ada kampanye terhenti
   useEffect(() => {
+    if (hasCheckedResumePrompt || sending) return;
+    if (interruptedCampaigns.length > 0) {
+      setPendingResumeCampaign(interruptedCampaigns[0]);
+      setHasCheckedResumePrompt(true);
+    }
+  }, [interruptedCampaigns, hasCheckedResumePrompt, sending]);
+
+  // Guard beforeunload: cegah tab tertutup tanpa sengaja saat loop penyerahan sedang berjalan
+  useEffect(() => {
+    if (!sending) return;
+    const handleBeforeUnload = (e) => {
+      e.preventDefault();
+      e.returnValue = 'Penyerahan broadcast ke gateway sedang berlangsung. Menutup tab akan menghentikan sisa penyerahan nomor.';
+      return e.returnValue;
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [sending]);
+
+  useEffect(() => {
+    if (sending) return; // Jangan timpa antrean lokal saat blast aktif menyerahkan ke gateway
     if (selectedCampaign) {
       const liveCamp = campaigns.find((c) => c.id === selectedCampaign.id);
       if (liveCamp) {
@@ -430,7 +488,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
       }
     }
     setRecipientQueue(selectedCampaign?.queue || []);
-  }, [campaigns, selectedCampaign?.id]);
+  }, [campaigns, selectedCampaign?.id, sending]);
 
   /**
    * Simpan antrean kampanye ke MySQL.
@@ -845,16 +903,17 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
     persistQueue([...additions, ...recipientQueue]);
   };
 
-  // Handler Mulai Blast - kirim antrean ke wa-api gateway dengan batchId kampanye
+  // Handler Mulai Blast - serahkan antrean ke wa-api gateway secara paralel (concurrency pool)
   const handleStartBlast = async () => {
     if (!selectedCampaign || sending) return;
 
-    // Ambil target yang belum selesai (draft lokal / antrean gateway)
+    // Filter target idempoten: hanya yang BELUM diserahkan ke gateway (belum punya messageId)
+    // dan berstatus draft / gagal lokal. Target yang sudah di-enqueue tidak akan dikirim ulang.
     const targets = recipientQueue.filter(
-      (item) => !item.status || item.status === 'draft' || item.status === 'queued' || item.status === 'pending'
+      (item) => !item.messageId && (!item.status || item.status === 'draft' || item.status === 'failed')
     );
     if (targets.length === 0) {
-      setQueueError('Antrean masih kosong atau semua target sudah terkirim.');
+      setQueueError('Semua target dalam antrean sudah diserahkan ke gateway atau sudah terkirim.');
       return;
     }
 
@@ -879,6 +938,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
     isStoppedRef.current = false;
     setQueuePaused(false);
     setSending(true);
+    setBlastProgress({ total: targets.length, current: 0, ok: 0, fail: 0 });
     setQueueError('');
 
     // Status kampanye aktif seketika menjadi in_progress
@@ -899,64 +959,77 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
     let failCount = 0;
     let lastError = '';
 
-    for (const item of targets) {
-      if (isPausedRef.current || isStoppedRef.current) {
-        break;
-      }
-      try {
-        const recipientCustom = resolveRecipientCustom(item);
-        const rendered = renderMessage(tpl.content, {
-          name: item.name || '',
-          nama: item.name || '',
-          phone: item.phone,
-          ...recipientCustom,
-          custom: recipientCustom,
-        });
+    // Concurrency limit: 15 request paralel ke backend wa-api.
+    // Memangkas waktu penyerahan 500 target dari puluhan detik menjadi 1-2 detik.
+    const BATCH_CONCURRENCY = 15;
 
-        const res = tpl.messageType === 'media'
-          ? await sendMedia({
-              sessionId: activeSessionId,
-              to: item.phone,
-              mediaType: tpl.mediaType || 'image',
-              mediaUrl: tpl.mediaUrl,
-              fileName: tpl.fileName || undefined,
-              caption: rendered,
-              priority: selectedCampaign?.priority || campaignPriority || 'normal',
-              batchId: activeBatchId,
-            })
-          : tpl.messageType === 'location'
-            ? await sendLocation({
+    await runConcurrentPool(
+      targets,
+      BATCH_CONCURRENCY,
+      async (item) => {
+        try {
+          const recipientCustom = resolveRecipientCustom(item);
+          const rendered = renderMessage(tpl.content, {
+            name: item.name || '',
+            nama: item.name || '',
+            phone: item.phone,
+            ...recipientCustom,
+            custom: recipientCustom,
+          });
+
+          const res = tpl.messageType === 'media'
+            ? await sendMedia({
                 sessionId: activeSessionId,
                 to: item.phone,
-                latitude: tpl.location?.latitude,
-                longitude: tpl.location?.longitude,
-                name: tpl.location?.name,
-                address: tpl.location?.address,
+                mediaType: tpl.mediaType || 'image',
+                mediaUrl: tpl.mediaUrl,
+                fileName: tpl.fileName || undefined,
+                caption: rendered,
                 priority: selectedCampaign?.priority || campaignPriority || 'normal',
                 batchId: activeBatchId,
               })
-            : await sendText({
-                sessionId: activeSessionId,
-                to: item.phone,
-                text: rendered,
-                priority: selectedCampaign?.priority || campaignPriority || 'normal',
-                batchId: activeBatchId,
-              });
+            : tpl.messageType === 'location'
+              ? await sendLocation({
+                  sessionId: activeSessionId,
+                  to: item.phone,
+                  latitude: tpl.location?.latitude,
+                  longitude: tpl.location?.longitude,
+                  name: tpl.location?.name,
+                  address: tpl.location?.address,
+                  priority: selectedCampaign?.priority || campaignPriority || 'normal',
+                  batchId: activeBatchId,
+                })
+              : await sendText({
+                  sessionId: activeSessionId,
+                  to: item.phone,
+                  text: rendered,
+                  priority: selectedCampaign?.priority || campaignPriority || 'normal',
+                  batchId: activeBatchId,
+                });
 
-        batch = batch || res?.batchId || activeBatchId;
-        okCount += 1;
-        // Status riil dari gateway adalah pending / pacing (bukan langsung sent)
-        statusByPhone.set(item.phone, {
-          status: res?.status || 'pending',
-          messageId: res?.messageId,
-          sentAt: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
-        });
-      } catch (err) {
-        failCount += 1;
-        lastError = err?.message || 'Pengiriman gagal.';
-        statusByPhone.set(item.phone, { status: 'failed', error: lastError, sentAt: '-' });
-      }
-    }
+          batch = batch || res?.batchId || activeBatchId;
+          okCount += 1;
+          // Status resmi dari gateway wa-api adalah 'queued'
+          statusByPhone.set(item.phone, {
+            status: res?.status || 'queued',
+            messageId: res?.messageId,
+            sentAt: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+          });
+        } catch (err) {
+          failCount += 1;
+          lastError = err?.message || 'Pengiriman gagal.';
+          statusByPhone.set(item.phone, { status: 'failed', error: lastError, sentAt: '-' });
+        } finally {
+          setBlastProgress((prev) => ({
+            ...prev,
+            current: prev.current + 1,
+            ok: okCount,
+            fail: failCount,
+          }));
+        }
+      },
+      () => isPausedRef.current || isStoppedRef.current
+    );
 
     setSending(false);
 
@@ -1706,6 +1779,30 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
       </div>
 
       {/* TAMPILAN 1: DAFTAR BROADCAST (SUBVIEW = 'campaigns') */}
+      {subView === 'campaigns' && interruptedCampaigns.length > 0 && (
+        <div className="mb-4 p-3.5 rounded-xl border border-amber-500/30 bg-amber-500/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2.5">
+            <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+            <div>
+              <span className="font-semibold text-ink">
+                Ada {interruptedCampaigns.length} broadcast terhenti sebelum tuntas:
+              </span>{' '}
+              <span className="text-ink-muted">
+                {interruptedCampaigns.map((c) => `"${c.name}"`).join(', ')} memiliki target yang belum diserahkan ke gateway.
+              </span>
+            </div>
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => handleOpenQueueView(interruptedCampaigns[0])}
+            className="text-xs h-7 bg-amber-600 hover:bg-amber-700 text-white shrink-0 self-start sm:self-auto"
+          >
+            <span>Buka Antrean & Lanjutkan</span>
+          </Button>
+        </div>
+      )}
+
       {subView === 'campaigns' && (
         <div className="bg-surface  rounded-lg border border-line border-line overflow-hidden ">
           <div className="overflow-x-auto">
@@ -1929,7 +2026,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
                     }`}
                   >
                     {sending
-                      ? 'Menyerahkan ke Gateway...'
+                      ? `Menyerahkan (${blastProgress.current}/${blastProgress.total})...`
                       : selectedCampaign.status === 'in_progress'
                       ? 'Berjalan di Gateway'
                       : selectedCampaign.status === 'paused' || queuePaused
@@ -2171,6 +2268,25 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
               >
                 <X className="w-4 h-4" />
               </button>
+            </div>
+          )}
+
+          {/* Indikator Progres Paralel Penyerahan Antrean ke Gateway */}
+          {sending && blastProgress.total > 0 && (
+            <div className="p-3 rounded-xl bg-surface border border-brand/30 space-y-2">
+              <div className="flex items-center justify-between text-xs font-medium">
+                <span className="flex items-center gap-2 text-ink">
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-brand" />
+                  <span>Menyerahkan antrean ke gateway: {blastProgress.current} dari {blastProgress.total}</span>
+                  {blastProgress.fail > 0 && (
+                    <span className="text-rose-500 font-normal">({blastProgress.fail} gagal)</span>
+                  )}
+                </span>
+                <span className="font-mono text-ink-muted text-[11px]">
+                  {Math.round((blastProgress.current / blastProgress.total) * 100)}%
+                </span>
+              </div>
+              <Progress value={(blastProgress.current / blastProgress.total) * 100} className="h-1.5" />
             </div>
           )}
 
@@ -3584,6 +3700,53 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
               className="text-xs bg-clay hover:bg-rose-700 text-white"
             >
               {isCancellingQueue ? 'Membatalkan...' : 'Ya, Batalkan Sekarang'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Konfirmasi Lanjutkan Broadcast Terhenti */}
+      <Dialog open={Boolean(pendingResumeCampaign)} onOpenChange={(open) => !open && setPendingResumeCampaign(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>Lanjutkan Broadcast yang Terhenti?</span>
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-2 text-xs text-ink-soft space-y-2">
+            <p>
+              Ditemukan broadcast{' '}
+              <strong className="text-ink">{pendingResumeCampaign?.name}</strong>{' '}
+              yang belum selesai diserahkan ke gateway karena sesi atau tab browser sebelumnya tertutup.
+            </p>
+            <p className="text-[11px] text-ink-muted">
+              Nomor yang sudah diserahkan tetap diproses aman oleh gateway. Anda dapat membuka antrean sekarang untuk meninjau dan melanjutkan pengiriman sisa target.
+            </p>
+          </div>
+          <DialogFooter className="flex items-center justify-end gap-2 pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setPendingResumeCampaign(null)}
+              className="text-xs"
+            >
+              Nanti Saja
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => {
+                const targetCamp = pendingResumeCampaign;
+                setPendingResumeCampaign(null);
+                if (targetCamp) {
+                  handleOpenQueueView(targetCamp);
+                }
+              }}
+              className="text-xs bg-brand hover:bg-brand text-white font-medium"
+            >
+              Buka Antrean & Lanjutkan
             </Button>
           </DialogFooter>
         </DialogContent>
