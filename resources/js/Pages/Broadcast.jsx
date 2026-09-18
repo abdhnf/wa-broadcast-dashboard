@@ -85,6 +85,20 @@ const QUEUE_FAILURE_STATUSES = ['failed', 'invalid_number', 'not_registered'];
 const QUEUE_CANCELLED_STATUSES = ['cancelled'];
 const QUEUE_PAGE_SIZE = 50;
 
+/**
+ * batchId kanonik untuk sebuah kampanye.
+ *
+ * Kampanye lama (dibuat sebelum kolom batch_id terisi) tidak punya batchId,
+ * sehingga penyerahan memakai `camp_<id>` sementara kontrol kampanye memakai
+ * null — tombol Jeda/Stop dan whitelist jadi tidak mengenai kampanye yang
+ * sedang berjalan. Semua jalur wajib memakai helper ini.
+ *
+ * Fallback `camp_<id>` dipilih karena itu nilai yang SUDAH tersimpan di gateway
+ * untuk kampanye lama (mis. `camp_7`), jadi riwayat pengiriman tidak terputus.
+ */
+const resolveBatchId = (campaign) =>
+  campaign?.batchId || (campaign?.id != null ? `camp_${campaign.id}` : null);
+
 // Penyerahan antrean kampanye ke gateway.
 //   true  -> satu request per 500 penerima lewat POST /messages/send-bulk (payload
 //            per penerima), sehingga tab boleh ditutup begitu request selesai.
@@ -751,7 +765,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
             fileName: tpl.fileName || undefined,
             caption: rendered,
             priority: selectedCampaign?.priority || 'normal',
-            batchId: selectedCampaign?.batchId || undefined,
+            batchId: resolveBatchId(selectedCampaign) || undefined,
           });
         } else {
           await sendText({
@@ -759,7 +773,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
             to: item.phone,
             text: rendered,
             priority: selectedCampaign?.priority || 'normal',
-            batchId: selectedCampaign?.batchId || undefined,
+            batchId: resolveBatchId(selectedCampaign) || undefined,
           });
         }
       }
@@ -942,7 +956,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
     }
 
     // Pastikan kampanye punya batchId unik yang konsisten
-    const activeBatchId = selectedCampaign.batchId || `camp_${selectedCampaign.id}`;
+    const activeBatchId = resolveBatchId(selectedCampaign);
     isPausedRef.current = false;
     isStoppedRef.current = false;
     setQueuePaused(false);
@@ -1147,7 +1161,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
 
     const updated = {
       ...selectedCampaign,
-      batchId: batch || selectedCampaign.batchId,
+      batchId: batch || resolveBatchId(selectedCampaign),
       status: finalStatus,
       sentCount: (selectedCampaign.sentCount || 0) + okCount,
       failedCount: (selectedCampaign.failedCount || 0) + failCount,
@@ -1409,7 +1423,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
       return;
     }
 
-    const campBatchId = selectedCampaign?.batchId;
+    const campBatchId = resolveBatchId(selectedCampaign);
     const isCampActiveOrStarted = selectedCampaign && (
       selectedCampaign.status === 'in_progress' ||
       selectedCampaign.status === 'paused' ||
@@ -1545,7 +1559,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
     }
 
     try {
-      const campBatchId = selectedCampaign?.batchId;
+      const campBatchId = resolveBatchId(selectedCampaign);
       if (campBatchId) {
         if (next) await pauseBatch(campBatchId, `Kampanye "${selectedCampaign.name}" dijeda`);
         else await resumeBatch(campBatchId);
@@ -1566,6 +1580,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
       // Jika dilanjutkan (resume), gateway wa-api sudah memegang antrean batch dan worker akan
       // otomatis melanjutkan pengiriman pesan pending yang ada tanpa perlu re-dispatch gelombang baru.
       // Hanya dispatch jika kampanye belum pernah memiliki batch di gateway sama sekali.
+      // Sengaja baca kolom MENTAH: kampanye tanpa batchId = belum pernah masuk gateway.
       if (!next && selectedCampaign && !selectedCampaign.batchId) {
         const remainingTargets = recipientQueue.filter((item) => !item.status || item.status === 'draft');
         if (remainingTargets.length > 0 && !sending) {
@@ -1587,7 +1602,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
     setSending(false);
     setQueuePaused(false);
 
-    const campBatchId = selectedCampaign.batchId;
+    const campBatchId = resolveBatchId(selectedCampaign);
 
     try {
       if (campBatchId) {
@@ -1636,7 +1651,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
   const liveQueued = filteredUnifiedQueue.filter((m) => QUEUE_RUNNING_STATUSES.includes(m.status)).length;
 
   // Status jeda antrean: prioritas tunggal pada batchId kampanye yang aktif (Item #3)
-  const campBatchId = selectedCampaign?.batchId;
+  const campBatchId = resolveBatchId(selectedCampaign);
   const monitorSessionId = activeSessionId !== 'auto'
     ? activeSessionId
     : sessions?.find((s) => s.status === 'connected')?.id;
@@ -2095,6 +2110,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
                     }`}
                   />
                   <span className="font-semibold text-sm text-ink">{selectedCampaign.name}</span>
+                  {/* Sengaja mentah: 'draft lokal' hanya benar bila batchId belum pernah ada. */}
                   {selectedCampaign.batchId ? (
                     <span className="font-mono text-[11px] text-ink-muted bg-surface-alt px-2 py-0.5 rounded border border-line/60">
                       {selectedCampaign.batchId}
