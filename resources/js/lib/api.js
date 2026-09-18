@@ -400,6 +400,25 @@ export function sendBulk({ sessionId, recipients, text, priority = 'normal' }) {
   });
 }
 
+/**
+ * Bulk v2: kirim banyak pesan dengan payload PER PENERIMA dalam satu request.
+ *
+ * Berbeda dari `sendBulk` (satu teks seragam), bentuk ini menjaga personalisasi
+ * (variabel kustom, spintax) dan mendukung pesan media/lokasi. `batchId` dipasok
+ * klien supaya kontrol kampanye (pause/resume/clear) punya sasaran yang stabil.
+ */
+export function sendBulkMessages({ sessionId, batchId, priority = 'normal', messages }) {
+  const body = {
+    sessionId: sessionId || 'auto',
+    priority,
+    messages: (messages || [])
+      .map((m) => ({ ...m, to: normalizePhone(m.to) }))
+      .filter((m) => m.to),
+  };
+  if (batchId) body.batchId = batchId;
+  return apiFetch('/messages/send-bulk', { method: 'POST', body });
+}
+
 export function fetchQueueStatus(sessionId, { signal } = {}) {
   return apiFetch(`/sessions/${encodeURIComponent(sessionId)}/queue/status`, { signal });
 }

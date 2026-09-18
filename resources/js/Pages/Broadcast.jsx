@@ -64,6 +64,7 @@ import {
   pauseQueue,
   resumeQueue,
   retryMessage,
+  sendBulkMessages,
   sendLocation,
   sendMedia,
   sendText,
@@ -83,6 +84,14 @@ const QUEUE_SUCCESS_STATUSES = ['sent', 'delivered', 'read'];
 const QUEUE_FAILURE_STATUSES = ['failed', 'invalid_number', 'not_registered'];
 const QUEUE_CANCELLED_STATUSES = ['cancelled'];
 const QUEUE_PAGE_SIZE = 50;
+
+// Penyerahan antrean kampanye ke gateway.
+//   true  -> satu request per 500 penerima lewat POST /messages/send-bulk (payload
+//            per penerima), sehingga tab boleh ditutup begitu request selesai.
+//   false -> jalur lama: satu request per penerima dengan worker pool paralel.
+//            Berguna sebagai fallback bila kontrak bulk di gateway berubah.
+const USE_BULK_ENQUEUE = true;
+const BULK_CHUNK_SIZE = 500;
 
 /**
  * Jalankan penyerahan antrean secara paralel dengan batas concurrency terkontrol (worker pool)
@@ -959,11 +968,90 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
     let failCount = 0;
     let lastError = '';
 
-    // Concurrency limit: 15 request paralel ke backend wa-api.
-    // Memangkas waktu penyerahan 500 target dari puluhan detik menjadi 1-2 detik.
-    const BATCH_CONCURRENCY = 15;
+    if (USE_BULK_ENQUEUE) {
+    // Susun payload per penerima. Spintax dan variabel kustom di-render DI SINI
+    // (sisi klien), bukan di gateway, supaya tiap penerima mendapat varian sendiri.
+    const payloads = targets.map((item) => {
+      const recipientCustom = resolveRecipientCustom(item);
+      const rendered = renderMessage(tpl.content, {
+        name: item.name || '',
+        nama: item.name || '',
+        phone: item.phone,
+        ...recipientCustom,
+        custom: recipientCustom,
+      });
 
-    await runConcurrentPool(
+      if (tpl.messageType === 'media') {
+        return {
+          mode: 'media',
+          to: item.phone,
+          mediaType: tpl.mediaType || 'image',
+          ...(tpl.mediaUrl ? { mediaUrl: tpl.mediaUrl } : {}),
+          ...(tpl.fileName ? { fileName: tpl.fileName } : {}),
+          caption: rendered,
+        };
+      }
+      if (tpl.messageType === 'location') {
+        return {
+          mode: 'location',
+          to: item.phone,
+          latitude: Number(tpl.location?.latitude),
+          longitude: Number(tpl.location?.longitude),
+          ...(tpl.location?.name ? { name: tpl.location.name } : {}),
+          ...(tpl.location?.address ? { address: tpl.location.address } : {}),
+        };
+      }
+      return { mode: 'text', to: item.phone, text: rendered };
+    });
+
+    const enqueuePriority = selectedCampaign?.priority || campaignPriority || 'normal';
+
+    for (let offset = 0; offset < payloads.length; offset += BULK_CHUNK_SIZE) {
+      if (isPausedRef.current || isStoppedRef.current) break;
+      const slice = payloads.slice(offset, offset + BULK_CHUNK_SIZE);
+
+      try {
+        const res = await sendBulkMessages({
+          sessionId: activeSessionId,
+          batchId: activeBatchId,
+          priority: enqueuePriority,
+          messages: slice,
+        });
+
+        // Status awal dari gateway adalah 'queued', bukan 'pending'.
+        (res?.messages || []).forEach((m) => {
+          statusByPhone.set(m.to, {
+            status: m.status || 'queued',
+            messageId: m.id,
+            sentAt: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+          });
+          okCount += 1;
+        });
+        // Kegagalan per penerima dikumpulkan gateway, tidak menggagalkan seluruh chunk.
+        (res?.errors || []).forEach((e) => {
+          statusByPhone.set(e.to, { status: 'failed', error: e.error, sentAt: '-' });
+          failCount += 1;
+          lastError = e.error;
+        });
+      } catch (err) {
+        // Kegagalan satu chunk tidak menghentikan chunk berikutnya; target yang belum
+        // diserahkan tetap berstatus draft sehingga masih bisa dikirim ulang.
+        const msg = err?.message || 'Gagal menyerahkan batch ke gateway.';
+        lastError = msg;
+        failCount += slice.length;
+        slice.forEach((m) => statusByPhone.set(m.to, { status: 'failed', error: msg, sentAt: '-' }));
+      } finally {
+        setBlastProgress({
+          total: payloads.length,
+          current: Math.min(offset + slice.length, payloads.length),
+          ok: okCount,
+          fail: failCount,
+        });
+      }
+    }
+  } else {
+    // Jalur lama: satu request per penerima, 15 worker paralel.
+await runConcurrentPool(
       targets,
       BATCH_CONCURRENCY,
       async (item) => {
@@ -1030,6 +1118,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
       },
       () => isPausedRef.current || isStoppedRef.current
     );
+    }
 
     setSending(false);
 
