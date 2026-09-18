@@ -30,10 +30,14 @@ import {
   clearApiConfig,
   STORAGE_USER
 } from '../lib/api';
+import {
+  FAILURE_STATUSES,
+  QUEUED_STATUSES,
+  SUCCESS_STATUSES,
+  statusClass,
+  statusLabel,
+} from '../lib/messageStatus';
 
-const SUCCESS_STATUSES = ['sent', 'delivered', 'read'];
-const FAILURE_STATUSES = ['failed', 'invalid_number', 'not_registered'];
-const QUEUED_STATUSES = ['pending', 'pacing', 'sending'];
 
 const POLL_INTERVAL_MS = 15000;
 
@@ -57,27 +61,6 @@ function formatClock(iso) {
   }
 }
 
-function statusLabel(status) {
-  const map = {
-    sent: 'Terkirim',
-    delivered: 'Delivered',
-    read: 'Dibaca',
-    pending: 'Menunggu',
-    pacing: 'Pacing',
-    sending: 'Mengirim',
-    failed: 'Gagal',
-    invalid_number: 'Nomor Invalid',
-    not_registered: 'Tidak Terdaftar',
-  };
-  return map[status] || status;
-}
-
-function statusClass(status) {
-  if (SUCCESS_STATUSES.includes(status)) return 'text-brand-deep';
-  if (FAILURE_STATUSES.includes(status)) return 'text-rose-500';
-  if (status === 'pacing') return 'text-amber-500';
-  return 'text-ink-muted text-ink-muted';
-}
 
 export function DashboardPage({ onNavigate }) {
   const [sessions, setSessions] = useState([]);

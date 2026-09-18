@@ -71,6 +71,10 @@ import {
 import { renderMessage } from '../lib/utils';
 import { PHONE_ERROR_MESSAGE, isValidPhone, normalizePhone, toPhoneInput } from '../lib/phone';
 import { ContactSearchInput } from '../components/ContactSearchInput';
+import {
+  QUEUE_STATUS_OPTIONS,
+  statusLabel,
+} from '../lib/messageStatus';
 
 // Status antrean disamakan dengan `MessageStatus` wa-api (types.ts).
 // Status yang sah dari wa-api gateway dan status draft lokal
@@ -80,23 +84,6 @@ const QUEUE_FAILURE_STATUSES = ['failed', 'invalid_number', 'not_registered'];
 const QUEUE_CANCELLED_STATUSES = ['cancelled'];
 const QUEUE_PAGE_SIZE = 50;
 
-const QUEUE_STATUS_OPTIONS = [
-  { value: 'all', label: 'Semua Status' },
-  { value: 'draft', label: 'Siap Dikirim' },
-  { value: 'queued', label: 'Antrean Gateway' },
-  { value: 'pending', label: 'Antrean Dashboard (lama)' },
-  { value: 'pacing', label: 'Jeda anti-ban' },
-  { value: 'sending', label: 'Sedang dikirim' },
-  { value: 'sent', label: 'Terkirim' },
-  { value: 'delivered', label: 'Sampai' },
-  { value: 'read', label: 'Dibaca' },
-  { value: 'failed', label: 'Gagal' },
-  { value: 'invalid_number', label: 'Nomor tidak valid' },
-  { value: 'not_registered', label: 'Tidak terdaftar' },
-  { value: 'cancelled', label: 'Dibatalkan' },
-];
-
-const QUEUE_STATUS_LABEL = Object.fromEntries(QUEUE_STATUS_OPTIONS.map((s) => [s.value, s.label]));
 
 /**
  * Hitung metrik dan status turunan kampanye secara reaktif mengikuti isi antreannya.
@@ -2426,13 +2413,13 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
                           {item.status === 'draft' ? (
                             <span className="inline-flex items-center gap-1 text-[11px] text-ink-soft text-ink-muted font-medium">
                               <Clock className="w-3.5 h-3.5 text-ink-faint" />
-                              <span>Siap Dikirim</span>
+                              <span>{statusLabel(item.status)}</span>
                             </span>
                           ) : ['sent', 'delivered', 'read'].includes(item.status) ? (
                             <div>
                               <span className="inline-flex items-center gap-1 text-[11px] text-brand-deep font-medium">
                                 <CheckCircle2 className="w-3.5 h-3.5" />
-                                <span>{item.status === 'read' ? 'Dibaca' : item.status === 'delivered' ? 'Sampai' : 'Terkirim'}</span>
+                                <span>{statusLabel(item.status)}</span>
                               </span>
                               {item.liveData?.timestamp && (
                                 <div className="text-[10px] text-ink-faint">
@@ -2444,7 +2431,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
                             <div>
                               <span className="inline-flex items-center gap-1 text-[11px] text-indigo-600 dark:text-indigo-400 font-medium animate-pulse">
                                 <Clock className="w-3.5 h-3.5" />
-                                <span>Jeda anti-ban</span>
+                                <span>{statusLabel(item.status)}</span>
                               </span>
                               {Number(item.liveData?.jitterDelayMs) > 0 && (
                                 <div className="text-[10px] text-indigo-600 dark:text-indigo-400 font-mono">
@@ -2459,7 +2446,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
                                 title={item.liveData?.errorDetail || item.error || 'Dibatalkan oleh pengguna'}
                               >
                                 <XCircle className="w-3.5 h-3.5" />
-                                <span>Dibatalkan</span>
+                                <span>{statusLabel(item.status)}</span>
                               </span>
                               {item.liveData?.errorDetail && (
                                 <div className="text-[10px] text-ink-faint truncate max-w-[160px]" title={item.liveData.errorDetail}>
@@ -2474,7 +2461,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
                                 title={item.liveData?.errorDetail || item.error || 'Pengiriman gagal'}
                               >
                                 <AlertCircle className="w-3.5 h-3.5" />
-                                <span>{item.status === 'invalid_number' ? 'Nomor Invalid' : item.status === 'not_registered' ? 'Tidak Terdaftar' : 'Gagal'}</span>
+                                <span>{statusLabel(item.status)}</span>
                               </span>
                               {item.liveData?.errorDetail && (
                                 <div className="text-[10px] text-rose-500/80 truncate max-w-[160px]" title={item.liveData.errorDetail}>
@@ -2486,20 +2473,20 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
                             <div>
                               <span className="inline-flex items-center gap-1 text-[11px] text-cyan-600 dark:text-cyan-400 font-medium animate-pulse">
                                 <Clock className="w-3.5 h-3.5" />
-                                <span>Sedang dikirim</span>
+                                <span>{statusLabel(item.status)}</span>
                               </span>
                             </div>
                           ) : item.status === 'pending' ? (
                             <div>
                               <span className="inline-flex items-center gap-1 text-[11px] text-honey text-honey font-medium animate-pulse">
                                 <Clock className="w-3.5 h-3.5" />
-                                <span>Antrean Gateway</span>
+                                <span>{statusLabel(item.status)}</span>
                               </span>
                             </div>
                           ) : (
                             <span className="inline-flex items-center gap-1 text-[11px] text-ink-muted text-ink-muted font-medium">
                               <Clock className="w-3.5 h-3.5" />
-                              <span>{QUEUE_STATUS_LABEL[item.status] || item.status}</span>
+                              <span>{statusLabel(item.status)}</span>
                             </span>
                           )}
                         </td>
