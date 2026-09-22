@@ -235,6 +235,13 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
   const [queueMessages, setQueueMessages] = useState([]);
   const [queueTotal, setQueueTotal] = useState(0);
   const [queuePaused, setQueuePaused] = useState(false);
+  /**
+   * Detail jeda level sesi dari wa-api: alasan, jumlah tertahan, dan agregasi
+   * per status. `byStatus`/`totalMessages` dihitung backend atas SELURUH
+   * riwayat sesi, bukan halaman tabel — dipakai untuk ringkasan yang tidak
+   * ikut berubah saat tabel difilter.
+   */
+  const [sessionPauseInfo, setSessionPauseInfo] = useState(null);
   const [loadingQueue, setLoadingQueue] = useState(false);
   const [queueError, setQueueError] = useState('');
   const [sending, setSending] = useState(false);
@@ -1302,9 +1309,21 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
     });
   }, [mergedQueue, queueStatusFilter, queueSearch]);
 
+  // Ringkasan ini mengikuti FILTER tabel (status + pencarian), jadi angkanya
+  // sengaja mewakili apa yang sedang tampil — bukan total kampanye.
   const draftCount = filteredUnifiedQueue.filter((i) => i.status === 'draft').length;
-  const pendingCount = filteredUnifiedQueue.filter((i) => i.status === 'pending').length;
+  // `queued` ikut dihitung: pesan yang tertahan di antrean gateway belum
+  // terkirim, jadi tidak boleh hilang dari angka "menunggu". Sebelumnya hanya
+  // `pending` yang dihitung, sehingga pesan tertahan tampil sebagai nol.
+  // `pacing` sengaja TIDAK di sini: ia punya angka sendiri di header
+  // ("N jeda pacing"). Memasukkannya ke sini membuat pesan yang sama dihitung
+  // dua kali di ringkasan yang sama.
+  const pendingCount = filteredUnifiedQueue.filter(
+    (i) => QUEUE_RUNNING_STATUSES.includes(i.status) && i.status !== 'pacing',
+  ).length;
   const sentCount = filteredUnifiedQueue.filter((i) => QUEUE_SUCCESS_STATUSES.includes(i.status)).length;
+  const failedCount = filteredUnifiedQueue.filter((i) => QUEUE_FAILURE_STATUSES.includes(i.status)).length;
+  const cancelledCount = filteredUnifiedQueue.filter((i) => QUEUE_CANCELLED_STATUSES.includes(i.status)).length;
   const activePacingCount = filteredUnifiedQueue.filter((i) => i.status === 'pacing').length;
 
   // Paginasi: satu halaman berisi 50 baris. Setiap kali filter atau pencarian
@@ -1657,33 +1676,54 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
     : sessions?.find((s) => s.status === 'connected')?.id;
 
   const loadQueueStatus = useCallback(async () => {
-    // 1. Jika kampanye aktif memiliki batchId di gateway, periksa langsung status batch tersebut
+    // 1. Status batch (kalau kampanye ini punya batchId di gateway).
+    //    Dulu blok ini `return` lebih awal, sehingga status per-sesi di langkah
+    //    2 tidak pernah dibaca untuk kampanye yang punya batchId — praktis
+    //    semua kampanye nyata.
+    let resolvedByBatch = false;
     if (campBatchId) {
       try {
         const batchRes = await fetchBatchStatus(campBatchId);
         if (batchRes && typeof batchRes.isPaused === 'boolean') {
           setQueuePaused(batchRes.isPaused);
+          resolvedByBatch = true;
           // Sinkronkan status kampanye bila berbeda
           if (batchRes.isPaused && selectedCampaign?.status === 'in_progress') {
             setSelectedCampaign((prev) => (prev ? { ...prev, status: 'paused' } : prev));
           } else if (!batchRes.isPaused && selectedCampaign?.status === 'paused' && batchRes.activeCount > 0) {
             setSelectedCampaign((prev) => (prev ? { ...prev, status: 'in_progress' } : prev));
           }
-          return;
         }
       } catch {
         // Fallback jika batch belum terdaftar di gateway
       }
     }
 
-    // 2. Fallback per-sesi bila belum ada batchId
+    // 2. Status per-sesi. Dijalankan juga saat batch berhasil dibaca, karena
+    //    jeda bisa dipasang di level sesi (mis. timelock, rate limit) dan itu
+    //    tidak terlihat dari status batch.
     if (!monitorSessionId) {
-      setQueuePaused(false);
+      if (!resolvedByBatch) setQueuePaused(false);
       return;
     }
     try {
       const res = await fetchQueueStatus(monitorSessionId);
-      setQueuePaused(Boolean(res?.isPaused));
+      const sessionPaused = Boolean(res?.isPaused);
+      if (sessionPaused) {
+        // Jeda level sesi menahan SELURUH batch di sesi itu, jadi menang.
+        setQueuePaused(true);
+        setSessionPauseInfo({
+          reason: res?.pauseReason,
+          pendingCount: res?.pendingCount ?? 0,
+          byStatus: res?.byStatus,
+          totalMessages: res?.totalMessages,
+        });
+      } else if (!resolvedByBatch) {
+        setQueuePaused(false);
+        setSessionPauseInfo(null);
+      } else {
+        setSessionPauseInfo(null);
+      }
     } catch {
       // status jeda hanya informasi; kegagalan tidak perlu mengganggu UI
     }
@@ -2178,7 +2218,12 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
                         {queuePaused || selectedCampaign.status === 'paused' ? (
                           <>
                             <Play className="w-3.5 h-3.5 mr-1.5 text-brand-deep" />
-                            <span>Lanjutkan Antrean</span>
+                            <span>
+                              Lanjutkan Antrean
+                              {sessionPauseInfo?.pendingCount > 0
+                                ? ` (${sessionPauseInfo.pendingCount} tertahan)`
+                                : ''}
+                            </span>
                           </>
                         ) : (
                           <>
@@ -2507,7 +2552,7 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
                   Daftar Antrean & Progres Pengiriman
                 </h2>
                 <p className="text-[11px] text-ink-muted text-ink-muted">
-                  {sentCount} terkirim · {activePacingCount > 0 ? `${activePacingCount} jeda pacing · ` : ''}{pendingCount} menunggu
+                  {sentCount} terkirim · {activePacingCount > 0 ? `${activePacingCount} jeda pacing · ` : ''}{pendingCount} menunggu{failedCount > 0 ? ` · ${failedCount} gagal` : ''}{cancelledCount > 0 ? ` · ${cancelledCount} dibatalkan` : ''}
                   {selectedCampaign?.batchId ? ` · Batch: ${selectedCampaign.batchId}` : ''}
                 </p>
               </div>
