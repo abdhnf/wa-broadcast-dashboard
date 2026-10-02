@@ -9,6 +9,30 @@ dicatat di sini karena berdampak langsung ke kampanye yang sedang berjalan.
 
 ---
 
+## [Merged] — branch `fix/migration-selaraskan-prod`
+
+**Tema:** menyelaraskan migration inti dengan skema produksi agar `php artisan migrate` aman dijalankan.
+
+### Fixed
+
+- **Migration inti `0001_01_01_000000/1/2` kini idempoten** (`create_users_table`, `create_cache_table`, `create_jobs_table`).
+  Setiap `Schema::create` dibungkus `Schema::hasTable()`, sehingga tabel yang sudah ada dilewati alih-alih menggagalkan migration.
+
+### Why
+
+Tabel `migrations` di produksi (`wa_blast`) mencatat nama migration ad-hoc `2026_09_11_104001/2/3`, bukan `0001_01_01_000000/1/2`. Akibatnya ketiga file kanonik itu berstatus **Pending** selamanya, padahal tabel yang ingin dibuatnya (`users`, `password_reset_tokens`, `sessions`, `cache`, `cache_locks`, `jobs`) sudah ada. Tanpa penjaga, `php artisan migrate` gagal dengan `table already exists` — dan pada varian yang memakai `dropIfExists` di `up()` berisiko menghapus data.
+
+Efek samping yang ikut diperbaiki: tabel `job_batches` dan `failed_jobs` **tidak pernah terbentuk**, karena migration ad-hoc produksi hanya membuat tabel `jobs`. Setelah perbaikan ini keduanya dibuat saat migration dijalankan.
+
+### Notes for reviewer
+
+- File ad-hoc `2026_09_11_10400*` **sengaja tidak** ditambahkan ke repo. Kalau ditambahkan, instalasi baru akan membuat tabel yang sama dua kali (sekali oleh `0001_01_01_*`, sekali oleh `2026_09_11_10400*`). `0001_01_01_*` dipertahankan sebagai satu-satunya set kanonik.
+- Diuji di SQLite terisolasi (MySQL produksi tidak disentuh): (A) replika produksi + migration lama → **gagal** `table "users" already exists`; (B) replika produksi + migration baru → tabel lama dilewati, data utuh, `job_batches` + `failed_jobs` terbentuk; (C) database kosong + migration baru → 13 tabel lengkap.
+- `QUEUE_CONNECTION=database`, tetapi aplikasi **tidak memakai queue** (`ShouldQueue`/`dispatch()` tidak ada di `app/`, `routes/`; tabel `jobs` 0 baris). Jadi tabel yang hilang itu risiko laten, bukan gangguan aktif.
+- Catatan operasional: `migrate --pretend` **tidak menjalankan** `hasTable()`, jadi SQL `create table` tetap tercetak meski penjaga akan melewatinya. Bukti penjaga bekerja hanya dari eksekusi nyata, bukan dari `--pretend`.
+
+---
+
 ## [Unreleased] — branch `main`
 
 **Tema:** pemisahan data scope admin (Personal vs Global System) pada Overview Dashboard.
