@@ -75,6 +75,8 @@ import { ContactSearchInput } from '../components/ContactSearchInput';
 import {
   QUEUE_STATUS_OPTIONS,
   statusLabel,
+  statusTimeSummary,
+  statusTimeOf,
 } from '../lib/messageStatus';
 
 // Status antrean disamakan dengan `MessageStatus` wa-api (types.ts).
@@ -84,6 +86,76 @@ const QUEUE_SUCCESS_STATUSES = ['sent', 'delivered', 'read'];
 const QUEUE_FAILURE_STATUSES = ['failed', 'invalid_number', 'not_registered'];
 const QUEUE_CANCELLED_STATUSES = ['cancelled'];
 const QUEUE_PAGE_SIZE = 50;
+
+/**
+ * Sumber `statusTimes` untuk sebuah baris antrean.
+ *
+ * Dipakai untuk jam di bawah badge dan isi tooltip. Hanya data gateway yang
+ * dipakai: `statusTimes` tidak pernah ada di data draft lokal, jadi baris yang
+ * belum diserahkan ke gateway tidak akan menampilkan waktu apa pun.
+ */
+function ambilStatusTimes(item) {
+  return item?.liveData?.statusTimes || null;
+}
+
+/**
+ * Jam kejadian status yang SEDANG tampil, untuk ditulis di bawah badge.
+ *
+ * Sebelumnya sel ini memakai `liveData.timestamp`, yang isinya `created_at` —
+ * waktu pesan masuk antrean, bukan waktu terkirim. Di bawah badge "Sent" itu
+ * menyesatkan, karena jeda anti-ban bisa membuat selisihnya bermenit-menit.
+ * Balasan null berarti tidak ada catatan; pemanggil wajib menampilkan kosong.
+ */
+function jamStatusUtama(item) {
+  const ms = statusTimeOf(ambilStatusTimes(item), item?.status);
+  if (ms === null) return null;
+  return new Date(ms).toLocaleTimeString('id-ID', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+/**
+ * Baris keterangan di bawah badge status: jam kejadian status terkini, opsional
+ * diikuti keterangan tambahan (jeda pacing atau pesan galat).
+ *
+ * Kenapa satu komponen: sel status di sini punya delapan cabang, dan sebelumnya
+ * hanya cabang `sent`/`delivered`/`read` yang menampilkan jam. Akibatnya pesan
+ * gagal — justru yang paling perlu ditelusuri — tidak punya patokan waktu,
+ * padahal `statusTimes`-nya tersedia dari gateway. Satu komponen memastikan
+ * kedelapan cabang memakai bentuk yang sama.
+ *
+ * `null` dari `jamStatusUtama` berarti tidak ada catatan (pesan lama), dan
+ * komponen ini tidak merender apa pun — waktu antrean TIDAK dipakai sebagai
+ * pengganti, karena dua waktu itu berbeda dan mencampurnya menyesatkan.
+ */
+function KeteranganStatus({ item, rincian, tambahan, toneTambahan }) {
+  const jam = jamStatusUtama(item);
+  if (!jam && !tambahan) return null;
+  return (
+    <div
+      className="text-[10px] text-ink-faint truncate max-w-[170px]"
+      title={rincian || undefined}
+    >
+      {jam}
+      {tambahan && (
+        <span className={`${jam ? 'ml-1 ' : ''}${toneTambahan || ''}`.trim()}>{tambahan}</span>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Isi atribut `title` sebuah badge: pesan kesalahan (kalau ada) di atas,
+ * lalu rincian waktu per tahap.
+ *
+ * Dipisah baris kosong supaya keduanya tidak terbaca sebagai satu kalimat —
+ * pesan galat menjelaskan SEBAB, rincian waktu menjelaskan KAPAN.
+ */
+function judulBadge(pesanGalat, rincianWaktu) {
+  const bagian = [pesanGalat, rincianWaktu].filter(Boolean);
+  return bagian.length > 0 ? bagian.join('\n\n') : undefined;
+}
 
 /**
  * batchId kanonik untuk sebuah kampanye.
@@ -2614,6 +2686,11 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
                     pagedQueue.map((item, idx) => {
                       const itemKey = item.phone || item.id;
                       const isSelected = selectedQueueIds.includes(itemKey) || (item.phone && selectedQueueIds.includes(item.phone)) || (item.id && selectedQueueIds.includes(item.id));
+                      // Rincian waktu per tahap untuk tooltip badge status.
+                      // Berisi seluruh tahap yang sudah dilalui, bukan hanya
+                      // status terkini — supaya operator bisa melihat jeda
+                      // anti-ban tanpa membuka halaman lain.
+                      const rincianWaktu = statusTimeSummary(ambilStatusTimes(item));
                       return (
                         <tr
                           key={item.id}
@@ -2681,83 +2758,108 @@ export function BroadcastPage({ groups, templates, sessions, contacts = [], laun
                         </td>
                         <td className="py-2.5 px-4">
                           {item.status === 'draft' ? (
-                            <span className="inline-flex items-center gap-1 text-[11px] text-ink-soft text-ink-muted font-medium">
-                              <Clock className="w-3.5 h-3.5 text-ink-faint" />
-                              <span>{statusLabel(item.status)}</span>
-                            </span>
+                            <div>
+                              <span className="inline-flex items-center gap-1 text-[11px] text-ink-soft text-ink-muted font-medium">
+                                <Clock className="w-3.5 h-3.5 text-ink-faint" />
+                                <span>{statusLabel(item.status)}</span>
+                              </span>
+                              <KeteranganStatus item={item} rincian={rincianWaktu} />
+                            </div>
                           ) : ['sent', 'delivered', 'read'].includes(item.status) ? (
                             <div>
-                              <span className="inline-flex items-center gap-1 text-[11px] text-brand-deep font-medium">
+                              <span
+                                className="inline-flex items-center gap-1 text-[11px] text-brand-deep font-medium"
+                                title={rincianWaktu || undefined}
+                              >
                                 <CheckCircle2 className="w-3.5 h-3.5" />
                                 <span>{statusLabel(item.status)}</span>
                               </span>
-                              {item.liveData?.timestamp && (
-                                <div className="text-[10px] text-ink-faint">
-                                  {new Date(item.liveData.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
-                                </div>
-                              )}
+                              <KeteranganStatus item={item} rincian={rincianWaktu} />
                             </div>
                           ) : item.status === 'pacing' ? (
                             <div>
-                              <span className="inline-flex items-center gap-1 text-[11px] text-indigo-600 dark:text-indigo-400 font-medium animate-pulse">
+                              <span
+                                className="inline-flex items-center gap-1 text-[11px] text-indigo-600 dark:text-indigo-400 font-medium animate-pulse"
+                                title={rincianWaktu || undefined}
+                              >
                                 <Clock className="w-3.5 h-3.5" />
                                 <span>{statusLabel(item.status)}</span>
                               </span>
-                              {Number(item.liveData?.jitterDelayMs) > 0 && (
-                                <div className="text-[10px] text-indigo-600 dark:text-indigo-400 font-mono">
-                                  {(Number(item.liveData.jitterDelayMs) / 1000).toFixed(1)}s jeda
-                                </div>
-                              )}
+                              <KeteranganStatus
+                                item={item}
+                                rincian={rincianWaktu}
+                                tambahan={
+                                  Number(item.liveData?.jitterDelayMs) > 0
+                                    ? `${(Number(item.liveData.jitterDelayMs) / 1000).toFixed(1)}s jeda`
+                                    : null
+                                }
+                                toneTambahan="text-indigo-600 dark:text-indigo-400 font-mono"
+                              />
                             </div>
                           ) : item.status === 'cancelled' ? (
                             <div>
                               <span
                                 className="inline-flex items-center gap-1 text-[11px] text-ink-muted text-ink-muted font-medium"
-                                title={item.liveData?.errorDetail || item.error || 'Dibatalkan oleh pengguna'}
+                                title={judulBadge(item.liveData?.errorDetail || item.error || 'Dibatalkan oleh pengguna', rincianWaktu)}
                               >
                                 <XCircle className="w-3.5 h-3.5" />
                                 <span>{statusLabel(item.status)}</span>
                               </span>
-                              {item.liveData?.errorDetail && (
-                                <div className="text-[10px] text-ink-faint truncate max-w-[160px]" title={item.liveData.errorDetail}>
-                                  {item.liveData.errorDetail}
-                                </div>
-                              )}
+                              <KeteranganStatus
+                                item={item}
+                                rincian={judulBadge(item.liveData?.errorDetail || item.error || 'Dibatalkan oleh pengguna', rincianWaktu)}
+                                tambahan={item.liveData?.errorDetail}
+                              />
                             </div>
                           ) : ['failed', 'invalid_number', 'not_registered'].includes(item.status) ? (
                             <div>
                               <span
                                 className="inline-flex items-center gap-1 text-[11px] text-clay text-clay font-medium"
-                                title={item.liveData?.errorDetail || item.error || 'Pengiriman gagal'}
+                                title={judulBadge(item.liveData?.errorDetail || item.error || 'Pengiriman gagal', rincianWaktu)}
                               >
                                 <AlertCircle className="w-3.5 h-3.5" />
                                 <span>{statusLabel(item.status)}</span>
                               </span>
-                              {item.liveData?.errorDetail && (
-                                <div className="text-[10px] text-rose-500/80 truncate max-w-[160px]" title={item.liveData.errorDetail}>
-                                  {item.liveData.errorDetail}
-                                </div>
-                              )}
+                              <KeteranganStatus
+                                item={item}
+                                rincian={judulBadge(item.liveData?.errorDetail || item.error || 'Pengiriman gagal', rincianWaktu)}
+                                tambahan={item.liveData?.errorDetail}
+                                toneTambahan="text-rose-500/80"
+                              />
                             </div>
                           ) : item.status === 'sending' ? (
                             <div>
-                              <span className="inline-flex items-center gap-1 text-[11px] text-cyan-600 dark:text-cyan-400 font-medium animate-pulse">
+                              <span
+                                className="inline-flex items-center gap-1 text-[11px] text-cyan-600 dark:text-cyan-400 font-medium animate-pulse"
+                                title={rincianWaktu || undefined}
+                              >
                                 <Clock className="w-3.5 h-3.5" />
                                 <span>{statusLabel(item.status)}</span>
                               </span>
+                              <KeteranganStatus item={item} rincian={rincianWaktu} />
                             </div>
                           ) : item.status === 'pending' ? (
                             <div>
-                              <span className="inline-flex items-center gap-1 text-[11px] text-honey text-honey font-medium animate-pulse">
+                              <span
+                                className="inline-flex items-center gap-1 text-[11px] text-honey text-honey font-medium animate-pulse"
+                                title={rincianWaktu || undefined}
+                              >
                                 <Clock className="w-3.5 h-3.5" />
                                 <span>{statusLabel(item.status)}</span>
                               </span>
+                              <KeteranganStatus item={item} rincian={rincianWaktu} />
                             </div>
                           ) : (
-                            <span className="inline-flex items-center gap-1 text-[11px] text-ink-muted text-ink-muted font-medium">
-                              <Clock className="w-3.5 h-3.5" />
-                              <span>{statusLabel(item.status)}</span>
-                            </span>
+                            <div>
+                              <span
+                                className="inline-flex items-center gap-1 text-[11px] text-ink-muted text-ink-muted font-medium"
+                                title={rincianWaktu || undefined}
+                              >
+                                <Clock className="w-3.5 h-3.5" />
+                                <span>{statusLabel(item.status)}</span>
+                              </span>
+                              <KeteranganStatus item={item} rincian={rincianWaktu} />
+                            </div>
                           )}
                         </td>
                         {/* Whitelist penerima kampanye (contactGraph).

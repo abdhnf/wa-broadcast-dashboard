@@ -33,6 +33,35 @@ Efek samping yang ikut diperbaiki: tabel `job_batches` dan `failed_jobs` **tidak
 
 ---
 
+## [Unreleased] — waktu per transisi status pesan
+
+**Tema:** menampilkan kapan setiap tahap pengiriman benar-benar terjadi, menggantikan satu jam yang menyesatkan.
+
+### Fixed
+
+- **Jam di bawah badge "Sent" tidak lagi memakai waktu antrean.** Sebelumnya sel status memakai `liveData.timestamp`, yang isinya `created_at` — waktu pesan **masuk antrean**, bukan waktu terkirim. Pada kampanye dengan jeda anti-ban, keduanya bisa berbeda menit-menit, sehingga badge "Sent" menampilkan jam yang salah.
+- **Status terminal selain `failed` tidak lagi hilang dari daftar waktu.** Sebelumnya hanya `failed` yang ditangani, sehingga pesan `not_registered` / `invalid_number` / `cancelled` hanya menampilkan baris "Masuk antrean" — seolah pesannya masih di antrean, padahal sudah berhenti karena nomornya bermasalah. Daftar terminal kini sejalan dengan `FORCED_STATUSES` di backend wa-api.
+
+### Added
+
+- **`statusTimes` dipakai di dua halaman.** Gateway wa-api mencatat waktu kejadian tiap status (`queued`, `pacing`, `sending`, `sent`, `delivered`, `read`, `failed`) dan sudah mengirimkannya lewat `GET /messages/:sessionId`. Dashboard kini memakainya:
+  - **Blast Engine → antrean**, kolom "Status & Jeda": jam di bawah badge = waktu status itu terjadi; tooltip badge memuat seluruh tahap beserta selisihnya.
+  - **Overview → Log Pesan Terbaru**, kolom "Status": jam status + tooltip seluruh tahap. Kolom "Waktu" **diganti nama menjadi "Masuk Antrean"** karena isinya `created_at` — dua jam berbeda tanpa label mudah tertukar.
+- **Jam status tampil di SEMUA cabang status antrean, bukan hanya yang sukses.** Sebelumnya hanya `sent` / `delivered` / `read` yang dirender dengan jam; `draft`, `pacing`, `sending`, `pending`, `cancelled`, dan ketiga status gagal (`failed`, `invalid_number`, `not_registered`) tidak. Akibatnya pesan `not_registered` — kasus nyata di produksi — tampil tanpa jam sama sekali. Kini seluruh cabang lewat satu komponen `KeteranganStatus`, sehingga tidak ada lagi cabang yang tertinggal saat status baru ditambahkan.
+- **Util baru di `lib/messageStatus.js`** sebagai satu sumber kebenaran: `statusTimeOf`, `statusTimeSummary`, `buildStatusTimeRows`, `formatStatusClock`, `formatStatusDelta`, `STATUS_STAGE_LABEL`. Nama tahap disamakan dengan panel wa-api agar istilahnya konsisten.
+
+### Notes for reviewer
+
+- **Pesan lama tidak akan punya waktu per tahap.** Waktunya tidak pernah tersimpan sebelum fitur ini ada, dan tidak bisa direkonstruksi. Sel tampil kosong — bukan diisi `created_at` sebagai tebakan.
+- **`draft` dan `pending` juga tidak punya waktu per tahap.** Keduanya status lokal dashboard (target belum diserahkan ke gateway), sedangkan pencatatan gateway dimulai dari `queued`.
+- **Tidak ada perubahan backend.** `statusTimes` sudah ikut di respons API apa adanya; ini murni lapisan tampilan.
+- **Uji util: 43 kasus lulus** (`buildStatusTimeRows`, `statusTimeSummary`, `statusTimeOf`) — termasuk alur lengkap, pesan gagal, keempat status terminal, nilai rusak (`NaN`/`Infinity`/string), dan objek kosong. Satu bug ditemukan dan diperbaiki saat uji: `typeof NaN === 'number'` membuat nilai rusak lolos dan tampil sebagai baris berjam `-`; kini memakai `Number.isFinite`.
+- **Verifikasi browser** dengan data nyata dari gateway (bukan dummy): kasus pembeda sengaja dibuat — waktu antrean 05.21 vs waktu read 05.30, dan sel menampilkan **05.30**. Ketujuh status antrean dicek satu per satu (termasuk `failed` dengan sebab "Nomor tidak terdaftar di WhatsApp"), tooltip memuat seluruh tahap beserta selisihnya, dan mobile 375px memakai scroll horizontal yang sudah ada tanpa jam terpotong.
+- **Cara menguji ulang:** harness ada di `~/Documents/uji/wa-broadcast-harness/` (`./jalankan.sh`, `./hentikan.sh`). Uji util: `node ~/Documents/uji/wa-broadcast-harness/uji-util-waktu.mjs`.
+- **Bug harness yang ikut diperbaiki** (`server.mjs`): proxy hanya meneruskan header `content-type`, sehingga `X-API-Key` — satu-satunya kredensial dashboard — terbuang dan backend menjawab **401 untuk semua permintaan**. Gejalanya menyesatkan: halaman tampil normal dengan pesan "sesi login tidak valid", bukan galat proxy, sehingga sempat dicurigai sebagai bug fitur. Kini seluruh header diteruskan kecuali `host` dan `content-length`.
+
+---
+
 ## [Unreleased] — branch `main`
 
 **Tema:** pemisahan data scope admin (Personal vs Global System) pada Overview Dashboard.

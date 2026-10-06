@@ -36,6 +36,8 @@ import {
   SUCCESS_STATUSES,
   statusClass,
   statusLabel,
+  statusTimeOf,
+  statusTimeSummary,
 } from '../lib/messageStatus';
 
 
@@ -58,6 +60,24 @@ function formatClock(iso) {
     return new Date(iso).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
   } catch {
     return '-';
+  }
+}
+
+/**
+ * Jam kejadian status terkini, dari `statusTimes` gateway.
+ *
+ * Berbeda dari `formatClock(m.timestamp)` di kolom Waktu — itu `created_at`,
+ * waktu pesan masuk antrean. Kolom ini menjawab "kapan status ini terjadi".
+ * Balasan null berarti belum ada catatan (pesan lama), dan sel harus tampil
+ * kosong alih-alih menebak.
+ */
+function jamStatusPesan(m) {
+  const ms = statusTimeOf(m?.statusTimes, m?.status);
+  if (ms === null) return null;
+  try {
+    return new Date(ms).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+  } catch {
+    return null;
   }
 }
 
@@ -659,7 +679,7 @@ export function DashboardPage({ onNavigate }) {
                   <th className="py-2.5 px-4">Tujuan</th>
                   <th className="py-2.5 px-4">Status</th>
                   <th className="py-2.5 px-4">Jeda</th>
-                  <th className="py-2.5 px-4 text-right">Waktu</th>
+                  <th className="py-2.5 px-4 text-right">Masuk Antrean</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
@@ -690,12 +710,25 @@ export function DashboardPage({ onNavigate }) {
                       </div>
                     </td>
                     <td className={`py-2.5 px-4 text-[11px] font-medium ${statusClass(m.status)}`}>
-                      {statusLabel(m.status)}
+                      <span title={statusTimeSummary(m.statusTimes) || undefined}>
+                        {statusLabel(m.status)}
+                      </span>
+                      {jamStatusPesan(m) && (
+                        <div
+                          className="text-[10px] font-normal text-ink-faint"
+                          title={statusTimeSummary(m.statusTimes) || undefined}
+                        >
+                          {jamStatusPesan(m)}
+                        </div>
+                      )}
                     </td>
                     <td className="py-2.5 px-4 text-ink text-ink-soft">
                       {Number(m.jitterDelayMs) > 0 ? `${(Number(m.jitterDelayMs) / 1000).toFixed(1)}s` : '-'}
                     </td>
-                    <td className="py-2.5 px-4 text-right text-[10px] text-ink-muted text-ink-muted">
+                    <td
+                      className="py-2.5 px-4 text-right text-[10px] text-ink-muted text-ink-muted"
+                      title="Waktu pesan masuk antrean"
+                    >
                       {formatClock(m.timestamp)}
                     </td>
                   </tr>
