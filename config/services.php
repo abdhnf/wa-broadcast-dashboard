@@ -49,6 +49,16 @@ return [
 
     'wa_api' => [
         'base' => env('WA_API_BASE', 'http://127.0.0.1:3100/api/v1'),
+
+        /*
+         * Secret untuk memverifikasi tanda tangan webhook dari wa-api.
+         *
+         * Nilainya ditampilkan wa-api SEKALI saat webhook didaftarkan (POST
+         * /webhooks). Simpan di sini. Selama kosong, endpoint penerima menolak
+         * semua kiriman dengan 503 — lebih baik gagal terang-terangan daripada
+         * menerima kiriman yang tidak bisa diverifikasi.
+         */
+        'webhook_secret' => env('WA_WEBHOOK_SECRET', ''),
     ],
 
 ];

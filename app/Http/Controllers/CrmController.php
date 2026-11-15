@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\WaCampaign;
 use App\Models\WaContact;
 use App\Models\WaGroup;
+use App\Models\WaInboundMessage;
 use App\Models\WaTemplate;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -965,5 +966,104 @@ class CrmController extends Controller
         $campaign->delete();
 
         return response()->json(['success' => true]);
+    }
+
+    // ------------------------------------------------------------------ Inbox
+
+    /**
+     * Daftar percakapan masuk, satu baris per nomor.
+     *
+     * Dikelompokkan di SQL, bukan di PHP: satu nomor bisa punya ribuan pesan,
+     * dan mengunduh semuanya untuk mengambil yang terakhir akan membebani
+     * browser tanpa alasan.
+     */
+    public function inbox(Request $request)
+    {
+        if (! $user = $this->authorize($request)) {
+            return $this->unauthorized();
+        }
+
+        $limit = max(1, min((int) $request->query('limit', 50), 200));
+        // Filter sesi opsional. Tanpa ini, akun dengan beberapa nomor melihat
+        // percakapan semua nomor bercampur, padahal yang menanganinya bisa
+        // orang berbeda.
+        $sessionId = trim((string) $request->query('sessionId', ''));
+
+        $query = DB::table('wa_inbound_messages as a')
+            ->where('a.user_id', $user['id'])
+            ->whereNotNull('a.from_phone')
+            ->whereRaw('a.id = (
+                SELECT b.id FROM wa_inbound_messages b
+                WHERE b.user_id = a.user_id
+                  AND b.session_id = a.session_id
+                  AND b.from_phone = a.from_phone
+                ORDER BY b.received_at DESC, b.id DESC
+                LIMIT 1
+            )');
+
+        if ($sessionId !== '') {
+            $query->where('a.session_id', $sessionId);
+        }
+
+        $rows = $query
+            ->orderByDesc('a.received_at')
+            ->limit($limit)
+            ->get(['a.session_id', 'a.from_phone', 'a.push_name', 'a.text', 'a.type', 'a.received_at']);
+
+        // Daftar sesi yang benar-benar punya pesan masuk. Dihitung dari tabel
+        // inbound, bukan diambil dari wa-api: halaman ini harus tetap bisa
+        // dibuka walau gateway sedang mati, dan yang relevan di sini hanya sesi
+        // yang punya isi.
+        $sesi = DB::table('wa_inbound_messages')
+            ->where('user_id', $user['id'])
+            ->whereNotNull('from_phone')
+            ->select('session_id')
+            ->distinct()
+            ->orderBy('session_id')
+            ->pluck('session_id');
+
+        return response()->json([
+            'conversations' => $rows->map(fn ($r) => [
+                'sessionId' => $r->session_id,
+                'phone' => $r->from_phone,
+                'name' => $r->push_name,
+                'lastText' => $r->text,
+                'lastType' => $r->type,
+                'lastAt' => $r->received_at,
+            ])->values(),
+            'sessions' => $sesi,
+        ]);
+    }
+
+    /** Riwayat satu percakapan, urut lama ke baru. */
+    public function conversation(Request $request)
+    {
+        if (! $user = $this->authorize($request)) {
+            return $this->unauthorized();
+        }
+
+        $data = Validator::make($request->all(), [
+            'sessionId' => ['required', 'string', 'max:64'],
+            'phone' => ['required', 'string', 'max:20'],
+        ])->validate();
+
+        $messages = WaInboundMessage::where('user_id', $user['id'])
+            ->where('session_id', $data['sessionId'])
+            ->where('from_phone', $data['phone'])
+            ->orderBy('received_at')
+            ->orderBy('id')
+            ->limit(500)
+            ->get()
+            ->map(fn (WaInboundMessage $m) => [
+                'id' => (string) $m->id,
+                'type' => $m->type,
+                'text' => $m->text,
+                'caption' => $m->media_caption,
+                'mime' => $m->media_mime,
+                'at' => $m->received_at?->toIso8601String(),
+            ])
+            ->values();
+
+        return response()->json(['messages' => $messages]);
     }
 }

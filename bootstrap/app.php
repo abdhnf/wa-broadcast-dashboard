@@ -29,6 +29,15 @@ return Application::configure(basePath: dirname(__DIR__))
          */
         $middleware->validateCsrfTokens(except: [
             'api/crm/*',
+            // Reverse OTP: sama seperti CRM, diautentikasi header X-API-Key.
+            // Tanpa pengecualian ini, klien non-browser (server lain, Postman,
+            // cron) selalu ditolak 419 meski kuncinya sah — pembuatan challenge
+            // tidak akan pernah bisa dipakai dari integrasi.
+            'api/otp/*',
+            // Webhook dari wa-api: dipanggil server, bukan browser, dan
+            // autentikasinya tanda tangan HMAC. Tidak ada cookie sesi yang
+            // bisa dimanfaatkan penyerang lintas situs di sini.
+            'api/wa/webhook',
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
