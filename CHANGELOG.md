@@ -9,6 +9,67 @@ dicatat di sini karena berdampak langsung ke kampanye yang sedang berjalan.
 
 ---
 
+## [Unreleased] — Reverse OTP / User-Initiated Magic Link
+
+Alur verifikasi terbalik: pengguna mengirim token dari WhatsApp-nya sendiri,
+wa-api meneruskan lewat webhook, aplikasi mencocokkan token + nomor pengirim.
+Tidak ada pesan yang dikirim aplikasi, dan nomor terbukti aktif karena ada
+pesan keluar darinya. Panduan lengkap: `docs/reverse-otp.md`.
+
+### Added
+
+- **`ReverseOtp`** (`app/Services/ReverseOtp.php`). Normalisasi nomor
+  (`08xx`/`+62`/`62` → `628`), ekstraksi token dari teks maupun caption gambar,
+  dan verifikasi atomik. Token disimpan sebagai SHA-256; klaim memakai `UPDATE`
+  bersyarat `status = 'pending'` sehingga dua pesan identik yang tiba bersamaan
+  hanya memverifikasi sekali. Batas 5 percobaan salah, masa berlaku 5 menit,
+  satu challenge aktif per nomor.
+- **API `api/otp/*`** (`OtpController`): buat challenge, cek status untuk
+  polling, batalkan. Otorisasi header `X-API-Key` seperti grup CRM; batas laju
+  5 permintaan/menit per user dan per nomor.
+- **Tabel `wa_otp_challenges`** dengan index unik `(user_id, token_hash)`.
+- **Penyambungan ke webhook**: `WaWebhookController::cobaVerifikasiOtp()`
+  dipanggil dari `handleMessageReceived()`. Kegagalan pencocokan tidak pernah
+  menggagalkan penyimpanan pesan.
+- **Redaksi token sebelum disimpan** (`ReverseOtp::samarkanToken()`). Verifikasi
+  dijalankan lebih dulu, lalu teks disamarkan sebelum masuk
+  `wa_inbound_messages.text`, kolom `raw`, dan `wa_webhook_events.payload`:
+  `OTP GRQQCYTU` → `OTP ****`. Kedua tabel itu tidak pernah dibersihkan, jadi
+  tanpa redaksi token hidup di sana selamanya — dan token yang belum terpakai
+  masih sah sampai masa berlakunya habis.
+- **`ReverseOtp::tokenDikenal()`**, dipakai khusus untuk memutuskan penyamaran.
+  Bentuk token tanpa label tidak bisa dibedakan dari kata biasa delapan huruf:
+  `sekarang`, `harganya`, dan `sebentar` seluruhnya ada di alfabet token. Pola
+  yang menyamarkan semua teks delapan karakter merusak pesan pelanggan; pola
+  yang tidak menyamarkan apa pun membiarkan ~6% token (yang kebetulan seluruhnya
+  huruf) tersimpan mentah. Karena itu bentuk telanjang ditanyakan ke database —
+  apakah hash-nya milik challenge user ini yang belum kedaluwarsa. Pemeriksaan
+  bentuk dilakukan lebih dulu supaya pesan biasa tidak menghasilkan query.
+- **Tes**: 33 lulus (125 asersi). `ReverseOtpTest` 19 tes, `OtpControllerTest`
+  6 tes, `WaWebhookRetryTest` 3 tes.
+
+### Fixed
+
+- **Event webhook yang gagal tidak pernah diproses ulang.** Penerima hanya
+  memeriksa `delivery_id` sudah ada atau belum, sehingga kiriman ulang dari
+  wa-api setelah galat 500 dijawab "duplicate" — dan event itu hilang
+  selamanya. Pada alur OTP akibatnya: pelanggan mengirim token, dashboard gagal
+  sesaat, token tidak pernah terverifikasi. Sekarang hanya baris `processed`
+  yang dianggap duplikat; baris `failed` diklaim ulang secara atomik.
+- **`api/otp/*` dikecualikan dari CSRF** (`bootstrap/app.php`). Rute ini
+  diautentikasi API key, bukan cookie sesi; tanpa pengecualian, klien non-browser
+  selalu ditolak 419 meski kuncinya sah.
+- **Pesan biasa berubah menjadi `****`.** Versi pertama `samarkanToken()`
+  menyamarkan setiap teks delapan karakter dari alfabet token, sehingga
+  "sekarang" dan "harganya" ikut hilang dari inbox. Ditutup dengan
+  `tokenDikenal()` di atas.
+- **Token yang dikirim dari nomor yang salah tetap tersimpan mentah.** Versi
+  yang membedakan berdasarkan hasil verifikasi melewatkannya, karena
+  verifikasinya gagal — padahal justru token seperti itu yang paling berbahaya
+  bila bocor. `tokenDikenal()` tidak bergantung pada hasil verifikasi.
+
+---
+
 ## [Merged] — branch `fix/migration-selaraskan-prod`
 
 **Tema:** menyelaraskan migration inti dengan skema produksi agar `php artisan migrate` aman dijalankan.

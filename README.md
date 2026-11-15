@@ -204,9 +204,40 @@ Dashboard ini memerlukan sinkronisasi langsung dengan endpoint API gateway [wa-a
 | :--- | :--- | :--- |
 | `WA_API_BASE` | URL internal gateway yang dihubungi oleh backend Laravel | `http://127.0.0.1:3100/api/v1` |
 | `VITE_WA_API_BASE` | URL publik gateway yang dihubungi langsung dari browser pengguna | `http://192.168.1.50:3100/api/v1` |
+| `WA_WEBHOOK_SECRET` | Secret untuk memverifikasi tanda tangan webhook dari wa-api | `whsec_...` |
 | `APP_URL` | Domain atau URL akses aplikasi dashboard blast | `http://192.168.1.50:8085` |
 
 > ⚠️ **Catatan Penting Vite:** Nilai `VITE_WA_API_BASE` ditanam ke dalam file Javascript statis pada saat proses kompilasi (`npm run build`). Jika URL gateway berubah, selalu jalankan ulang `npm run build`.
+
+### Menerima Pesan Masuk (Webhook)
+
+Dashboard menerima pesan masuk dari wa-api lewat `POST /api/wa/webhook`. Rute ini
+tidak memakai API key — pemanggilnya server wa-api — dan autentikasinya tanda
+tangan HMAC-SHA256.
+
+Langkah menghubungkan:
+
+1. Daftarkan webhook di wa-api (sekali saja):
+
+   ```bash
+   curl -s -X POST https://wa-api.domain.com/api/v1/webhooks \
+     -H "X-API-Key: wa_live_xxx" -H "Content-Type: application/json" \
+     -d '{"url":"https://blast.domain.com/api/wa/webhook",
+          "events":["message.received","message.status"]}'
+   ```
+
+2. Salin nilai `secret` dari respons ke `WA_WEBHOOK_SECRET` di `.env` dashboard.
+   Nilai itu **hanya ditampilkan sekali**; pembacaan berikutnya disamarkan.
+
+3. Jalankan `php artisan migrate --force`, lalu buka menu **Inbox**.
+
+Pesan yang masuk disimpan di `wa_inbound_messages`; setiap kiriman webhook
+dicatat di `wa_webhook_events` sehingga kegagalan bisa ditelusuri. Kiriman ulang
+dengan `deliveryId` yang sama diabaikan (idempoten).
+
+> Bila `WA_WEBHOOK_SECRET` kosong, endpoint menolak semua kiriman dengan 503.
+> Ini disengaja: menerima kiriman yang tidak bisa diverifikasi lebih buruk
+> daripada gagal terang-terangan.
 
 ### Alur Autentikasi Magic Launch Token & PIN
 Dashboard menggunakan sistem autentikasi aman tanpa pendaftaran publik terbuka:
@@ -244,6 +275,13 @@ Dashboard menggunakan sistem autentikasi aman tanpa pendaftaran publik terbuka:
   - Live preview tampilan balon chat WhatsApp (*WhatsApp Bubble Preview*).
   - Toolbar pemformatan teks (*bold*, *italic*, *strikethrough*, *monospace*).
   - Dukungan pengiriman media (Gambar, Dokumen PDF, Audio, Video) dan Lokasi GPS.
+
+- 📥 **Inbox Pesan Masuk**:
+  - Menerima pesan pelanggan lewat webhook dari wa-api, tersimpan di database
+    dashboard sendiri sehingga tetap bisa dibaca walau gateway sedang mati.
+  - Daftar percakapan per nomor dengan pencarian, plus riwayat lengkap per kontak.
+  - Status kampanye (`sent`/`delivered`/`read`/`failed`) diperbarui otomatis dari
+    event `message.status`, dengan penghitungan idempoten.
 
 ---
 
