@@ -568,3 +568,27 @@ export function formatNumber(value) {
 }
 
 export { STORAGE_USER, STORAGE_CONFIG };
+
+// ---------- Inbox (pesan masuk dari webhook wa-api) ----------
+
+/**
+ * Daftar percakapan inbox.
+ *
+ * Mengembalikan `{ conversations, sessions }` — `sessions` adalah daftar sesi
+ * yang benar-benar punya pesan masuk, dipakai untuk pemilih sesi. Sebelumnya
+ * fungsi ini hanya mengembalikan array sehingga pemanggil tidak punya cara
+ * mengetahui sesi mana saja yang ada tanpa memanggil wa-api.
+ */
+export function fetchInbox({ signal, limit = 50, sessionId = '' } = {}) {
+  const q = new URLSearchParams({ limit: String(limit) });
+  if (sessionId) q.set('sessionId', sessionId);
+  return crmFetch(`/inbox?${q.toString()}`, { signal }).then((res) => ({
+    conversations: res?.conversations ?? [],
+    sessions: res?.sessions ?? [],
+  }));
+}
+
+export function fetchConversation({ sessionId, phone, signal }) {
+  const q = new URLSearchParams({ sessionId, phone });
+  return crmFetch(`/inbox/conversation?${q.toString()}`, { signal }).then((res) => res?.messages ?? []);
+}

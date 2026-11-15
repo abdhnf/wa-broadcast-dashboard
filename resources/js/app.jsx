@@ -5,6 +5,7 @@ import { Layout } from './components/Layout';
 import { DashboardPage } from './Pages/Dashboard';
 import { ContactsPage } from './Pages/Contacts';
 import { GroupsPage } from './Pages/Groups';
+import { InboxPage } from './Pages/Inbox';
 import { TemplatesPage } from './Pages/Templates';
 import { BroadcastPage } from './Pages/Broadcast';
 import { PlaygroundPage } from './Pages/Playground';
@@ -236,6 +237,7 @@ export function StandaloneApp() {
             }}
           />
         )}
+        {currentTab === 'inbox' && <InboxPage />}
         {currentTab === 'templates' && (
           <TemplatesPage contacts={contacts} onTemplatesChange={refreshTemplates} />
         )}

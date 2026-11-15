@@ -13,6 +13,7 @@ import {
   PanelLeft,
   PanelLeftClose,
   LayoutDashboard,
+  Inbox,
 } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 
@@ -23,6 +24,7 @@ const navItems = [
   { id: 'broadcast', label: 'Blast Engine', icon: Send, badgeKey: 'activeCampaigns', desc: 'Kirim massal' },
   { id: 'contacts', label: 'Contacts', icon: Users, badgeKey: 'contactsTotal', desc: 'Database nomor' },
   { id: 'groups', label: 'Segments', icon: FolderKanban, badgeKey: 'groupsTotal', desc: 'Grup audiens' },
+  { id: 'inbox', label: 'Inbox', icon: Inbox, desc: 'Pesan masuk' },
   { id: 'templates', label: 'Templates', icon: FileText, badgeKey: 'templatesTotal', desc: 'Pustaka pesan' },
   { id: 'playground', label: 'Playground', icon: Terminal, desc: 'Simulator endpoint' },
   { id: 'settings', label: 'API & Auth', icon: Settings, desc: 'Kredensial gateway' },
