@@ -7,7 +7,10 @@ use App\Models\WaContact;
 use App\Models\WaGroup;
 use App\Models\WaInboundMessage;
 use App\Models\WaTemplate;
+use App\Services\InboxHistory;
+use App\Services\WaApiClient;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 
@@ -25,10 +28,31 @@ class CrmController extends Controller
     private const VERIFY_TIMEOUT = 5;
 
     /**
+     * Lama hasil verifikasi disimpan, dalam detik.
+     *
+     * wa-api membatasi endpoint `/auth/*` 30 permintaan per menit PER IP, dan
+     * seluruh pengunjung dashboard berbagi satu IP (mesin ini). Tanpa cache,
+     * membuka 30 percakapan dalam semenit sudah cukup membuat semua request
+     * berikutnya ditolak 429 — dan Inbox memang membuka satu percakapan per
+     * klik.
+     *
+     * Kompromi keamanannya: kunci yang dicabut masih berlaku paling lama satu
+     * menit di dashboard. Hanya verifikasi yang BERHASIL yang disimpan, jadi
+     * kunci salah tetap ditolak seketika.
+     */
+    private const VERIFY_CACHE_SECONDS = 60;
+
+    /** True bila wa-api menolak karena batas laju, bukan karena kunci salah. */
+    private bool $dibatasiGateway = false;
+
+    /**
      * Verifikasi API key ke wa-api dan kembalikan identitas pemiliknya.
      * Balasan null berarti key tidak sah atau wa-api tidak terjangkau.
+     *
+     * `protected`, bukan `private`, supaya tes bisa menggantinya tanpa
+     * menghubungi wa-api sungguhan — pola yang sama dipakai OtpController.
      */
-    private function resolveUser(Request $request): ?array
+    protected function resolveUser(Request $request): ?array
     {
         $apiKey = trim((string) $request->header('X-API-Key', ''));
         if ($apiKey === '') {
@@ -38,6 +62,14 @@ class CrmController extends Controller
         $base = rtrim((string) (config('services.wa_api.base') ?: ''), '/');
         if ($base === '') {
             return null;
+        }
+
+        // Kunci cache adalah hash, bukan kunci API-nya: isi cache tidak boleh
+        // menjadi tempat kunci mentah tersimpan.
+        $kunciCache = 'wa_api_user:'.hash('sha256', $apiKey);
+        $tersimpan = Cache::get($kunciCache);
+        if (is_array($tersimpan) && ! empty($tersimpan['id'])) {
+            return $tersimpan;
         }
 
         $ch = curl_init($base . '/auth/me');
@@ -51,6 +83,14 @@ class CrmController extends Controller
         $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
 
+        if ($status === 429) {
+            // Bukan kunci yang salah: gateway sedang membatasi. Dibedakan supaya
+            // pesan ke pengguna tidak menyesatkan ("kunci tidak valid").
+            $this->dibatasiGateway = true;
+
+            return null;
+        }
+
         if ($status !== 200 || ! is_string($body)) {
             return null;
         }
@@ -60,16 +100,26 @@ class CrmController extends Controller
             return null;
         }
 
-        return [
+        $user = [
             'id' => (string) $data['id'],
             'name' => $data['name'] ?? null,
             'role' => $data['role'] ?? 'user',
         ];
+
+        Cache::put($kunciCache, $user, now()->addSeconds(self::VERIFY_CACHE_SECONDS));
+
+        return $user;
     }
 
     /** Balasan seragam untuk key yang tidak sah / wa-api tidak terjangkau. */
     private function unauthorized()
     {
+        if ($this->dibatasiGateway) {
+            return response()->json([
+                'error' => 'Gateway sedang membatasi permintaan autentikasi. Coba lagi sebentar.',
+            ], 429);
+        }
+
         return response()->json([
             'error' => 'API key tidak valid atau wa-api tidak dapat dihubungi.',
         ], 401);
@@ -971,11 +1021,16 @@ class CrmController extends Controller
     // ------------------------------------------------------------------ Inbox
 
     /**
-     * Daftar percakapan masuk, satu baris per nomor.
+     * Daftar percakapan, satu baris per nomor, dua arah.
      *
-     * Dikelompokkan di SQL, bukan di PHP: satu nomor bisa punya ribuan pesan,
-     * dan mengunduh semuanya untuk mengambil yang terakhir akan membebani
-     * browser tanpa alasan.
+     * Pesan masuk dikelompokkan di SQL (satu nomor bisa punya ribuan pesan).
+     * Pesan keluar diringkas dari wa-api dalam SATU panggilan untuk semua sesi,
+     * bukan satu panggilan per percakapan: daftar bisa berisi puluhan nomor dan
+     * memanggil gateway per baris akan membuat halaman ini menunggu puluhan
+     * timeout saat gateway bermasalah.
+     *
+     * Bila wa-api tidak bisa dihubungi, daftar tetap tampil berisi percakapan
+     * yang punya pesan masuk, dengan `outboundAvailable: false`.
      */
     public function inbox(Request $request)
     {
@@ -988,6 +1043,15 @@ class CrmController extends Controller
         // percakapan semua nomor bercampur, padahal yang menanganinya bisa
         // orang berbeda.
         $sessionId = trim((string) $request->query('sessionId', ''));
+        $arah = (string) $request->query('direction', 'all');
+        if (! in_array($arah, ['all', 'in', 'out'], true)) {
+            $arah = 'all';
+        }
+
+        // Ambil lebih banyak dari `limit` permintaan: setelah digabung dengan
+        // pesan keluar, sebagian baris bisa tersisih dan daftar jadi lebih
+        // pendek dari yang diminta.
+        $batasMuat = 200;
 
         $query = DB::table('wa_inbound_messages as a')
             ->where('a.user_id', $user['id'])
@@ -1007,35 +1071,150 @@ class CrmController extends Controller
 
         $rows = $query
             ->orderByDesc('a.received_at')
-            ->limit($limit)
+            ->limit($batasMuat)
             ->get(['a.session_id', 'a.from_phone', 'a.push_name', 'a.text', 'a.type', 'a.received_at']);
 
-        // Daftar sesi yang benar-benar punya pesan masuk. Dihitung dari tabel
-        // inbound, bukan diambil dari wa-api: halaman ini harus tetap bisa
-        // dibuka walau gateway sedang mati, dan yang relevan di sini hanya sesi
-        // yang punya isi.
-        $sesi = DB::table('wa_inbound_messages')
+        // Jumlah pesan masuk per percakapan, satu query agregat untuk semuanya.
+        $hitungMasuk = DB::table('wa_inbound_messages')
             ->where('user_id', $user['id'])
             ->whereNotNull('from_phone')
-            ->select('session_id')
-            ->distinct()
-            ->orderBy('session_id')
-            ->pluck('session_id');
+            ->selectRaw('session_id, from_phone, count(*) as total')
+            ->groupBy('session_id', 'from_phone')
+            ->get()
+            ->mapWithKeys(fn ($r) => [
+                InboxHistory::kunci($r->session_id, $r->from_phone) => (int) $r->total,
+            ])
+            ->all();
 
-        return response()->json([
-            'conversations' => $rows->map(fn ($r) => [
+        $konversasi = [];
+        foreach ($rows as $r) {
+            $kunci = InboxHistory::kunci($r->session_id, $r->from_phone);
+            $konversasi[$kunci] = [
                 'sessionId' => $r->session_id,
                 'phone' => $r->from_phone,
                 'name' => $r->push_name,
                 'lastText' => $r->text,
                 'lastType' => $r->type,
-                'lastAt' => $r->received_at,
-            ])->values(),
-            'sessions' => $sesi,
+                'lastAt' => InboxHistory::waktuLokal($r->received_at),
+                'lastDirection' => 'in',
+                'lastStatus' => null,
+                'batchId' => null,
+                'inboundCount' => $hitungMasuk[$kunci] ?? 0,
+            ];
+        }
+
+        $klien = $this->klienRiwayat($request);
+        $ringkasKeluar = [];
+        $outboundTersedia = false;
+        if ($klien !== null && config('services.wa_api.history_enabled')) {
+            $hasil = $klien->ringkasanKeluar(InboxHistory::BATAS_RINGKASAN);
+            if ($hasil !== null) {
+                $outboundTersedia = true;
+                $ringkasKeluar = InboxHistory::ringkasKeluar(
+                    is_array($hasil['messages'] ?? null) ? $hasil['messages'] : [],
+                );
+            }
+        }
+
+        // Percakapan yang hanya punya pesan keluar (nomor hasil blast yang belum
+        // pernah membalas) tetap harus muncul — justru itu yang dicari operator.
+        foreach ($ringkasKeluar as $kunci => $keluar) {
+            if ($sessionId !== '' && $keluar['sessionId'] !== $sessionId) {
+                continue;
+            }
+
+            if (! isset($konversasi[$kunci])) {
+                $konversasi[$kunci] = [
+                    'sessionId' => $keluar['sessionId'],
+                    'phone' => $keluar['phone'],
+                    'name' => null,
+                    'lastText' => null,
+                    'lastType' => null,
+                    'lastAt' => null,
+                    'lastDirection' => 'out',
+                    'lastStatus' => null,
+                    'batchId' => null,
+                    'inboundCount' => 0,
+                ];
+            }
+
+            // Pesan keluar lebih baru dari pesan masuk terakhir: dialah yang
+            // menjadi baris terakhir percakapan di daftar.
+            if (($keluar['lastAt'] ?? '') > ($konversasi[$kunci]['lastAt'] ?? '')) {
+                $konversasi[$kunci]['lastText'] = $keluar['lastText'];
+                $konversasi[$kunci]['lastType'] = $keluar['lastType'];
+                $konversasi[$kunci]['lastAt'] = $keluar['lastAt'];
+                $konversasi[$kunci]['lastDirection'] = 'out';
+                $konversasi[$kunci]['lastStatus'] = $keluar['lastStatus'];
+                $konversasi[$kunci]['batchId'] = $keluar['batchId'];
+            }
+        }
+
+        // Sesi yang sudah dihapus di wa-api tidak boleh muncul lagi. Riwayat
+        // pesannya tetap tersimpan (tidak ada yang menghapusnya), jadi tanpa
+        // saringan ini nomor-nomor lama terus tampil di inbox.
+        $sesiAktif = $this->sesiAktif($request);
+        if ($sesiAktif !== null) {
+            $konversasi = array_filter(
+                $konversasi,
+                fn (array $c) => isset($sesiAktif[$c['sessionId']]),
+            );
+        }
+
+        if ($arah !== 'all') {
+            $konversasi = array_filter(
+                $konversasi,
+                fn (array $c) => $c['lastDirection'] === $arah,
+            );
+        }
+
+        // Urutkan dari aktivitas terbaru. `lastAt` sudah ISO-8601 dengan offset
+        // yang sama untuk semua baris, jadi perbandingan teks setara waktu.
+        uasort($konversasi, fn (array $a, array $b) => strcmp((string) $b['lastAt'], (string) $a['lastAt']));
+
+        $daftar = array_slice(array_values($konversasi), 0, $limit);
+
+        // Pilihan sesi memakai nama dan status dari wa-api, bukan id mentah:
+        // operator mengenali nomornya dari nama, dan status menentukan apakah
+        // balasan bisa dikirim dari sini.
+        if ($sesiAktif !== null) {
+            $daftarSesi = array_values($sesiAktif);
+        } else {
+            // wa-api tidak terjangkau: tampilkan sesi yang benar-benar punya
+            // pesan di database sendiri, tanpa nama/status.
+            $idLokal = DB::table('wa_inbound_messages')
+                ->where('user_id', $user['id'])
+                ->whereNotNull('from_phone')
+                ->select('session_id')
+                ->distinct()
+                ->pluck('session_id')
+                ->all();
+
+            $daftarSesi = array_map(
+                fn ($id) => ['id' => $id, 'name' => null, 'phone' => null, 'status' => null],
+                array_values(array_unique(array_filter($idLokal))),
+            );
+        }
+
+        usort($daftarSesi, fn (array $a, array $b) => strcmp((string) ($a['name'] ?? $a['id']), (string) ($b['name'] ?? $b['id'])));
+
+        return response()->json([
+            'conversations' => $daftar,
+            'sessions' => $daftarSesi,
+            'sessionsKnown' => $sesiAktif !== null,
+            'outboundAvailable' => $outboundTersedia,
+            'outboundEnabled' => (bool) config('services.wa_api.history_enabled'),
         ]);
     }
 
-    /** Riwayat satu percakapan, urut lama ke baru. */
+    /**
+     * Riwayat satu percakapan, urut lama ke baru, dua arah.
+     *
+     * Pesan masuk dibaca dari database sendiri (teksnya sudah disamarkan dari
+     * token OTP). Pesan keluar dibaca langsung dari wa-api: isinya tidak pernah
+     * melewati dashboard saat dikirim, jadi tidak ada salinan lokal yang bisa
+     * dibaca. Status yang tampil juga status asli dari sana.
+     */
     public function conversation(Request $request)
     {
         if (! $user = $this->authorize($request)) {
@@ -1045,25 +1224,140 @@ class CrmController extends Controller
         $data = Validator::make($request->all(), [
             'sessionId' => ['required', 'string', 'max:64'],
             'phone' => ['required', 'string', 'max:20'],
+            'limit' => ['nullable', 'integer', 'min:1', 'max:'.InboxHistory::BATAS_PESAN],
         ])->validate();
 
-        $messages = WaInboundMessage::where('user_id', $user['id'])
+        // Sesi yang sudah dihapus tidak boleh dibuka lagi: pesannya masih ada
+        // di database, tetapi menampilkannya membuat operator membalas dari
+        // nomor yang tidak lagi terhubung.
+        $sesiAktif = $this->sesiAktif($request);
+        if ($sesiAktif !== null && ! isset($sesiAktif[$data['sessionId']])) {
+            return response()->json([
+                'error' => 'Sesi ini sudah tidak aktif. Riwayatnya disembunyikan.',
+            ], 404);
+        }
+
+        $batas = (int) ($data['limit'] ?? InboxHistory::BATAS_PESAN);
+
+        // Diambil dari yang terbaru lalu dibalik, supaya percakapan panjang
+        // menampilkan pesan terkini — bukan 300 pesan paling tua.
+        $masuk = WaInboundMessage::where('user_id', $user['id'])
             ->where('session_id', $data['sessionId'])
             ->where('from_phone', $data['phone'])
-            ->orderBy('received_at')
-            ->orderBy('id')
-            ->limit(500)
+            ->orderByDesc('received_at')
+            ->orderByDesc('id')
+            ->limit($batas)
             ->get()
-            ->map(fn (WaInboundMessage $m) => [
-                'id' => (string) $m->id,
-                'type' => $m->type,
-                'text' => $m->text,
-                'caption' => $m->media_caption,
-                'mime' => $m->media_mime,
-                'at' => $m->received_at?->toIso8601String(),
-            ])
-            ->values();
+            ->reverse()
+            ->map(fn (WaInboundMessage $m) => InboxHistory::petakanMasuk($m))
+            ->values()
+            ->all();
 
-        return response()->json(['messages' => $messages]);
+        $keluar = [];
+        $degraded = false;
+        $aktif = (bool) config('services.wa_api.history_enabled');
+        $klien = $this->klienRiwayat($request);
+
+        if ($aktif && $klien !== null) {
+            $terkumpul = [];
+            $offset = 0;
+
+            for ($halaman = 0; $halaman < InboxHistory::BATAS_HALAMAN; $halaman++) {
+                $hasil = $klien->riwayatKeluar($data['sessionId'], $data['phone'], 200, $offset);
+                if ($hasil === null) {
+                    $degraded = true;
+                    break;
+                }
+
+                $batch = is_array($hasil['messages'] ?? null) ? $hasil['messages'] : [];
+                $terkumpul = array_merge($terkumpul, $batch);
+                $total = (int) ($hasil['total'] ?? count($terkumpul));
+                $offset += 200;
+
+                if (count($terkumpul) >= $total || count($batch) < 200) {
+                    break;
+                }
+            }
+
+            foreach ($terkumpul as $baris) {
+                if (is_array($baris)) {
+                    $keluar[] = InboxHistory::petakanKeluar($baris);
+                }
+            }
+        } else {
+            // Riwayat keluar dimatikan lewat konfigurasi: bukan kegagalan, jadi
+            // tidak perlu banner peringatan.
+            $degraded = false;
+        }
+
+        $gabung = InboxHistory::gabung($masuk, $keluar);
+
+        return response()->json([
+            'messages' => $gabung['messages'],
+            'truncated' => $gabung['truncated'],
+            'degraded' => $degraded,
+            'outboundEnabled' => $aktif,
+        ]);
+    }
+
+    /**
+     * Peta sesi yang masih terdaftar di wa-api, atau null bila tidak diketahui.
+     *
+     * Di-cache 30 detik: halaman Inbox memanggil ini pada setiap muat daftar
+     * dan setiap percakapan dibuka, sementara daftar sesi jarang berubah.
+     * `null` berarti "tidak tahu" — pemanggil harus memperlakukan semua sesi
+     * sebagai sah, bukan menyembunyikan semuanya.
+     *
+     * @return array<string, array{id: string, name: ?string, phone: ?string, status: ?string}>|null
+     */
+    private function sesiAktif(Request $request): ?array
+    {
+        $klien = $this->klienRiwayat($request);
+        if ($klien === null) {
+            return null;
+        }
+
+        $kunciCache = 'wa_api_sessions:'.hash('sha256', trim((string) $request->header('X-API-Key', '')));
+        $tersimpan = Cache::get($kunciCache);
+        if (is_array($tersimpan)) {
+            return $tersimpan;
+        }
+
+        $hasil = $klien->sesi();
+        if ($hasil === null || ! is_array($hasil['sessions'] ?? null)) {
+            return null;
+        }
+
+        $peta = [];
+        foreach ($hasil['sessions'] as $satu) {
+            if (! is_array($satu) || empty($satu['id'])) {
+                continue;
+            }
+
+            $peta[(string) $satu['id']] = [
+                'id' => (string) $satu['id'],
+                'name' => $satu['name'] ?? null,
+                'phone' => $satu['phone'] ?? null,
+                'status' => $satu['status'] ?? null,
+            ];
+        }
+
+        Cache::put($kunciCache, $peta, now()->addSeconds(30));
+
+        return $peta;
+    }
+
+    /**
+     * Klien riwayat wa-api memakai kunci yang sama dengan pemanggil.
+     *
+     * Tidak ada jalur alternatif yang menerima `userId` dari klien: identitas
+     * tetap berasal dari kunci yang sudah diverifikasi, dan wa-api sendiri yang
+     * menyaring baris berdasarkan pemilik kunci itu.
+     */
+    private function klienRiwayat(Request $request): ?WaApiClient
+    {
+        $apiKey = trim((string) $request->header('X-API-Key', ''));
+
+        return $apiKey === '' ? null : WaApiClient::untuk($apiKey);
     }
 }

@@ -569,26 +569,51 @@ export function formatNumber(value) {
 
 export { STORAGE_USER, STORAGE_CONFIG };
 
-// ---------- Inbox (pesan masuk dari webhook wa-api) ----------
+// ---------- Inbox (riwayat dua arah: masuk dari webhook, keluar dari wa-api) ----------
 
 /**
  * Daftar percakapan inbox.
  *
- * Mengembalikan `{ conversations, sessions }` — `sessions` adalah daftar sesi
- * yang benar-benar punya pesan masuk, dipakai untuk pemilih sesi. Sebelumnya
- * fungsi ini hanya mengembalikan array sehingga pemanggil tidak punya cara
- * mengetahui sesi mana saja yang ada tanpa memanggil wa-api.
+ * Mengembalikan `{ conversations, sessions, sessionsKnown, outboundAvailable,
+ * outboundEnabled }`. `sessions` berisi `{ id, name, phone, status }` untuk
+ * pemilih sesi — hanya sesi yang masih terdaftar di wa-api, karena riwayat
+ * sesi yang sudah dihapus tidak ikut terhapus dan tidak boleh muncul lagi.
+ *
+ * `sessionsKnown` false berarti daftar sesi tidak dapat diambil (gateway mati);
+ * pemanggil sebaiknya menampilkan id apa adanya, bukan mengosongkan pilihan.
+ * `outboundAvailable` false berarti riwayat terkirim tidak tersedia.
  */
-export function fetchInbox({ signal, limit = 50, sessionId = '' } = {}) {
+export function fetchInbox({ signal, limit = 50, sessionId = '', direction = '' } = {}) {
   const q = new URLSearchParams({ limit: String(limit) });
   if (sessionId) q.set('sessionId', sessionId);
+  if (direction) q.set('direction', direction);
   return crmFetch(`/inbox?${q.toString()}`, { signal }).then((res) => ({
     conversations: res?.conversations ?? [],
-    sessions: res?.sessions ?? [],
+    sessions: (res?.sessions ?? []).map((s) =>
+      typeof s === 'string'
+        ? { id: s, name: null, phone: null, status: null }
+        : { id: s.id, name: s.name ?? null, phone: s.phone ?? null, status: s.status ?? null },
+    ),
+    sessionsKnown: res?.sessionsKnown !== false,
+    outboundAvailable: res?.outboundAvailable !== false,
+    outboundEnabled: res?.outboundEnabled !== false,
   }));
 }
 
-export function fetchConversation({ sessionId, phone, signal }) {
+/**
+ * Riwayat satu percakapan, dua arah.
+ *
+ * `degraded` berarti pesan masuk berhasil dibaca tetapi riwayat terkirim tidak
+ * dapat diambil dari wa-api. `truncated` berarti percakapan lebih panjang dari
+ * batas yang dikirim server.
+ */
+export function fetchConversation({ sessionId, phone, limit, signal }) {
   const q = new URLSearchParams({ sessionId, phone });
-  return crmFetch(`/inbox/conversation?${q.toString()}`, { signal }).then((res) => res?.messages ?? []);
+  if (limit) q.set('limit', String(limit));
+  return crmFetch(`/inbox/conversation?${q.toString()}`, { signal }).then((res) => ({
+    messages: res?.messages ?? [],
+    degraded: Boolean(res?.degraded),
+    truncated: Boolean(res?.truncated),
+    outboundEnabled: res?.outboundEnabled !== false,
+  }));
 }

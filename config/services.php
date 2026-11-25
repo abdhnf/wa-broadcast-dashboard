@@ -59,6 +59,30 @@ return [
          * menerima kiriman yang tidak bisa diverifikasi.
          */
         'webhook_secret' => env('WA_WEBHOOK_SECRET', ''),
+
+        /*
+         * Riwayat pesan keluar di Inbox.
+         *
+         * Pesan keluar tidak pernah disimpan dashboard (browser mengirim
+         * langsung ke wa-api), jadi halaman Inbox membacanya dari wa-api saat
+         * percakapan dibuka. Timeout dibuat pendek: gateway yang lambat tidak
+         * boleh menahan halaman yang sebenarnya masih punya pesan masuk untuk
+         * ditampilkan.
+         *
+         * Set `WA_API_HISTORY_ENABLED=false` untuk kembali ke perilaku lama
+         * tanpa deploy ulang.
+         */
+        'history_enabled' => filter_var(env('WA_API_HISTORY_ENABLED', true), FILTER_VALIDATE_BOOLEAN),
+        'history_timeout' => (int) env('WA_API_HISTORY_TIMEOUT', 3),
+
+        /*
+         * Kunci API untuk `php artisan inbox:backfill`.
+         *
+         * Perintah CLI tidak punya request yang membawa header, jadi kuncinya
+         * dibaca dari sini atau dari opsi `--api-key=`. Kunci ini hanya dipakai
+         * untuk membaca riwayat milik pemiliknya sendiri — bukan kunci admin.
+         */
+        'backfill_key' => env('WA_API_BACKFILL_KEY', ''),
     ],
 
 ];

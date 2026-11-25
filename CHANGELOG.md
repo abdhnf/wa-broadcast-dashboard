@@ -9,6 +9,133 @@ dicatat di sini karena berdampak langsung ke kampanye yang sedang berjalan.
 
 ---
 
+## [Unreleased] — Inbox: sesi aktif, balasan, satu alur
+
+Penyempurnaan Inbox setelah dipakai: menyembunyikan sesi yang sudah dihapus,
+menamai pilihan sesi, menambah editor balasan, dan menghapus pemisahan
+Masuk/Terkirim supaya percakapan mengalir seperti aplikasi chat.
+
+### Added
+
+- **Balasan langsung dari Inbox.** Editor teks dengan toolbar pemformatan
+  WhatsApp (tebal/miring/coret/monospace, emoji, spintax, variabel) yang sama
+  dengan Playground. Enter mengirim, Shift+Enter menambah baris. Pengiriman
+  memakai jalur yang sudah ada (`POST /messages/send`), lalu riwayat dimuat
+  ulang supaya status yang tampil adalah status asli gateway — bukan tebakan
+  lokal.
+- **Status sesi di header percakapan.** Titik warna dan label
+  (`Terhubung`/`Menghubungkan`/`Terputus`) memberi tahu apakah balasan bisa
+  dikirim. Tombol kirim dinonaktifkan saat sesi tidak terhubung.
+
+### Changed
+
+- **Tombol kirim mengapung di dalam kotak teks** (kanan bawah), bukan di kolom
+  terpisah. Kotak teks memakai padding kanan 56px supaya teks tidak tertutup.
+- **Kotak balasan tumbuh mengikuti isi** (`field-sizing: content`, 52–132px),
+  lalu menggulir sendiri setelah melewati batas.
+- **Enter mengirim lewat jalur form native.** Editor dibungkus `<form>` dengan
+  tombol `type="submit"`; Enter hanya pintasan (`requestSubmit()`). Ditambah
+  penjaga IME (`isComposing` + `keyCode 229`) supaya Enter yang sedang
+  mengonfirmasi kandidat huruf Jepang/China/Korea tidak mengirim pesan
+  setengah jadi, dan `enterkeyhint="send"` agar keyboard ponsel menampilkan
+  tombol Kirim.
+- **Pilihan sesi memakai nama dan status**, bukan `sess-xxxx`. Datanya diambil
+  dari `GET /sessions` wa-api dan di-cache 30 detik; bila gateway tidak
+  terjangkau, pilihan jatuh kembali ke daftar sesi yang punya pesan di database
+  sendiri tanpa nama.
+- **Daftar percakapan tidak lagi dipisah Masuk/Terkirim.** Semua percakapan
+  tampil dalam satu urutan aktivitas terbaru; pencarian tetap ada.
+
+### Fixed
+
+- **Balasan tidak muncul di daftar percakapan.** Setelah mengirim, hanya utas
+  yang dimuat ulang; daftar di kiri tetap menampilkan pesan lama dan
+  percakapannya tidak naik ke atas. Sekarang keduanya diperbarui (daftar secara
+  senyap, tanpa kedipan indikator), dan gelembung pesan ditambahkan langsung
+  memakai id asli dari gateway sehingga tidak berkedip saat riwayat dimuat.
+- **Pesan bisa terkirim lewat sesi lain tanpa penjelasan.** Bila sesi yang
+  dipakai sedang tidak sehat, gateway memindahkan pengiriman ke sesi lain
+  (auto-rotate) sehingga pesan tidak muncul di utas yang sedang dibuka.
+  Kondisi itu sekarang dideteksi dari `messageId` dan diberi keterangan,
+  bukan dibiarkan seolah pesan hilang.
+- **Sesi yang sudah dihapus tidak muncul lagi.** Riwayat pesan tidak ikut
+  terhapus saat sesi dihapus di wa-api, sehingga nomor-nomor lama terus tampil
+  (sebelumnya 43 percakapan, 23 setelah disaring). Daftar kini hanya memuat
+  sesi yang masih terdaftar, dan membuka percakapan dari sesi lama dijawab 404
+  "Sesi ini sudah tidak aktif" — termasuk pesannya, tidak hanya namanya.
+
+---
+
+## [Unreleased] — Inbox Dua Arah (riwayat masuk + terkirim)
+
+Inbox sebelumnya hanya membaca `wa_inbound_messages`, sehingga pesan yang
+dikirim operator tidak pernah terlihat — padahal pesan itu tidak pernah
+melewati dashboard (browser memanggil wa-api langsung). Sekarang percakapan
+menampilkan kedua arah, dengan tampilan gelembung seperti WhatsApp. Rancangan
+lengkap: `docs/inbox-history.md`.
+
+### Added
+
+- **Riwayat pesan terkirim di Inbox.** `CrmController::conversation()` membaca
+  pesan keluar dari wa-api (`GET /messages/{sessionId}?phones=…`) lalu
+  menggabungkannya dengan pesan masuk lokal lewat `InboxHistory::gabung()`.
+  Tidak ada tabel baru: wa-api sudah menyimpan riwayat itu lengkap dan tidak
+  pernah menghapusnya, jadi menyalinnya ke dashboard hanya menciptakan sumber
+  kebenaran kedua yang harus disinkronkan statusnya.
+- **Daftar percakapan dua arah.** `CrmController::inbox()` menambahkan
+  percakapan yang hanya punya pesan keluar (nomor hasil blast yang belum pernah
+  membalas) dan menandai arah pesan terakhir (`lastDirection`, `lastStatus`,
+  `batchId`). Ringkasan pesan keluar diambil dalam SATU panggilan untuk semua
+  sesi, bukan satu panggilan per baris.
+- **`WaApiClient`** (`app/Services/WaApiClient.php`). Klien baca-saja ke wa-api
+  dengan timeout pendek; kegagalan mengembalikan `null`, bukan exception, supaya
+  gateway yang mati tidak menjatuhkan halaman.
+- **`InboxHistory`** (`app/Services/InboxHistory.php`). Fungsi murni untuk
+  memetakan dan menggabungkan dua sumber: daftar putih field (payload wa-api
+  memuat `mediaBase64` yang bisa beberapa megabyte), normalisasi waktu UTC →
+  zona aplikasi, urutan, dan pemotongan.
+- **`php artisan inbox:backfill`** (`app/Console/Commands/InboxBackfill.php`).
+  Menarik riwayat pesan masuk lama dari wa-api. Idempoten (kunci
+  `session_id` + `wa_message_id`), menyamarkan token OTP sebelum menyimpan, dan
+  punya `--dry-run`.
+- **UI Inbox bergaya WhatsApp** (`resources/js/Pages/Inbox.jsx`): gelembung
+  keluar hijau di kanan dengan centang status, gelembung masuk terang di kiri,
+  wallpaper doodle, pemisah hari, saringan Semua/Masuk/Terkirim, pencarian isi
+  pesan, dan tata letak master-detail di layar kecil.
+- **`resources/js/lib/whatsappText.js`**: pemformatan teks WhatsApp dipindahkan
+  dari `WhatsAppBubblePreview` supaya pratinjau dan riwayat memakai aturan yang
+  sama.
+- **Index `wa_inbound_conv_idx`** pada `(user_id, session_id, from_phone,
+  received_at)` untuk query riwayat percakapan.
+
+### Changed
+
+- **Verifikasi API key di-cache 60 detik** (`CrmController::resolveUser()`).
+  wa-api membatasi `/auth/*` 30 permintaan per menit **per IP**, dan seluruh
+  pengunjung dashboard berbagi satu IP. Tanpa cache, membuka 30 percakapan
+  dalam semenit membuat semua request berikutnya ditolak 429 — dan Inbox
+  memang membuka satu percakapan per klik. Hanya verifikasi yang berhasil yang
+  disimpan; kunci salah tetap ditolak seketika. Kompromi: kunci yang dicabut
+  masih berlaku paling lama satu menit.
+- **429 dari gateway dibedakan dari 401.** Sebelumnya batas laju dilaporkan
+  sebagai "API key tidak valid", yang menyesatkan operator.
+
+### Fixed
+
+- **Klaim README "inbox tetap bisa dibaca walau gateway mati" tidak benar.**
+  `resolveUser()` memanggil wa-api pada setiap request CRM, jadi gateway mati
+  berarti semua endpoint CRM menjawab 401. README diperbaiki; perilakunya
+  sendiri tidak diubah (kecuali cache di atas).
+
+### Catatan operasional
+
+- Jalankan `php artisan inbox:backfill --api-key=…` sekali setelah deploy untuk
+  mengisi riwayat masuk yang datang sebelum webhook terpasang.
+- `WA_API_HISTORY_ENABLED=false` mengembalikan Inbox ke perilaku lama tanpa
+  deploy ulang.
+
+---
+
 ## [Unreleased] — Reverse OTP / User-Initiated Magic Link
 
 Alur verifikasi terbalik: pengguna mengirim token dari WhatsApp-nya sendiri,

@@ -276,10 +276,27 @@ Dashboard menggunakan sistem autentikasi aman tanpa pendaftaran publik terbuka:
   - Toolbar pemformatan teks (*bold*, *italic*, *strikethrough*, *monospace*).
   - Dukungan pengiriman media (Gambar, Dokumen PDF, Audio, Video) dan Lokasi GPS.
 
-- 📥 **Inbox Pesan Masuk**:
-  - Menerima pesan pelanggan lewat webhook dari wa-api, tersimpan di database
-    dashboard sendiri sehingga tetap bisa dibaca walau gateway sedang mati.
-  - Daftar percakapan per nomor dengan pencarian, plus riwayat lengkap per kontak.
+- 📥 **Inbox Dua Arah (masuk + terkirim)**:
+  - Pesan pelanggan diterima lewat webhook dari wa-api dan disimpan di database
+    dashboard sendiri. Pesan yang dikirim operator dibaca dari wa-api saat
+    percakapan dibuka, karena pengiriman berjalan langsung dari browser ke
+    gateway dan tidak pernah melewati dashboard.
+  - Tampilan gelembung seperti WhatsApp: pesan keluar hijau di kanan dengan
+    centang status (`queued`/`sent`/`delivered`/`read`/`failed`), pesan masuk
+    terang di kiri, dan pemisah hari. Masuk dan terkirim berada dalam satu alur,
+    tidak dipisah per arah.
+  - Balas langsung dari Inbox dengan editor berformat WhatsApp (tebal, miring,
+    coret, monospace, emoji, variabel). Enter mengirim, Shift+Enter menambah
+    baris. Tombol kirim nonaktif bila sesi sedang terputus.
+  - Pilihan sesi memakai nama dan status (`Terhubung`/`Menghubungkan`/
+    `Terputus`), bukan id. Sesi yang sudah dihapus di wa-api tidak muncul lagi
+    beserta pesannya.
+  - Daftar percakapan per nomor dengan pencarian isi pesan, termasuk nomor yang
+    baru menerima blast dan belum pernah membalas.
+  - Bila gateway tidak dapat dihubungi, pesan masuk tetap tampil dan halaman
+    memberi tahu bahwa riwayat terkirim tidak dapat dimuat.
+  - Riwayat masuk sebelum webhook terpasang diisi lewat
+    `php artisan inbox:backfill` (idempoten, menyamarkan token OTP).
   - Status kampanye (`sent`/`delivered`/`read`/`failed`) diperbarui otomatis dari
     event `message.status`, dengan penghitungan idempoten.
 
